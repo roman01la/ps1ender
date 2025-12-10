@@ -1,0 +1,586 @@
+import React, { useRef, useEffect, useCallback, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { Vector3, Color } from "./math";
+import {
+  Vertex,
+  createPlaneMesh,
+  createCubeMesh,
+  createCircleMesh,
+} from "./primitives";
+import { Rasterizer } from "./rasterizer";
+import { OBJLoader } from "./obj-loader";
+import { Scene, SceneObject } from "./scene";
+import {
+  Editor,
+  EditorMode,
+  TransformMode,
+  AxisConstraint,
+  ViewMode,
+} from "./editor";
+import { InputManager } from "./systems/input";
+import {
+  useEditorUIState,
+  RendererSettings,
+  SceneObjectInfo,
+  DEFAULT_SETTINGS,
+} from "./systems/ui-state";
+import { RenderLoop, RenderContext, GridData } from "./systems/render-loop";
+import { Toolbar } from "./components/Toolbar";
+import { SceneTree } from "./components/SceneTree";
+import { PropertiesPanel } from "./components/PropertiesPanel";
+import { StatusBar } from "./components/StatusBar";
+import { Instructions } from "./components/Instructions";
+import { AddMenu, PrimitiveType } from "./components/AddMenu";
+
+function App() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const rasterizerRef = useRef<Rasterizer | null>(null);
+  const sceneRef = useRef<Scene>(new Scene());
+  const editorRef = useRef<Editor | null>(null);
+  const gridDataRef = useRef<GridData | null>(null);
+  const renderLoopRef = useRef<RenderLoop | null>(null);
+
+  // UI state from custom hook
+  const {
+    state: uiState,
+    setters,
+    actions,
+  } = useEditorUIState(editorRef, sceneRef);
+  const {
+    fps,
+    editorMode,
+    selectionMode,
+    transformMode,
+    axisConstraint,
+    viewMode,
+    sceneObjects,
+    selectedObjectName,
+    selectedPosition,
+    selectedRotation,
+    selectedScale,
+    selectedVertexCount,
+    selectedEdgeCount,
+    selectedFaceCount,
+    settings,
+  } = uiState;
+  const { setFps, setSettings } = setters;
+  const {
+    updateUIState,
+    handleModeChange,
+    handleViewModeChange,
+    handleSelectionModeChange,
+  } = actions;
+
+  // Input state refs (don't need re-renders)
+  const inputManagerRef = useRef<InputManager>(new InputManager());
+
+  // Add menu state
+  const [addMenuPos, setAddMenuPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
+
+  // Resize canvas to fill viewport
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
+    const rasterizer = rasterizerRef.current;
+    if (!canvas || !viewport) return;
+
+    // Get viewport dimensions
+    const rect = viewport.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+
+    if (width <= 0 || height <= 0) return;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    if (rasterizer) {
+      // Resize display canvas
+      rasterizer.resize(width, height);
+
+      // Update render resolution to match aspect ratio (PS1-style low res)
+      // Use fixed base width, calculate height from aspect ratio
+      const baseWidth = 640;
+      const aspectRatio = width / height;
+      const baseHeight = Math.max(400, Math.floor(baseWidth / aspectRatio));
+      rasterizer.setRenderResolution(baseWidth, baseHeight);
+    }
+  }, []);
+
+  // Load OBJ file and add to scene
+  const loadOBJ = useCallback(async (url: string, name: string) => {
+    const rasterizer = rasterizerRef.current;
+    const scene = sceneRef.current;
+    if (!rasterizer) return;
+
+    try {
+      console.log(`Loading OBJ: ${url}`);
+      const result = await OBJLoader.load(url, new Color(200, 200, 200));
+
+      // Create a scene object from the loaded mesh
+      const obj = new SceneObject(name, result.defaultMesh);
+
+      // Center the mesh at origin
+      const center = result.defaultMesh.getCenter();
+      obj.position = new Vector3(-center.x, -center.y, -center.z);
+
+      scene.addObject(obj);
+      scene.selectObject(obj); // Select the newly added object
+
+      // Set up texture if available
+      if (result.defaultTexture) {
+        console.log("Loaded texture, enabling texturing");
+        rasterizer.setTexture(result.defaultTexture);
+        rasterizer.enableTexturing = true;
+      }
+
+      // Position camera to view the object
+      const size = result.defaultMesh.getSize();
+      const maxDim = Math.max(size.x, size.y, size.z);
+      scene.camera.position = new Vector3(maxDim * 2, maxDim * 1.5, maxDim * 2);
+      scene.camera.target = Vector3.zero();
+
+      console.log(
+        `Loaded OBJ with ${result.defaultMesh.triangles.length} triangles`
+      );
+    } catch (error) {
+      console.warn(`Could not load OBJ file: ${error}`);
+    }
+  }, []);
+
+  // Handle object selection from scene tree
+  const handleSelectObject = useCallback(
+    (name: string) => {
+      const scene = sceneRef.current;
+      const obj = scene.objects.find((o) => o.name === name);
+      if (obj) {
+        scene.selectObject(obj);
+        updateUIState(true); // Force immediate update for user action
+      }
+    },
+    [updateUIState]
+  );
+
+  // Handle visibility toggle
+  const handleToggleVisibility = useCallback(
+    (name: string) => {
+      const scene = sceneRef.current;
+      const obj = scene.objects.find((o) => o.name === name);
+      if (obj) {
+        obj.visible = !obj.visible;
+        updateUIState(true); // Force immediate update for user action
+      }
+    },
+    [updateUIState]
+  );
+
+  // Handle adding a primitive mesh
+  const handleAddPrimitive = useCallback(
+    (type: PrimitiveType) => {
+      const scene = sceneRef.current;
+      const editor = editorRef.current;
+
+      // Generate unique name
+      const baseName = type.charAt(0).toUpperCase() + type.slice(1);
+      let name = baseName;
+      let counter = 1;
+      while (scene.objects.some((o) => o.name === name)) {
+        name = `${baseName}.${String(counter).padStart(3, "0")}`;
+        counter++;
+      }
+
+      // Create the mesh
+      let mesh;
+      switch (type) {
+        case "plane":
+          mesh = createPlaneMesh(2);
+          break;
+        case "circle":
+          mesh = createCircleMesh(1, 32);
+          break;
+        case "cube":
+        default:
+          mesh = createCubeMesh(2);
+          break;
+      }
+
+      // Create scene object
+      const obj = new SceneObject(name, mesh);
+
+      // Add to scene and select it
+      scene.addObject(obj);
+      scene.selectObject(obj);
+
+      // Record in history for undo support
+      if (editor) {
+        editor.recordObjectAdd(obj);
+      }
+
+      updateUIState(true);
+      setAddMenuPos(null);
+    },
+    [updateUIState]
+  );
+
+  // Handle transform property changes from properties panel
+  const handlePositionChange = useCallback(
+    (position: Vector3) => {
+      const scene = sceneRef.current;
+      const selected = scene.getSelectedObjects();
+      if (selected.length > 0) {
+        selected[0].position = position;
+        updateUIState(true); // Force immediate update for user action
+      }
+    },
+    [updateUIState]
+  );
+
+  const handleRotationChange = useCallback(
+    (rotation: Vector3) => {
+      const scene = sceneRef.current;
+      const selected = scene.getSelectedObjects();
+      if (selected.length > 0) {
+        selected[0].rotation = rotation;
+        updateUIState(true); // Force immediate update for user action
+      }
+    },
+    [updateUIState]
+  );
+
+  const handleScaleChange = useCallback(
+    (scale: Vector3) => {
+      const scene = sceneRef.current;
+      const selected = scene.getSelectedObjects();
+      if (selected.length > 0) {
+        selected[0].scale = scale;
+        updateUIState(true); // Force immediate update for user action
+      }
+    },
+    [updateUIState]
+  );
+
+  // Update settings on rasterizer
+  useEffect(() => {
+    const rasterizer = rasterizerRef.current;
+    if (!rasterizer) return;
+
+    rasterizer.wireframe = settings.wireframe;
+    rasterizer.enableLighting = settings.lighting;
+    rasterizer.enableBackfaceCulling = true;
+    rasterizer.enableDithering = true;
+    rasterizer.enableVertexSnapping = true;
+    rasterizer.enableTexturing = settings.texturing;
+  }, [settings]);
+
+  // Main render loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Initialize rasterizer first
+    rasterizerRef.current = new Rasterizer(canvas);
+
+    const scene = sceneRef.current;
+    editorRef.current = new Editor(scene);
+    gridDataRef.current = scene.createGridLines();
+
+    // Now resize canvas and set correct render resolution
+    resizeCanvas();
+
+    // Load the demo object
+    loadOBJ("object.obj", "Monkey");
+
+    // Handle resize
+    window.addEventListener("resize", resizeCanvas);
+
+    // Handle keyboard
+    const inputManager = inputManagerRef.current;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const editor = editorRef.current;
+      const scene = sceneRef.current;
+
+      // Track held keys for camera movement
+      inputManager.setTransformActive(editor?.transformMode !== "none");
+
+      // Skip viewport shortcuts if pointer is not over viewport (allows typing in input fields)
+      // Exception: Escape key should always work to cancel transforms
+      const isEscape = e.key === "Escape";
+      const isActiveTransform = editor && editor.transformMode !== "none";
+
+      if (
+        !inputManager.getPointerOverViewport() &&
+        !isEscape &&
+        !isActiveTransform
+      ) {
+        return; // Let the event propagate to input fields
+      }
+
+      // Shift+A for Add menu (like Blender)
+      if (
+        e.key.toLowerCase() === "a" &&
+        e.shiftKey &&
+        !e.ctrlKey &&
+        !e.metaKey
+      ) {
+        // Get mouse position for menu placement
+        const mouseState = inputManager.getMouseState();
+        setAddMenuPos({ x: mouseState.x, y: mouseState.y });
+        e.preventDefault();
+        return;
+      }
+
+      // Z key for view mode cycling (like Blender's Z menu)
+      if (e.key.toLowerCase() === "z" && !e.ctrlKey && !e.metaKey && editor) {
+        // Don't handle Z during transforms (it's axis constraint)
+        if (editor.transformMode === "none") {
+          // Cycle through view modes: wireframe -> solid -> material -> wireframe
+          const modes: ViewMode[] = ["wireframe", "solid", "material"];
+          const currentIndex = modes.indexOf(editor.viewMode);
+          const nextIndex = (currentIndex + 1) % modes.length;
+          editor.setViewMode(modes[nextIndex]);
+          updateUIState(true); // Force immediate update for user action
+          e.preventDefault();
+          return;
+        }
+      }
+
+      // Let editor handle shortcuts first (pass modifier keys)
+      if (
+        editor &&
+        editor.handleKeyDown(e.key, e.ctrlKey || e.metaKey, e.shiftKey)
+      ) {
+        e.preventDefault();
+        return;
+      }
+
+      // Blender-style numpad viewpoints
+      const key = e.key;
+      if (key === "1") {
+        scene.camera.setViewpoint(e.ctrlKey || e.metaKey ? "back" : "front");
+        e.preventDefault();
+        return;
+      }
+      if (key === "3") {
+        scene.camera.setViewpoint(e.ctrlKey || e.metaKey ? "left" : "right");
+        e.preventDefault();
+        return;
+      }
+      if (key === "7") {
+        scene.camera.setViewpoint(e.ctrlKey || e.metaKey ? "bottom" : "top");
+        e.preventDefault();
+        return;
+      }
+      if (key === "0") {
+        scene.camera.setViewpoint("persp");
+        e.preventDefault();
+        return;
+      }
+      if (key === "5") {
+        // Toggle orthographic/perspective (Blender Numpad 5)
+        scene.camera.orthographic = !scene.camera.orthographic;
+        e.preventDefault();
+        return;
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // InputManager tracks held keys internally
+    };
+
+    // Initialize input manager keyboard tracking
+    inputManager.init();
+
+    // Also add our custom handlers
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    // Handle mouse
+    const handleMouseDown = (e: MouseEvent) => {
+      const editor = editorRef.current;
+      const canvas = canvasRef.current;
+
+      inputManager.setMouseDragging(true, e.button);
+      inputManager.updateMousePosition(e.clientX, e.clientY);
+
+      // Left click for selection (only if not in transform mode)
+      if (e.button === 0 && editor && canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Scale to render resolution
+        const scaleX = rasterizerRef.current!.renderWidth / rect.width;
+        const scaleY = rasterizerRef.current!.renderHeight / rect.height;
+
+        editor.handleClick(
+          x * scaleX,
+          y * scaleY,
+          rasterizerRef.current!.renderWidth,
+          rasterizerRef.current!.renderHeight,
+          e.shiftKey,
+          e.altKey,
+          e.ctrlKey || e.metaKey
+        );
+      }
+    };
+    const handleMouseUp = () => {
+      inputManager.setMouseDragging(false);
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      const editor = editorRef.current;
+      const canvas = canvasRef.current;
+      const mouseState = inputManager.getMouseState();
+
+      const deltaX = e.clientX - mouseState.x;
+      const deltaY = e.clientY - mouseState.y;
+
+      // Always update mouse position for features like Shift+A menu
+      inputManager.updateMousePosition(e.clientX, e.clientY);
+
+      // If in transform mode, update transform
+      if (editor && editor.transformMode !== "none" && canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const scaleX = rasterizerRef.current!.renderWidth / rect.width;
+        const scaleY = rasterizerRef.current!.renderHeight / rect.height;
+
+        editor.updateTransform(
+          deltaX,
+          deltaY,
+          x * scaleX,
+          y * scaleY,
+          rasterizerRef.current!.renderWidth,
+          rasterizerRef.current!.renderHeight
+        );
+      }
+    };
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const camera = sceneRef.current.camera;
+
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl + two fingers: zoom
+        camera.zoom(e.deltaY * 0.05);
+      } else if (e.shiftKey) {
+        // Shift + two fingers: pan
+        camera.pan(-e.deltaX * 0.005, -e.deltaY * 0.005);
+      } else {
+        // Two fingers only: orbit (rotate camera)
+        camera.orbit(-e.deltaX * 0.005, -e.deltaY * 0.005);
+      }
+    };
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault(); // Prevent right-click menu
+    };
+
+    // Track pointer over viewport for context-aware shortcuts (like Blender)
+    const handleViewportEnter = () => {
+      inputManager.setPointerOverViewport(true);
+    };
+    const handleViewportLeave = () => {
+      inputManager.setPointerOverViewport(false);
+    };
+
+    canvas.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    canvas.addEventListener("mouseenter", handleViewportEnter);
+    canvas.addEventListener("mouseleave", handleViewportLeave);
+
+    // Create and start render loop
+    renderLoopRef.current = new RenderLoop(24); // 24 FPS PS1-style
+
+    const renderCtx: RenderContext = {
+      rasterizer: rasterizerRef.current!,
+      scene: sceneRef.current,
+      editor: editorRef.current!,
+      inputManager: inputManagerRef.current,
+      gridData: gridDataRef.current,
+      settings: settings,
+    };
+
+    renderLoopRef.current.start(renderCtx, {
+      onFpsUpdate: setFps,
+      onUIUpdate: () => updateUIState(),
+    });
+
+    // Cleanup
+    return () => {
+      renderLoopRef.current?.stop();
+      window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("wheel", handleWheel);
+      canvas.removeEventListener("contextmenu", handleContextMenu);
+      canvas.removeEventListener("mouseenter", handleViewportEnter);
+      canvas.removeEventListener("mouseleave", handleViewportLeave);
+    };
+  }, [resizeCanvas, loadOBJ, updateUIState]);
+
+  return (
+    <div className="app-layout">
+      <Toolbar
+        mode={editorMode}
+        transformMode={transformMode}
+        viewMode={viewMode}
+        selectionMode={selectionMode}
+        onModeChange={handleModeChange}
+        onViewModeChange={handleViewModeChange}
+        onSelectionModeChange={handleSelectionModeChange}
+      />
+      <SceneTree
+        objects={sceneObjects}
+        onSelectObject={handleSelectObject}
+        onToggleVisibility={handleToggleVisibility}
+      />
+      <div className="viewport" ref={viewportRef}>
+        <canvas id="canvas" ref={canvasRef} />
+        <Instructions />
+      </div>
+      <PropertiesPanel
+        objectName={selectedObjectName}
+        position={selectedPosition}
+        rotation={selectedRotation}
+        scale={selectedScale}
+        onPositionChange={handlePositionChange}
+        onRotationChange={handleRotationChange}
+        onScaleChange={handleScaleChange}
+      />
+      <StatusBar
+        mode={editorMode}
+        selectionMode={selectionMode}
+        transformMode={transformMode}
+        axisConstraint={axisConstraint}
+        selectedCount={sceneObjects.filter((o) => o.selected).length}
+        vertexCount={selectedVertexCount}
+        edgeCount={selectedEdgeCount}
+        faceCount={selectedFaceCount}
+        fps={fps}
+      />
+      {addMenuPos && (
+        <AddMenu
+          x={addMenuPos.x}
+          y={addMenuPos.y}
+          onSelect={handleAddPrimitive}
+          onClose={() => setAddMenuPos(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Mount React app
+const container = document.getElementById("root");
+if (container) {
+  const root = createRoot(container);
+  root.render(<App />);
+}

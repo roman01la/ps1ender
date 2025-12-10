@@ -1,0 +1,23 @@
+{
+  "name": "ps1ender",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "build": "bun build src/App.tsx --outdir=public --target=browser --format=esm",
+    "prod": "bun build src/App.tsx --outdir=public --target=browser --format=esm --minify",
+    "watch": "bun build src/App.tsx --outdir=public --target=browser --format=esm --watch",
+    "dev": "bun run build && bunx serve public"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Software rasterizer for 3D graphics using Canvas 2D API",
+  "dependencies": {
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}
