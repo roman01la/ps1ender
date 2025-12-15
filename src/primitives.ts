@@ -85,6 +85,13 @@ export class Mesh {
   public triangles: Triangle[] = [];
 
   /**
+   * Enable PS1-style smooth (Gouraud) shading instead of flat shading.
+   * When false (default): flat shading - each face has uniform lighting
+   * When true: smooth shading - lighting is interpolated across vertices
+   */
+  public smoothShading: boolean = false;
+
+  /**
    * Primary face data - polygons with any number of vertices.
    * This is the source of truth for topology.
    */
@@ -440,6 +447,36 @@ export class Mesh {
     this.buildTriangles();
   }
 
+  /**
+   * Recalculate vertex normals based on current face geometry.
+   * Uses flat shading (PS1-style) - each vertex gets the normal of its face.
+   * Call this after transforming vertices (rotate, scale, etc.) to update lighting.
+   */
+  recalculateNormals(): void {
+    // PS1-style flat shading: each triangle's vertices get the face normal
+    for (let i = 0; i < this.indices.length; i += 3) {
+      const i0 = this.indices[i];
+      const i1 = this.indices[i + 1];
+      const i2 = this.indices[i + 2];
+
+      const v0 = this.vertices[i0].position;
+      const v1 = this.vertices[i1].position;
+      const v2 = this.vertices[i2].position;
+
+      const edge1 = v1.sub(v0);
+      const edge2 = v2.sub(v0);
+      const faceNormal = edge1.cross(edge2).normalize();
+
+      // All vertices of this triangle get the same face normal (flat shading)
+      this.vertices[i0].normal = faceNormal;
+      this.vertices[i1].normal = faceNormal;
+      this.vertices[i2].normal = faceNormal;
+    }
+
+    // Rebuild triangles to pick up the new normals
+    this.buildTriangles();
+  }
+
   // Public method to rebuild both triangles AND faces from indices
   // Use this after legacy operations that modify indices directly
   rebuildMesh(): void {
@@ -450,12 +487,15 @@ export class Mesh {
   /**
    * Rebuild indices and triangles from faceData
    * Use this after operations that modify faceData directly (new API)
+   * Also recalculates normals to ensure lighting is correct for new geometry
    */
   rebuildFromFaces(): void {
     this.triangulateFromFaces();
     this.buildTriangles();
     // Also rebuild legacy faces for backward compatibility
     this.buildLegacyFacesFromFaceData();
+    // Recalculate normals for correct lighting on new geometry
+    this.recalculateNormals();
   }
 
   /**
@@ -627,13 +667,13 @@ export class Mesh {
 export function createPlaneMesh(size: number = 2): Mesh {
   const half = size / 2;
   const color = Color.white();
-  const normal = new Vector3(0, 1, 0);
+  const normal = new Vector3(0, 0, 1); // Z-up
 
   const vertices: Vertex[] = [
-    new Vertex(new Vector3(-half, 0, -half), color, normal, 0, 0),
-    new Vertex(new Vector3(half, 0, -half), color, normal, 1, 0),
-    new Vertex(new Vector3(half, 0, half), color, normal, 1, 1),
-    new Vertex(new Vector3(-half, 0, half), color, normal, 0, 1),
+    new Vertex(new Vector3(-half, -half, 0), color, normal, 0, 0),
+    new Vertex(new Vector3(half, -half, 0), color, normal, 1, 0),
+    new Vertex(new Vector3(half, half, 0), color, normal, 1, 1),
+    new Vertex(new Vector3(-half, half, 0), color, normal, 0, 1),
   ];
 
   // Two triangles forming a quad
@@ -661,12 +701,12 @@ export function createCubeMesh(size: number = 2): Mesh {
     new Vector3(-half, half, half), // 7: back-top-left
   ];
 
-  // Face normals
+  // Face normals (Z-up coordinate system)
   const normals = {
-    front: new Vector3(0, 0, -1),
-    back: new Vector3(0, 0, 1),
-    top: new Vector3(0, 1, 0),
-    bottom: new Vector3(0, -1, 0),
+    front: new Vector3(0, -1, 0), // -Y face
+    back: new Vector3(0, 1, 0), // +Y face
+    top: new Vector3(0, 0, 1), // +Z face (top in Z-up)
+    bottom: new Vector3(0, 0, -1), // -Z face (bottom in Z-up)
     right: new Vector3(1, 0, 0),
     left: new Vector3(-1, 0, 0),
   };
@@ -721,22 +761,22 @@ export function createCircleMesh(
   segments: number = 32
 ): Mesh {
   const color = Color.white();
-  const normal = new Vector3(0, 1, 0);
+  const normal = new Vector3(0, 0, 1); // Z-up
 
   const vertices: Vertex[] = [];
   const indices: number[] = [];
 
-  // Create vertices around the circle
+  // Create vertices around the circle (XY plane)
   for (let i = 0; i < segments; i++) {
     const angle = (i / segments) * Math.PI * 2;
     const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
+    const y = Math.sin(angle) * radius;
 
     // UV mapping: map circle to 0-1 range
     const u = (Math.cos(angle) + 1) / 2;
     const v = (Math.sin(angle) + 1) / 2;
 
-    vertices.push(new Vertex(new Vector3(x, 0, z), color, normal, u, v));
+    vertices.push(new Vertex(new Vector3(x, y, 0), color, normal, u, v));
   }
 
   // Create degenerate triangles for each edge segment

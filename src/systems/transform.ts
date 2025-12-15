@@ -20,8 +20,10 @@ export type TransformMode = "none" | "grab" | "rotate" | "scale";
 
 /**
  * Axis constraint for transforms
+ * Single axis: "x", "y", "z" - movement locked to that axis
+ * Plane (two axes): "yz", "xz", "xy" - movement on that plane (excludes the missing axis)
  */
-export type AxisConstraint = "none" | "x" | "y" | "z";
+export type AxisConstraint = "none" | "x" | "y" | "z" | "yz" | "xz" | "xy";
 
 /**
  * Transform state snapshot for undo/redo
@@ -312,6 +314,13 @@ export class TransformManager {
     this._axisConstraint = axis;
   }
 
+  /**
+   * Reset transform origin (used when switching axis constraints)
+   */
+  resetTransformOrigin(origin: Vector3): void {
+    this._transformOrigin = origin;
+  }
+
   // ==================== Transform Update ====================
 
   /**
@@ -322,7 +331,13 @@ export class TransformManager {
     deltaY: number,
     camera: Camera,
     obj: SceneObject,
-    isEditMode: boolean
+    isEditMode: boolean,
+    ctrlKey: boolean = false,
+    screenX: number = 0,
+    screenY: number = 0,
+    canvasWidth: number = 0,
+    canvasHeight: number = 0,
+    selectedVertices?: Set<number>
   ): void {
     if (this._mode === "none") return;
 
@@ -334,7 +349,7 @@ export class TransformManager {
 
     // Get camera-relative directions
     const forward = camera.target.sub(camera.position).normalize();
-    const right = forward.cross(new Vector3(0, 1, 0)).normalize();
+    const right = forward.cross(new Vector3(0, 0, 1)).normalize();
     const up = right.cross(forward).normalize();
 
     // Sensitivity
@@ -366,7 +381,14 @@ export class TransformManager {
         moveSensitivity,
         getAxisMovement,
         obj,
-        isEditMode
+        isEditMode,
+        ctrlKey,
+        screenX,
+        screenY,
+        canvasWidth,
+        canvasHeight,
+        camera,
+        selectedVertices
       );
     } else if (this._mode === "rotate") {
       this.updateRotate(rotateSensitivity, getAxisMovement, obj, isEditMode);
@@ -383,8 +405,80 @@ export class TransformManager {
     sensitivity: number,
     getAxisMovement: (axis: Vector3) => number,
     obj: SceneObject,
-    isEditMode: boolean
+    isEditMode: boolean,
+    ctrlKey: boolean = false,
+    screenX: number = 0,
+    screenY: number = 0,
+    canvasWidth: number = 0,
+    canvasHeight: number = 0,
+    camera?: Camera,
+    selectedVertices?: Set<number>
   ): void {
+    // Vertex snapping: when Ctrl is held in edit mode, snap to nearest unselected vertex
+    if (
+      ctrlKey &&
+      isEditMode &&
+      this.vertexStartPositions.size > 0 &&
+      camera &&
+      selectedVertices &&
+      canvasWidth > 0 &&
+      canvasHeight > 0
+    ) {
+      const snapTarget = this.findSnapTarget(
+        obj,
+        screenX,
+        screenY,
+        canvasWidth,
+        canvasHeight,
+        camera,
+        selectedVertices
+      );
+
+      if (snapTarget) {
+        // Calculate the center of selected vertices
+        const mesh = obj.mesh;
+        let center = Vector3.zero();
+        for (const idx of selectedVertices) {
+          center = center.add(mesh.vertices[idx].position);
+        }
+        center = center.div(selectedVertices.size);
+
+        // Calculate offset to move center to snap target
+        // Apply axis constraint if active
+        let offset = snapTarget.sub(center);
+        if (this._axisConstraint === "x") {
+          offset = new Vector3(offset.x, 0, 0);
+        } else if (this._axisConstraint === "y") {
+          offset = new Vector3(0, offset.y, 0);
+        } else if (this._axisConstraint === "z") {
+          offset = new Vector3(0, 0, offset.z);
+        } else if (this._axisConstraint === "yz") {
+          // YZ plane: snap Y and Z, keep X
+          offset = new Vector3(0, offset.y, offset.z);
+        } else if (this._axisConstraint === "xz") {
+          // XZ plane: snap X and Z, keep Y
+          offset = new Vector3(offset.x, 0, offset.z);
+        } else if (this._axisConstraint === "xy") {
+          // XY plane: snap X and Y, keep Z
+          offset = new Vector3(offset.x, offset.y, 0);
+        }
+
+        // Move all selected vertices by the offset
+        for (const idx of selectedVertices) {
+          const pos = mesh.vertices[idx].position;
+          mesh.vertices[idx].position = pos.add(offset);
+        }
+        mesh.rebuildTriangles();
+
+        // Update gizmo origin
+        const modelMatrix = obj.getModelMatrix();
+        const newCenter = center.add(offset);
+        this._transformOrigin = modelMatrix.transformPoint(newCenter);
+        return;
+      }
+    }
+
+    // Normal grab behavior
     let movement = Vector3.zero();
 
     if (this._axisConstraint === "none") {
@@ -400,6 +494,21 @@ export class TransformManager {
     } else if (this._axisConstraint === "z") {
       const amount = getAxisMovement(new Vector3(0, 0, 1));
       movement = new Vector3(0, 0, amount * sensitivity);
+    } else if (this._axisConstraint === "yz") {
+      // YZ plane: move on Y and Z axes (exclude X)
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(0, amountY * sensitivity, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xz") {
+      // XZ plane: move on X and Z axes (exclude Y)
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(amountX * sensitivity, 0, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xy") {
+      // XY plane: move on X and Y axes (exclude Z)
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      movement = new Vector3(amountX * sensitivity, amountY * sensitivity, 0);
     }
 
     if (isEditMode && this.vertexStartPositions.size > 0) {
@@ -427,6 +536,55 @@ export class TransformManager {
     }
   }
 
+  /**
+   * Find the closest unselected vertex to the mouse pointer for snapping
+   */
+  private findSnapTarget(
+    obj: SceneObject,
+    screenX: number,
+    screenY: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    camera: Camera,
+    selectedVertices: Set<number>
+  ): Vector3 | null {
+    const mesh = obj.mesh;
+    const modelMatrix = obj.getModelMatrix();
+    const viewMatrix = camera.getViewMatrix();
+    const projMatrix = camera.getProjectionMatrix(canvasWidth / canvasHeight);
+    const mvp = projMatrix.multiply(viewMatrix).multiply(modelMatrix);
+
+    let closestVertex: Vector3 | null = null;
+    let closestDist = 30; // Snap radius in pixels
+
+    for (let i = 0; i < mesh.vertices.length; i++) {
+      // Skip selected vertices
+      if (selectedVertices.has(i)) continue;
+
+      const pos = mesh.vertices[i].position;
+      const clip = mvp.transformPoint(pos);
+
+      // Skip vertices behind camera
+      if (clip.z < -1 || clip.z > 1) continue;
+
+      // Convert to screen coordinates
+      const sx = ((clip.x + 1) / 2) * canvasWidth;
+      const sy = ((1 - clip.y) / 2) * canvasHeight;
+
+      // Calculate distance to mouse
+      const dx = sx - screenX;
+      const dy = sy - screenY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestVertex = pos.clone();
+      }
+    }
+
+    return closestVertex;
+  }
+
   private updateRotate(
     sensitivity: number,
     getAxisMovement: (axis: Vector3) => number,
@@ -435,9 +593,9 @@ export class TransformManager {
   ): void {
     if (isEditMode && this.vertexStartPositions.size > 0 && this.editPivot) {
       // Edit mode: rotate vertices around pivot
-      let axis = new Vector3(0, 1, 0);
+      let axis = new Vector3(0, 0, 1); // Default to Z axis (up in Z-up)
       if (this._axisConstraint === "x") axis = new Vector3(1, 0, 0);
-      else if (this._axisConstraint === "z") axis = new Vector3(0, 0, 1);
+      else if (this._axisConstraint === "y") axis = new Vector3(0, 1, 0);
 
       const amount = getAxisMovement(axis);
       const angle = amount * sensitivity;
@@ -449,18 +607,19 @@ export class TransformManager {
         const rotated = this.rotateVectorAroundAxis(relative, axis, angle);
         mesh.vertices[idx].position = rotated.add(this.editPivot);
       }
-      mesh.rebuildTriangles();
+      // Recalculate normals after rotation to update lighting
+      mesh.recalculateNormals();
     } else if (this.objectStartRotation) {
       // Object mode: rotate object
-      if (this._axisConstraint === "none" || this._axisConstraint === "y") {
-        const amount = getAxisMovement(new Vector3(0, 1, 0));
-        obj.rotation.y += amount * sensitivity;
+      if (this._axisConstraint === "none" || this._axisConstraint === "z") {
+        const amount = getAxisMovement(new Vector3(0, 0, 1));
+        obj.rotation.z += amount * sensitivity;
       } else if (this._axisConstraint === "x") {
         const amount = getAxisMovement(new Vector3(1, 0, 0));
         obj.rotation.x += amount * sensitivity;
-      } else if (this._axisConstraint === "z") {
-        const amount = getAxisMovement(new Vector3(0, 0, 1));
-        obj.rotation.z += amount * sensitivity;
+      } else if (this._axisConstraint === "y") {
+        const amount = getAxisMovement(new Vector3(0, 1, 0));
+        obj.rotation.y += amount * sensitivity;
       }
     }
   }
@@ -503,13 +662,35 @@ export class TransformManager {
             relative.y,
             relative.z * scaleAmount
           );
+        } else if (this._axisConstraint === "yz") {
+          // Scale on YZ plane (exclude X)
+          scaled = new Vector3(
+            relative.x,
+            relative.y * scaleAmount,
+            relative.z * scaleAmount
+          );
+        } else if (this._axisConstraint === "xz") {
+          // Scale on XZ plane (exclude Y)
+          scaled = new Vector3(
+            relative.x * scaleAmount,
+            relative.y,
+            relative.z * scaleAmount
+          );
+        } else if (this._axisConstraint === "xy") {
+          // Scale on XY plane (exclude Z)
+          scaled = new Vector3(
+            relative.x * scaleAmount,
+            relative.y * scaleAmount,
+            relative.z
+          );
         } else {
           scaled = relative;
         }
 
         mesh.vertices[idx].position = scaled.add(this.editPivot);
       }
-      mesh.rebuildTriangles();
+      // Recalculate normals after scaling to update lighting
+      mesh.recalculateNormals();
     } else if (this.objectStartScale) {
       // Object mode: scale object
       if (this._axisConstraint === "none") {
@@ -535,6 +716,27 @@ export class TransformManager {
           obj.scale.x,
           obj.scale.y,
           obj.scale.z * scaleAmount
+        );
+      } else if (this._axisConstraint === "yz") {
+        // Scale on YZ plane (exclude X)
+        obj.scale = new Vector3(
+          obj.scale.x,
+          obj.scale.y * scaleAmount,
+          obj.scale.z * scaleAmount
+        );
+      } else if (this._axisConstraint === "xz") {
+        // Scale on XZ plane (exclude Y)
+        obj.scale = new Vector3(
+          obj.scale.x * scaleAmount,
+          obj.scale.y,
+          obj.scale.z * scaleAmount
+        );
+      } else if (this._axisConstraint === "xy") {
+        // Scale on XY plane (exclude Z)
+        obj.scale = new Vector3(
+          obj.scale.x * scaleAmount,
+          obj.scale.y * scaleAmount,
+          obj.scale.z
         );
       }
     }

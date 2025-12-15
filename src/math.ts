@@ -15,7 +15,7 @@ export class Vector3 {
   }
 
   static up(): Vector3 {
-    return new Vector3(0, 1, 0);
+    return new Vector3(0, 0, 1);
   }
 
   static forward(): Vector3 {

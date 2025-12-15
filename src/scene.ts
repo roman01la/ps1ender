@@ -98,9 +98,9 @@ export class Camera {
   public orthoSize: number = 5; // Half-height of orthographic view
 
   constructor() {
-    this.position = new Vector3(5, 5, 5);
+    this.position = new Vector3(5, -5, 5);
     this.target = Vector3.zero();
-    this.up = new Vector3(0, 1, 0);
+    this.up = new Vector3(0, 0, 1);
     this.fov = 60;
     this.near = 0.1;
     this.far = 100;
@@ -138,19 +138,19 @@ export class Camera {
     const offset = this.position.sub(this.target);
     const radius = offset.length();
 
-    // Current angles
-    let theta = Math.atan2(offset.x, offset.z);
-    let phi = Math.acos(Math.max(-1, Math.min(1, offset.y / radius)));
+    // Current angles (Z-up coordinate system)
+    let theta = Math.atan2(offset.y, offset.x);
+    let phi = Math.acos(Math.max(-1, Math.min(1, offset.z / radius)));
 
     // Apply deltas
     theta += deltaTheta;
     phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi + deltaPhi));
 
-    // Convert back to position
+    // Convert back to position (Z-up)
     this.position = new Vector3(
-      this.target.x + radius * Math.sin(phi) * Math.sin(theta),
-      this.target.y + radius * Math.cos(phi),
-      this.target.z + radius * Math.sin(phi) * Math.cos(theta)
+      this.target.x + radius * Math.sin(phi) * Math.cos(theta),
+      this.target.y + radius * Math.sin(phi) * Math.sin(theta),
+      this.target.z + radius * Math.cos(phi)
     );
   }
 
@@ -191,52 +191,7 @@ export class Camera {
     const distance = this.position.sub(this.target).length();
 
     switch (view) {
-      case "front": // Numpad 1: -Z looking at +Z
-        this.position = new Vector3(
-          this.target.x,
-          this.target.y,
-          this.target.z - distance
-        );
-        this.up = new Vector3(0, 1, 0);
-        this.orthographic = true;
-        break;
-      case "back": // Ctrl+Numpad 1: +Z looking at -Z
-        this.position = new Vector3(
-          this.target.x,
-          this.target.y,
-          this.target.z + distance
-        );
-        this.up = new Vector3(0, 1, 0);
-        this.orthographic = true;
-        break;
-      case "right": // Numpad 3: +X looking at -X
-        this.position = new Vector3(
-          this.target.x + distance,
-          this.target.y,
-          this.target.z
-        );
-        this.up = new Vector3(0, 1, 0);
-        this.orthographic = true;
-        break;
-      case "left": // Ctrl+Numpad 3: -X looking at +X
-        this.position = new Vector3(
-          this.target.x - distance,
-          this.target.y,
-          this.target.z
-        );
-        this.up = new Vector3(0, 1, 0);
-        this.orthographic = true;
-        break;
-      case "top": // Numpad 7: +Y looking down
-        this.position = new Vector3(
-          this.target.x,
-          this.target.y + distance,
-          this.target.z
-        );
-        this.up = new Vector3(0, 0, -1);
-        this.orthographic = true;
-        break;
-      case "bottom": // Ctrl+Numpad 7: -Y looking up
+      case "front": // Numpad 1: -Y looking at +Y (Z-up)
         this.position = new Vector3(
           this.target.x,
           this.target.y - distance,
@@ -245,13 +200,58 @@ export class Camera {
         this.up = new Vector3(0, 0, 1);
         this.orthographic = true;
         break;
-      case "persp": // Numpad 0: perspective view
+      case "back": // Ctrl+Numpad 1: +Y looking at -Y (Z-up)
         this.position = new Vector3(
-          this.target.x + distance * 0.577,
-          this.target.y + distance * 0.577,
-          this.target.z + distance * 0.577
+          this.target.x,
+          this.target.y + distance,
+          this.target.z
+        );
+        this.up = new Vector3(0, 0, 1);
+        this.orthographic = true;
+        break;
+      case "right": // Numpad 3: +X looking at -X (Z-up)
+        this.position = new Vector3(
+          this.target.x + distance,
+          this.target.y,
+          this.target.z
+        );
+        this.up = new Vector3(0, 0, 1);
+        this.orthographic = true;
+        break;
+      case "left": // Ctrl+Numpad 3: -X looking at +X (Z-up)
+        this.position = new Vector3(
+          this.target.x - distance,
+          this.target.y,
+          this.target.z
+        );
+        this.up = new Vector3(0, 0, 1);
+        this.orthographic = true;
+        break;
+      case "top": // Numpad 7: +Z looking down (Z-up)
+        this.position = new Vector3(
+          this.target.x,
+          this.target.y,
+          this.target.z + distance
         );
         this.up = new Vector3(0, 1, 0);
+        this.orthographic = true;
+        break;
+      case "bottom": // Ctrl+Numpad 7: -Z looking up (Z-up)
+        this.position = new Vector3(
+          this.target.x,
+          this.target.y,
+          this.target.z - distance
+        );
+        this.up = new Vector3(0, -1, 0);
+        this.orthographic = true;
+        break;
+      case "persp": // Numpad 0: perspective view (Z-up)
+        this.position = new Vector3(
+          this.target.x + distance * 0.577,
+          this.target.y - distance * 0.577,
+          this.target.z + distance * 0.577
+        );
+        this.up = new Vector3(0, 0, 1);
         this.orthographic = false;
         break;
     }
@@ -321,6 +321,7 @@ export class Scene {
 
   /**
    * Create grid line data for rendering (not a Mesh - grids are lines, not triangles)
+   * Grid is on XY plane (Z=0) for Z-up coordinate system
    */
   createGridLines(): { vertices: Vertex[]; lineIndices: number[] } {
     const vertices: Vertex[] = [];
@@ -330,37 +331,37 @@ export class Scene {
 
     const gridColor = new Color(80, 80, 80);
     const axisColorX = new Color(150, 50, 50); // Red for X
-    const axisColorZ = new Color(50, 50, 150); // Blue for Z
+    const axisColorY = new Color(50, 150, 50); // Green for Y
 
     let vertexIndex = 0;
 
-    // Create grid lines along X axis
+    // Create grid lines along X axis (parallel to X, varying Y)
     for (let i = 0; i <= this.gridDivisions; i++) {
-      const z = -halfSize + i * step;
-      const isCenter = Math.abs(z) < 0.001;
+      const y = -halfSize + i * step;
+      const isCenter = Math.abs(y) < 0.001;
       const color = isCenter ? axisColorX : gridColor;
 
       vertices.push(
-        new Vertex(new Vector3(-halfSize, 0, z), color, new Vector3(0, 1, 0))
+        new Vertex(new Vector3(-halfSize, y, 0), color, new Vector3(0, 0, 1))
       );
       vertices.push(
-        new Vertex(new Vector3(halfSize, 0, z), color, new Vector3(0, 1, 0))
+        new Vertex(new Vector3(halfSize, y, 0), color, new Vector3(0, 0, 1))
       );
       lineIndices.push(vertexIndex, vertexIndex + 1);
       vertexIndex += 2;
     }
 
-    // Create grid lines along Z axis
+    // Create grid lines along Y axis (parallel to Y, varying X)
     for (let i = 0; i <= this.gridDivisions; i++) {
       const x = -halfSize + i * step;
       const isCenter = Math.abs(x) < 0.001;
-      const color = isCenter ? axisColorZ : gridColor;
+      const color = isCenter ? axisColorY : gridColor;
 
       vertices.push(
-        new Vertex(new Vector3(x, 0, -halfSize), color, new Vector3(0, 1, 0))
+        new Vertex(new Vector3(x, -halfSize, 0), color, new Vector3(0, 0, 1))
       );
       vertices.push(
-        new Vertex(new Vector3(x, 0, halfSize), color, new Vector3(0, 1, 0))
+        new Vertex(new Vector3(x, halfSize, 0), color, new Vector3(0, 0, 1))
       );
       lineIndices.push(vertexIndex, vertexIndex + 1);
       vertexIndex += 2;

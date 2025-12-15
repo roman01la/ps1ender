@@ -1424,8 +1424,42 @@ export class Editor {
 
   /**
    * Set axis constraint
+   * When changing axis during an active transform, reset to original position first
    */
   setAxisConstraint(axis: AxisConstraint): void {
+    // If in grab mode, reset to original positions before switching axis
+    if (this.transform.mode === "grab") {
+      const selected = this.scene.getSelectedObjects();
+      if (selected.length > 0) {
+        const obj = selected[0];
+        const state = this.transform.getState();
+
+        if (this.mode === "edit" && state.vertexStartPositions.size > 0) {
+          // Edit mode: reset vertices to original positions
+          const mesh = obj.mesh;
+          for (const [idx, startPos] of state.vertexStartPositions) {
+            mesh.vertices[idx].position = startPos.clone();
+          }
+          mesh.rebuildTriangles();
+
+          // Reset gizmo origin to original center
+          let center = Vector3.zero();
+          for (const [, pos] of state.vertexStartPositions) {
+            center = center.add(pos);
+          }
+          center = center.div(state.vertexStartPositions.size);
+          const modelMatrix = obj.getModelMatrix();
+          this.transform.resetTransformOrigin(
+            modelMatrix.transformPoint(center)
+          );
+        } else if (state.startPos) {
+          // Object mode: reset object to original position
+          obj.position = state.startPos.clone();
+          this.transform.resetTransformOrigin(obj.getWorldCenter());
+        }
+      }
+    }
+
     this.transform.setAxisConstraint(axis);
   }
 
@@ -1438,7 +1472,8 @@ export class Editor {
     screenX: number,
     screenY: number,
     canvasWidth: number,
-    canvasHeight: number
+    canvasHeight: number,
+    ctrlKey: boolean = false
   ): void {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0 || this.transformMode === "none") return;
@@ -1449,7 +1484,13 @@ export class Editor {
       deltaY,
       this.scene.camera,
       obj,
-      this.mode === "edit"
+      this.mode === "edit",
+      ctrlKey,
+      screenX,
+      screenY,
+      canvasWidth,
+      canvasHeight,
+      this.selectedVertices
     );
   }
 
@@ -1642,15 +1683,30 @@ export class Editor {
     // Axis constraints (only during transform)
     if (this.transformMode !== "none") {
       if (lowerKey === "x") {
-        this.setAxisConstraint(this.axisConstraint === "x" ? "none" : "x");
+        if (shiftKey) {
+          // Shift+X = YZ plane (exclude X)
+          this.setAxisConstraint(this.axisConstraint === "yz" ? "none" : "yz");
+        } else {
+          this.setAxisConstraint(this.axisConstraint === "x" ? "none" : "x");
+        }
         return true;
       }
       if (lowerKey === "y") {
-        this.setAxisConstraint(this.axisConstraint === "y" ? "none" : "y");
+        if (shiftKey) {
+          // Shift+Y = XZ plane (exclude Y)
+          this.setAxisConstraint(this.axisConstraint === "xz" ? "none" : "xz");
+        } else {
+          this.setAxisConstraint(this.axisConstraint === "y" ? "none" : "y");
+        }
         return true;
       }
       if (lowerKey === "z") {
-        this.setAxisConstraint(this.axisConstraint === "z" ? "none" : "z");
+        if (shiftKey) {
+          // Shift+Z = XY plane (exclude Z)
+          this.setAxisConstraint(this.axisConstraint === "xy" ? "none" : "xy");
+        } else {
+          this.setAxisConstraint(this.axisConstraint === "z" ? "none" : "z");
+        }
         return true;
       }
     }
@@ -1699,6 +1755,16 @@ export class Editor {
       this.gizmoSize,
       this.axisConstraint
     );
+  }
+
+  /**
+   * Get the origin point (position) of the selected object for rendering
+   * Returns null if no object is selected
+   */
+  getSelectedObjectOrigin(): Vector3 | null {
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0) return null;
+    return selected[0].position.clone();
   }
 
   /**
@@ -1898,7 +1964,15 @@ export class Editor {
     }
 
     const modeNames = { grab: "Grab", rotate: "Rotate", scale: "Scale" };
-    const axisNames = { none: "", x: " [X]", y: " [Y]", z: " [Z]" };
+    const axisNames: Record<AxisConstraint, string> = {
+      none: "",
+      x: " [X]",
+      y: " [Y]",
+      z: " [Z]",
+      yz: " [YZ]",
+      xz: " [XZ]",
+      xy: " [XY]",
+    };
     return `${modePrefix}${modeNames[this.transformMode]}${
       axisNames[this.axisConstraint]
     } | X/Y/Z: Axis | Enter: Confirm | Esc: Cancel`;

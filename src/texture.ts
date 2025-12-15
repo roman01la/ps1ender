@@ -58,6 +58,13 @@ export class Texture {
   }
 
   /**
+   * Get the raw pixel data buffer (for WASM upload)
+   */
+  getData(): Uint8ClampedArray {
+    return this.data;
+  }
+
+  /**
    * Set a pixel in the texture
    */
   setPixel(x: number, y: number, color: Color): void {

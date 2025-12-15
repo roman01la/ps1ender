@@ -43,6 +43,7 @@ export interface RendererSettings {
  */
 export interface UIState {
   fps: number;
+  frameTime: number;
   editorMode: EditorMode;
   selectionMode: SelectionMode;
   transformMode: TransformMode;
@@ -64,6 +65,7 @@ export interface UIState {
  */
 export interface UIStateSetters {
   setFps: (fps: number) => void;
+  setFrameTime: (ms: number) => void;
   setEditorMode: (mode: EditorMode) => void;
   setSelectionMode: (mode: SelectionMode) => void;
   setTransformMode: (mode: TransformMode) => void;
@@ -133,6 +135,7 @@ export function useEditorUIState(
 } {
   // UI state
   const [fps, setFps] = useState(0);
+  const [frameTime, setFrameTime] = useState(0);
   const [editorMode, setEditorMode] = useState<EditorMode>("object");
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("vertex");
   const [transformMode, setTransformMode] = useState<TransformMode>("none");
@@ -252,6 +255,7 @@ export function useEditorUIState(
   return {
     state: {
       fps,
+      frameTime,
       editorMode,
       selectionMode,
       transformMode,
@@ -269,6 +273,7 @@ export function useEditorUIState(
     },
     setters: {
       setFps,
+      setFrameTime,
       setEditorMode,
       setSelectionMode,
       setTransformMode,

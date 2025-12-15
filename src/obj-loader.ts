@@ -250,9 +250,7 @@ export class OBJLoader {
 
     if (hasNormals) return;
 
-    // Calculate face normals and accumulate for smooth shading
-    const normalAccum: Vector3[] = mesh.vertices.map(() => Vector3.zero());
-
+    // PS1-style flat shading: each triangle's vertices get the face normal
     for (let i = 0; i < mesh.indices.length; i += 3) {
       const i0 = mesh.indices[i];
       const i1 = mesh.indices[i + 1];
@@ -264,18 +262,12 @@ export class OBJLoader {
 
       const edge1 = v1.sub(v0);
       const edge2 = v2.sub(v0);
-      const faceNormal = edge1.cross(edge2);
+      const faceNormal = edge1.cross(edge2).normalize();
 
-      // Accumulate (weighted by face area, which is proportional to cross product magnitude)
-      normalAccum[i0] = normalAccum[i0].add(faceNormal);
-      normalAccum[i1] = normalAccum[i1].add(faceNormal);
-      normalAccum[i2] = normalAccum[i2].add(faceNormal);
-    }
-
-    // Normalize and assign
-    for (let i = 0; i < mesh.vertices.length; i++) {
-      const normal = normalAccum[i].normalize();
-      mesh.vertices[i].normal = normal;
+      // All vertices of this triangle get the same face normal (flat shading)
+      mesh.vertices[i0].normal = faceNormal;
+      mesh.vertices[i1].normal = faceNormal;
+      mesh.vertices[i2].normal = faceNormal;
     }
 
     // Rebuild triangles with updated normals

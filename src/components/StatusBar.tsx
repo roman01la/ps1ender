@@ -16,6 +16,7 @@ interface StatusBarProps {
   edgeCount: number;
   faceCount: number;
   fps: number;
+  frameTime: number;
 }
 
 export function StatusBar({
@@ -28,6 +29,7 @@ export function StatusBar({
   edgeCount,
   faceCount,
   fps,
+  frameTime,
 }: StatusBarProps) {
   const getModeText = () => {
     const modeStr = mode === "object" ? "Object Mode" : "Edit Mode";
@@ -86,7 +88,9 @@ export function StatusBar({
         <span className="status-selection">{getSelectionText()}</span>
       </div>
       <div className="status-right">
-        <span className="status-fps">{fps} FPS</span>
+        <span className="status-fps">
+          {fps} FPS ({frameTime.toFixed(1)} ms)
+        </span>
       </div>
     </div>
   );

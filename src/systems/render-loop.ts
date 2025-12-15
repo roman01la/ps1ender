@@ -57,7 +57,7 @@ export interface RenderContext {
  * Callbacks for the render loop
  */
 export interface RenderCallbacks {
-  onFpsUpdate: (fps: number) => void;
+  onFpsUpdate: (fps: number, frameTimeMs: number) => void;
   onUIUpdate: () => void;
 }
 
@@ -200,31 +200,52 @@ export function renderFrame(ctx: RenderContext): void {
 
   rasterizer.present();
 }
-
-/**
- * Render editor overlays: gizmo, vertex points, edges, faces
- */
 export function renderEditorOverlays(
   rasterizer: Rasterizer,
   editor: Editor,
   viewMatrix: Matrix4,
   projectionMatrix: Matrix4
 ): void {
-  // Render gizmo for selected object
-  const gizmoData = editor.createGizmoData();
-  if (gizmoData) {
-    rasterizer.renderLines(
-      {
-        vertices: gizmoData.vertices,
-        indices: gizmoData.lineIndices,
-      },
-      Matrix4.identity(),
-      viewMatrix,
-      projectionMatrix
-    );
+  // IMPORTANT: Render depth-tested elements FIRST (before gizmo which uses depth=0)
+  // These use actual depth values with bias, so they must be rendered while
+  // depth buffer still contains mesh geometry depth values
+
+  // Render vertex points in Edit mode (vertex selection mode)
+  const vertexData = editor.createVertexPointData(
+    rasterizer,
+    viewMatrix,
+    projectionMatrix
+  );
+  if (vertexData) {
+    // Render unselected vertices (smaller)
+    if (vertexData.unselected.vertices.length > 0) {
+      rasterizer.renderPoints(
+        {
+          vertices: vertexData.unselected.vertices,
+          indices: vertexData.unselected.pointIndices,
+        },
+        Matrix4.identity(),
+        viewMatrix,
+        projectionMatrix,
+        2 // Smaller point size for unselected
+      );
+    }
+    // Render selected vertices (larger, on top)
+    if (vertexData.selected.vertices.length > 0) {
+      rasterizer.renderPoints(
+        {
+          vertices: vertexData.selected.vertices,
+          indices: vertexData.selected.pointIndices,
+        },
+        Matrix4.identity(),
+        viewMatrix,
+        projectionMatrix,
+        4 // Larger point size for selected
+      );
+    }
   }
 
-  // Render wireframe in vertex edit mode
+  // Render wireframe in vertex edit mode (with depth testing)
   const vertexWireframe = editor.createVertexWireframeData(
     rasterizer,
     viewMatrix,
@@ -238,30 +259,12 @@ export function renderEditorOverlays(
       },
       Matrix4.identity(),
       viewMatrix,
-      projectionMatrix
-    );
-  }
-
-  // Render vertex points in Edit mode (vertex selection mode)
-  const vertexData = editor.createVertexPointData(
-    rasterizer,
-    viewMatrix,
-    projectionMatrix
-  );
-  if (vertexData) {
-    rasterizer.renderPoints(
-      {
-        vertices: vertexData.vertices,
-        indices: vertexData.pointIndices,
-      },
-      Matrix4.identity(),
-      viewMatrix,
       projectionMatrix,
-      2 // Point size
+      -1 // Use actual depth from vertex positions
     );
   }
 
-  // Render edge lines in Edit mode (edge selection mode)
+  // Render edge lines in Edit mode (edge selection mode, with depth testing)
   const edgeData = editor.createEdgeLineData(
     rasterizer,
     viewMatrix,
@@ -275,11 +278,12 @@ export function renderEditorOverlays(
       },
       Matrix4.identity(),
       viewMatrix,
-      projectionMatrix
+      projectionMatrix,
+      -1 // Use actual depth from vertex positions
     );
   }
 
-  // Render transparent fill for selected faces (before outlines)
+  // Render transparent fill for selected faces (with depth testing)
   const faceFillData = editor.createSelectedFaceFillData(
     rasterizer,
     viewMatrix,
@@ -298,7 +302,7 @@ export function renderEditorOverlays(
     );
   }
 
-  // Render face highlights in Edit mode (face selection mode)
+  // Render face highlights in Edit mode (face selection mode, with depth testing)
   const faceData = editor.createFaceHighlightData(
     rasterizer,
     viewMatrix,
@@ -312,7 +316,37 @@ export function renderEditorOverlays(
       },
       Matrix4.identity(),
       viewMatrix,
-      projectionMatrix
+      projectionMatrix,
+      -1 // Use actual depth from vertex positions
+    );
+  }
+
+  // Render gizmo for selected object LAST (depth 0 = always on top of everything)
+  const gizmoData = editor.createGizmoData();
+  if (gizmoData) {
+    rasterizer.renderLines(
+      {
+        vertices: gizmoData.vertices,
+        indices: gizmoData.lineIndices,
+      },
+      Matrix4.identity(),
+      viewMatrix,
+      projectionMatrix,
+      0 // Gizmo always on top
+    );
+  }
+
+  // Render origin point for selected object (orange circle, always on top)
+  const originPos = editor.getSelectedObjectOrigin();
+  if (originPos) {
+    const originColor = new Color(255, 128, 0); // Orange
+    rasterizer.renderPointNoDepth(
+      originPos,
+      originColor,
+      Matrix4.identity(),
+      viewMatrix,
+      projectionMatrix,
+      4 // Point size
     );
   }
 }
@@ -352,20 +386,22 @@ export class RenderLoop {
       const deltaTime = currentTime - this.timing.lastTime;
       this.timing.lastTime = currentTime;
 
-      // Update FPS counter
-      this.timing.frameCount++;
-      this.timing.fpsTime += deltaTime;
-      if (this.timing.fpsTime >= 1000) {
-        callbacks.onFpsUpdate(this.timing.frameCount);
-        this.timing.frameCount = 0;
-        this.timing.fpsTime = 0;
-      }
-
       // Update UI state
       callbacks.onUIUpdate();
 
-      // Render the frame
+      // Render the frame and measure time
+      const renderStart = performance.now();
       renderFrame(ctx);
+      const frameTimeMs = performance.now() - renderStart;
+
+      // Update FPS counter (do this after render so we have frame time)
+      this.timing.frameCount++;
+      this.timing.fpsTime += deltaTime;
+      if (this.timing.fpsTime >= 1000) {
+        callbacks.onFpsUpdate(this.timing.frameCount, frameTimeMs);
+        this.timing.frameCount = 0;
+        this.timing.fpsTime = 0;
+      }
     };
 
     this.animationId = requestAnimationFrame(tick);

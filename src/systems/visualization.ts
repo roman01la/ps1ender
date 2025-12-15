@@ -10,7 +10,7 @@
  * - Wireframe overlay
  */
 
-import { Vector3, Matrix4, Color } from "../math";
+import { Vector3, Vector4, Matrix4, Color } from "../math";
 import { Mesh, Vertex } from "../primitives";
 import { Camera } from "../scene";
 import { Rasterizer } from "../rasterizer";
@@ -37,10 +37,17 @@ export interface GizmoData {
 
 /**
  * Vertex point data for rendering in Edit mode
+ * Separated into unselected and selected for different point sizes
  */
 export interface VertexPointData {
-  vertices: Vertex[];
-  pointIndices: number[];
+  unselected: {
+    vertices: Vertex[];
+    pointIndices: number[];
+  };
+  selected: {
+    vertices: Vertex[];
+    pointIndices: number[];
+  };
 }
 
 /**
@@ -61,8 +68,10 @@ export interface TriangleData {
 
 /**
  * Axis constraint type
+ * Single axis: "x", "y", "z" - movement locked to that axis
+ * Plane (two axes): "yz", "xz", "xy" - movement on that plane (excludes the missing axis)
  */
-export type AxisConstraint = "none" | "x" | "y" | "z";
+export type AxisConstraint = "none" | "x" | "y" | "z" | "yz" | "xz" | "xy";
 
 /**
  * Selection mode type
@@ -99,10 +108,128 @@ export class VisualizationManager {
   private readonly zAxisColor = new Color(80, 80, 255); // Blue
   private readonly activeAxisColor = new Color(255, 255, 80); // Yellow
   private readonly unselectedColor = new Color(64, 64, 64); // Dark gray
-  private readonly selectedVertexColor = new Color(255, 255, 255); // White
+  private readonly selectedVertexColor = new Color(255, 128, 0); // Orange (selected)
   private readonly selectedEdgeColor = new Color(255, 128, 0); // Orange
-  private readonly unselectedVertexColor = new Color(255, 128, 0); // Orange
+  private readonly unselectedVertexColor = new Color(64, 64, 64); // Dark gray (unselected)
   private readonly selectedFaceFillColor = new Color(255, 128, 0); // Orange (for transparent fill)
+
+  /**
+   * Get camera direction from view matrix (points from camera toward scene)
+   */
+  private getCameraDirection(viewMatrix: Matrix4): Vector3 {
+    // The view matrix transforms world to view space
+    // Camera forward direction is the negative Z row of the view matrix (transposed)
+    // For a standard view matrix, this extracts where the camera is looking
+    const d = viewMatrix.data;
+    // View direction in world space (camera looks down -Z in view space)
+    return new Vector3(-d[2], -d[6], -d[10]).normalize();
+  }
+
+  /**
+   * Check if a triangle is front-facing in screen space (after projection)
+   * Uses the same method as the rasterizer for consistency
+   */
+  private isTriangleFrontFacingScreenSpace(
+    p0: Vector3,
+    p1: Vector3,
+    p2: Vector3,
+    ctx: VisualizationContext
+  ): boolean {
+    const { viewMatrix, projectionMatrix, rasterizer } = ctx;
+    if (!viewMatrix || !projectionMatrix || !rasterizer) return true;
+
+    const mvp = projectionMatrix.multiply(viewMatrix);
+
+    // Transform to clip space
+    const clip0 = mvp.transformVector4(Vector4.fromVector3(p0, 1));
+    const clip1 = mvp.transformVector4(Vector4.fromVector3(p1, 1));
+    const clip2 = mvp.transformVector4(Vector4.fromVector3(p2, 1));
+
+    // Skip if any behind camera
+    if (clip0.w < 0.1 || clip1.w < 0.1 || clip2.w < 0.1) return false;
+
+    // Perspective divide to NDC
+    const ndc0 = clip0.perspectiveDivide();
+    const ndc1 = clip1.perspectiveDivide();
+    const ndc2 = clip2.perspectiveDivide();
+
+    // Convert to screen space
+    const sx0 = (ndc0.x + 1) * 0.5 * rasterizer.renderWidth;
+    const sy0 = (1 - ndc0.y) * 0.5 * rasterizer.renderHeight;
+    const sx1 = (ndc1.x + 1) * 0.5 * rasterizer.renderWidth;
+    const sy1 = (1 - ndc1.y) * 0.5 * rasterizer.renderHeight;
+    const sx2 = (ndc2.x + 1) * 0.5 * rasterizer.renderWidth;
+    const sy2 = (1 - ndc2.y) * 0.5 * rasterizer.renderHeight;
+
+    // Calculate signed area in screen space (same as rasterizer)
+    const edge1x = sx1 - sx0;
+    const edge1y = sy1 - sy0;
+    const edge2x = sx2 - sx0;
+    const edge2y = sy2 - sy0;
+
+    const crossZ = edge1x * edge2y - edge1y * edge2x;
+    // Rasterizer: if (cross_z >= 0) continue; // backfacing
+    // So front-facing = crossZ < 0
+    return crossZ < 0;
+  }
+
+  /**
+   * Build a set of vertex indices that are part of at least one front-facing triangle
+   */
+  private getFrontFacingVertices(
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    ctx: VisualizationContext
+  ): Set<number> {
+    const frontFacingVertices = new Set<number>();
+
+    for (let i = 0; i < mesh.indices.length; i += 3) {
+      const i0 = mesh.indices[i];
+      const i1 = mesh.indices[i + 1];
+      const i2 = mesh.indices[i + 2];
+
+      const p0 = modelMatrix.transformPoint(mesh.vertices[i0].position);
+      const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
+      const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
+
+      if (this.isTriangleFrontFacingScreenSpace(p0, p1, p2, ctx)) {
+        frontFacingVertices.add(i0);
+        frontFacingVertices.add(i1);
+        frontFacingVertices.add(i2);
+      }
+    }
+
+    return frontFacingVertices;
+  }
+
+  /**
+   * Build a set of edges that are part of at least one front-facing triangle
+   */
+  private getFrontFacingEdges(
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    ctx: VisualizationContext
+  ): Set<string> {
+    const frontFacingEdges = new Set<string>();
+
+    for (let i = 0; i < mesh.indices.length; i += 3) {
+      const i0 = mesh.indices[i];
+      const i1 = mesh.indices[i + 1];
+      const i2 = mesh.indices[i + 2];
+
+      const p0 = modelMatrix.transformPoint(mesh.vertices[i0].position);
+      const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
+      const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
+
+      // For double-sided rendering, show edges from both front and back-facing triangles
+      // Just add all edges that belong to any triangle
+      frontFacingEdges.add(makeEdgeKey(i0, i1));
+      frontFacingEdges.add(makeEdgeKey(i1, i2));
+      frontFacingEdges.add(makeEdgeKey(i2, i0));
+    }
+
+    return frontFacingEdges;
+  }
 
   /**
    * Check if a point is visible using the depth buffer
@@ -114,12 +241,22 @@ export class VisualizationManager {
     const { rasterizer, viewMatrix, projectionMatrix } = ctx;
     if (!rasterizer || !viewMatrix || !projectionMatrix) return true;
 
-    const viewPos = viewMatrix.transformPoint(worldPos);
-    const clipPos = projectionMatrix.transformPoint(viewPos);
+    // In wireframe mode, skip depth check (no depth written)
+    if (rasterizer.wireframe) return true;
 
-    const screenX = (clipPos.x * 0.5 + 0.5) * rasterizer.renderWidth;
-    const screenY = (1 - (clipPos.y * 0.5 + 0.5)) * rasterizer.renderHeight;
-    const depth = Math.floor((clipPos.z * 0.5 + 0.5) * 65535);
+    // Compute MVP and transform like the rasterizer does
+    const mvp = projectionMatrix.multiply(viewMatrix);
+    const clipPos = mvp.transformVector4(Vector4.fromVector3(worldPos, 1));
+
+    // Skip if behind camera
+    if (clipPos.w < 0.1) return false;
+
+    // Perspective divide to get NDC
+    const ndc = clipPos.perspectiveDivide();
+
+    const screenX = (ndc.x + 1) * 0.5 * rasterizer.renderWidth;
+    const screenY = (1 - ndc.y) * 0.5 * rasterizer.renderHeight;
+    const depth = Math.floor((ndc.z + 1) * 32767.5); // Same formula as rasterizer
 
     return rasterizer.isPointVisible(screenX, screenY, depth);
   }
@@ -135,13 +272,27 @@ export class VisualizationManager {
     const vertices: Vertex[] = [];
     const lineIndices: number[] = [];
 
-    // Highlight active axis
+    // Highlight active axis/axes
+    // For single axis: highlight that axis
+    // For plane (yz, xz, xy): highlight both axes in the plane
     const activeX =
-      axisConstraint === "x" ? this.activeAxisColor : this.xAxisColor;
+      axisConstraint === "x" ||
+      axisConstraint === "xz" ||
+      axisConstraint === "xy"
+        ? this.activeAxisColor
+        : this.xAxisColor;
     const activeY =
-      axisConstraint === "y" ? this.activeAxisColor : this.yAxisColor;
+      axisConstraint === "y" ||
+      axisConstraint === "yz" ||
+      axisConstraint === "xy"
+        ? this.activeAxisColor
+        : this.yAxisColor;
     const activeZ =
-      axisConstraint === "z" ? this.activeAxisColor : this.zAxisColor;
+      axisConstraint === "z" ||
+      axisConstraint === "yz" ||
+      axisConstraint === "xz"
+        ? this.activeAxisColor
+        : this.zAxisColor;
 
     // X axis
     vertices.push(new Vertex(center.clone(), activeX, Vector3.zero()));
@@ -181,7 +332,7 @@ export class VisualizationManager {
 
     // Use the camera's orientation
     const forward = camera.target.sub(camera.position).normalize();
-    const right = forward.cross(new Vector3(0, 1, 0)).normalize();
+    const right = forward.cross(new Vector3(0, 0, 1)).normalize();
     const up = right.cross(forward).normalize();
 
     // Transform world axes to view space for the indicator
@@ -218,7 +369,9 @@ export class VisualizationManager {
 
   /**
    * Create vertex point data for rendering in Edit mode
-   * Uses depth-based occlusion - vertices behind other geometry are hidden
+   * Points use depth testing with a bias to render in front of surfaces
+   * but still get occluded by closer geometry (depth buffer handles occlusion)
+   * Returns separate data for unselected (smaller) and selected (larger) vertices
    */
   createVertexPointData(
     mesh: Mesh,
@@ -226,8 +379,12 @@ export class VisualizationManager {
     selectedVertices: ReadonlySet<number>,
     ctx: VisualizationContext
   ): VertexPointData {
-    const vertices: Vertex[] = [];
-    const pointIndices: number[] = [];
+    const unselectedVertices: Vertex[] = [];
+    const unselectedIndices: number[] = [];
+    const selectedVerticesArr: Vertex[] = [];
+    const selectedIndices: number[] = [];
+
+    // Depth buffer handles occlusion - no need for backface culling
 
     // First pass: add unselected vertices
     for (let i = 0; i < mesh.vertices.length; i++) {
@@ -236,39 +393,43 @@ export class VisualizationManager {
       const localPos = mesh.vertices[i].position;
       const worldPos = modelMatrix.transformPoint(localPos);
 
-      // Check visibility using depth buffer
-      if (!this.isPointVisible(worldPos, ctx)) continue;
-
-      const newIndex = vertices.length;
-      vertices.push(
+      const newIndex = unselectedVertices.length;
+      unselectedVertices.push(
         new Vertex(worldPos, this.unselectedVertexColor, Vector3.zero())
       );
-      pointIndices.push(newIndex);
+      unselectedIndices.push(newIndex);
     }
 
-    // Second pass: add selected vertices (rendered on top)
+    // Second pass: add selected vertices (rendered on top with larger size)
     for (let i = 0; i < mesh.vertices.length; i++) {
       if (!selectedVertices.has(i)) continue; // Only selected
 
       const localPos = mesh.vertices[i].position;
       const worldPos = modelMatrix.transformPoint(localPos);
 
-      // Check visibility using depth buffer
-      if (!this.isPointVisible(worldPos, ctx)) continue;
-
-      const newIndex = vertices.length;
-      vertices.push(
+      const newIndex = selectedVerticesArr.length;
+      selectedVerticesArr.push(
         new Vertex(worldPos, this.selectedVertexColor, Vector3.zero())
       );
-      pointIndices.push(newIndex);
+      selectedIndices.push(newIndex);
     }
 
-    return { vertices, pointIndices };
+    return {
+      unselected: {
+        vertices: unselectedVertices,
+        pointIndices: unselectedIndices,
+      },
+      selected: {
+        vertices: selectedVerticesArr,
+        pointIndices: selectedIndices,
+      },
+    };
   }
 
   /**
    * Create wireframe data for vertex edit mode (shows edges with depth-based occlusion)
    * Skips internal quad diagonals for Blender-like display
+   * Only shows edges on front-facing triangles (backface culling)
    */
   createVertexWireframeData(
     mesh: Mesh,
@@ -278,14 +439,31 @@ export class VisualizationManager {
     const vertices: Vertex[] = [];
     const lineIndices: number[] = [];
 
+    // Get front-facing edges for backface culling
+    const { rasterizer } = ctx;
+    let frontFacingEdges: Set<string> | null = null;
+
+    // Only do backface culling in solid/textured mode (not wireframe)
+    if (rasterizer && !rasterizer.wireframe) {
+      frontFacingEdges = this.getFrontFacingEdges(mesh, modelMatrix, ctx);
+    }
+
     // Get all edges, skipping quad diagonals
     const edges = getMeshEdges(mesh, true);
 
     for (const edge of edges) {
+      // Skip backface edges in solid mode
+      if (
+        frontFacingEdges &&
+        !frontFacingEdges.has(makeEdgeKey(edge.v0, edge.v1))
+      ) {
+        continue;
+      }
+
       const p0 = modelMatrix.transformPoint(mesh.vertices[edge.v0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[edge.v1].position);
 
-      // Check if both vertices are visible
+      // Check if both vertices are visible (depth occlusion)
       if (!this.isPointVisible(p0, ctx) || !this.isPointVisible(p1, ctx))
         continue;
 
@@ -302,6 +480,7 @@ export class VisualizationManager {
    * Create edge line data for rendering in Edit mode (edge selection mode)
    * Uses depth-based occlusion - edges behind other geometry are hidden
    * Skips internal quad diagonals for Blender-like display
+   * Only shows edges on front-facing triangles (backface culling)
    */
   createEdgeLineData(
     mesh: Mesh,
@@ -312,6 +491,15 @@ export class VisualizationManager {
     const vertices: Vertex[] = [];
     const lineIndices: number[] = [];
 
+    // Get front-facing edges for backface culling
+    const { rasterizer } = ctx;
+    let frontFacingEdges: Set<string> | null = null;
+
+    // Only do backface culling in solid/textured mode (not wireframe)
+    if (rasterizer && !rasterizer.wireframe) {
+      frontFacingEdges = this.getFrontFacingEdges(mesh, modelMatrix, ctx);
+    }
+
     // Get all edges, skipping quad diagonals
     const edges = getMeshEdges(mesh, true);
 
@@ -319,6 +507,9 @@ export class VisualizationManager {
     for (const edge of edges) {
       const edgeKey = makeEdgeKey(edge.v0, edge.v1);
       if (selectedEdges.has(edgeKey)) continue;
+
+      // Skip backface edges in solid mode
+      if (frontFacingEdges && !frontFacingEdges.has(edgeKey)) continue;
 
       const p0 = modelMatrix.transformPoint(mesh.vertices[edge.v0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[edge.v1].position);
@@ -335,6 +526,9 @@ export class VisualizationManager {
 
     // Second pass: selected edges (rendered on top)
     for (const edgeKey of selectedEdges) {
+      // Skip backface edges in solid mode
+      if (frontFacingEdges && !frontFacingEdges.has(edgeKey)) continue;
+
       const [v0, v1] = parseEdgeKey(edgeKey);
 
       const p0 = modelMatrix.transformPoint(mesh.vertices[v0].position);

@@ -250,6 +250,24 @@ export function createEditorShortcuts(): Shortcut[] {
     { key: "x", duringTransform: true, description: "Constrain to X axis" },
     { key: "y", duringTransform: true, description: "Constrain to Y axis" },
     { key: "z", duringTransform: true, description: "Constrain to Z axis" },
+    {
+      key: "x",
+      shift: true,
+      duringTransform: true,
+      description: "Constrain to YZ plane",
+    },
+    {
+      key: "y",
+      shift: true,
+      duringTransform: true,
+      description: "Constrain to XZ plane",
+    },
+    {
+      key: "z",
+      shift: true,
+      duringTransform: true,
+      description: "Constrain to XY plane",
+    },
 
     // Transform control
     {

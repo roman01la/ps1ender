@@ -494,6 +494,97 @@
       .add-menu-label {
         flex: 1;
       }
+
+      .add-menu-separator {
+        height: 1px;
+        background: var(--border);
+        margin: 4px 0;
+      }
+
+      /* Viewport Gizmo - viewpoint switcher in top right */
+      .viewport-gizmo {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        z-index: 100;
+        pointer-events: auto;
+      }
+
+      .viewport-gizmo-cube {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .gizmo-middle-row {
+        display: flex;
+        gap: 2px;
+      }
+
+      .gizmo-face {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--text);
+        font-size: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.1s, transform 0.1s;
+        padding: 0;
+      }
+
+      .gizmo-face:hover {
+        background: var(--bg-active);
+        transform: scale(1.1);
+      }
+
+      .gizmo-label {
+        font-size: 9px;
+        font-weight: bold;
+      }
+
+      .gizmo-x,
+      .gizmo-x-neg {
+        color: #e55;
+      }
+      .gizmo-y,
+      .gizmo-y-neg {
+        color: #5e5;
+      }
+      .gizmo-z,
+      .gizmo-z-neg {
+        color: #58f;
+      }
+
+      .gizmo-ortho-toggle {
+        padding: 2px 8px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        color: var(--text);
+        font-size: 9px;
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+
+      .gizmo-ortho-toggle:hover {
+        background: var(--bg-active);
+      }
+
+      .gizmo-ortho-toggle.ortho {
+        background: var(--accent);
+        color: white;
+      }
     </style>
   </head>
   <body>
