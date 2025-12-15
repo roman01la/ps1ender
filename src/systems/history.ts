@@ -16,6 +16,7 @@ import { Vertex, Mesh } from "../primitives";
  */
 export type HistoryActionType =
   | "object-transform"
+  | "multi-object-transform"
   | "vertex-move"
   | "object-add"
   | "object-delete"
@@ -109,6 +110,12 @@ export interface HistoryAction {
   objectTransform?: {
     before: ObjectTransformState;
     after: ObjectTransformState;
+  };
+  multiObjectTransform?: {
+    objects: Array<{
+      before: ObjectTransformState;
+      after: ObjectTransformState;
+    }>;
   };
   vertexMove?: {
     before: VertexMoveState;

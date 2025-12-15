@@ -58,6 +58,17 @@ export interface ExtrudeVertexResult {
 }
 
 /**
+ * Result of a face extrusion operation
+ */
+export interface ExtrudeFaceResult {
+  success: boolean;
+  /** New vertex indices that were created (these should be selected for transform) */
+  newVertices: Set<number>;
+  /** New face indices that were created */
+  newFaces: Set<number>;
+}
+
+/**
  * Result of a join vertices operation
  */
 export interface JoinVerticesResult {
@@ -935,5 +946,104 @@ export class MeshEditManager {
     // In that case, we need to reverse the extruded quad winding
     const nextPos = (pos0 + 1) % 3;
     return faceVerts[nextPos] === edgeV1;
+  }
+
+  /**
+   * Extrude selected faces - duplicates face vertices and creates connecting side faces
+   *
+   * Algorithm:
+   * 1. For each selected face, collect its unique vertices
+   * 2. Duplicate these vertices (initially at same position)
+   * 3. Create quad side faces connecting original edges to new edges
+   * 4. Create new top face from duplicated vertices
+   * 5. Return the new vertices so they can be selected for transform
+   */
+  extrudeFaces(mesh: Mesh, selectedFaces: Set<number>): ExtrudeFaceResult {
+    if (selectedFaces.size === 0) {
+      return { success: false, newVertices: new Set(), newFaces: new Set() };
+    }
+
+    // Map from original vertex index to new duplicated vertex index
+    const vertexMapping = new Map<number, number>();
+    const newVertexIndices = new Set<number>();
+    const newFaceIndices = new Set<number>();
+
+    // Process each selected face
+    for (const faceIdx of selectedFaces) {
+      if (faceIdx >= mesh.faceData.length) continue;
+
+      const face = mesh.faceData[faceIdx];
+      const faceVerts = face.vertices;
+      if (faceVerts.length < 3) continue;
+
+      // Collect vertices for this face that haven't been duplicated yet
+      const localMapping = new Map<number, number>();
+
+      for (const vIdx of faceVerts) {
+        if (!vertexMapping.has(vIdx)) {
+          const originalVertex = mesh.vertices[vIdx];
+          const newVertex = new Vertex(
+            originalVertex.position.clone(),
+            originalVertex.color.clone(),
+            originalVertex.normal.clone(),
+            originalVertex.u,
+            originalVertex.v
+          );
+          const newIdx = mesh.vertices.length;
+          mesh.vertices.push(newVertex);
+          vertexMapping.set(vIdx, newIdx);
+          newVertexIndices.add(newIdx);
+        }
+        localMapping.set(vIdx, vertexMapping.get(vIdx)!);
+      }
+
+      // Create side quads for each edge of the face
+      // Edge goes from v0 to v1 in the face winding order
+      // Side quad connects: v0, v1, newV1, newV0 (reversed to point outward)
+      for (let i = 0; i < faceVerts.length; i++) {
+        const v0 = faceVerts[i];
+        const v1 = faceVerts[(i + 1) % faceVerts.length];
+        const newV0 = localMapping.get(v0)!;
+        const newV1 = localMapping.get(v1)!;
+
+        // Side face winding: v1, v0, newV0, newV1 (reversed from face winding for outward normal)
+        mesh.faceData.push({ vertices: [v1, v0, newV0, newV1] });
+        newFaceIndices.add(mesh.faceData.length - 1);
+      }
+
+      // Create the new top face from duplicated vertices (same winding as original)
+      const newTopVerts = faceVerts.map((v) => localMapping.get(v)!);
+      mesh.faceData.push({ vertices: newTopVerts });
+      newFaceIndices.add(mesh.faceData.length - 1);
+    }
+
+    // Remove the original selected faces (they're now inside the extrusion)
+    // We need to remove them in reverse order to avoid index shifting issues
+    const sortedFaces = Array.from(selectedFaces).sort((a, b) => b - a);
+    for (const faceIdx of sortedFaces) {
+      mesh.faceData.splice(faceIdx, 1);
+      // Adjust newFaceIndices since we removed a face
+      const adjustedIndices = new Set<number>();
+      for (const idx of newFaceIndices) {
+        if (idx > faceIdx) {
+          adjustedIndices.add(idx - 1);
+        } else {
+          adjustedIndices.add(idx);
+        }
+      }
+      newFaceIndices.clear();
+      for (const idx of adjustedIndices) {
+        newFaceIndices.add(idx);
+      }
+    }
+
+    // Rebuild mesh from faceData
+    mesh.rebuildFromFaces();
+
+    return {
+      success: true,
+      newVertices: newVertexIndices,
+      newFaces: newFaceIndices,
+    };
   }
 }

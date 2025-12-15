@@ -17101,7 +17101,7 @@ var require_jsx_dev_runtime = __commonJS((exports, module) => {
 });
 
 // src/App.tsx
-var import_react5 = __toESM(require_react(), 1);
+var import_react6 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // src/math.ts
@@ -19146,6 +19146,7 @@ class SceneObject {
   scale;
   selected = false;
   visible = true;
+  parent = null;
   constructor(name, mesh) {
     this.name = name;
     this.mesh = mesh;
@@ -19153,8 +19154,15 @@ class SceneObject {
     this.rotation = Vector3.zero();
     this.scale = new Vector3(1, 1, 1);
   }
+  getChildren(allObjects) {
+    return allObjects.filter((obj) => obj.parent === this);
+  }
   getModelMatrix() {
-    return Matrix4.translation(this.position.x, this.position.y, this.position.z).multiply(Matrix4.rotationY(this.rotation.y)).multiply(Matrix4.rotationX(this.rotation.x)).multiply(Matrix4.rotationZ(this.rotation.z)).multiply(Matrix4.scaling(this.scale.x, this.scale.y, this.scale.z));
+    const localMatrix = Matrix4.translation(this.position.x, this.position.y, this.position.z).multiply(Matrix4.rotationY(this.rotation.y)).multiply(Matrix4.rotationX(this.rotation.x)).multiply(Matrix4.rotationZ(this.rotation.z)).multiply(Matrix4.scaling(this.scale.x, this.scale.y, this.scale.z));
+    if (this.parent) {
+      return this.parent.getModelMatrix().multiply(localMatrix);
+    }
+    return localMatrix;
   }
   getWorldBounds() {
     const localBounds = this.mesh.getBounds();
@@ -19290,6 +19298,7 @@ class Scene {
   camera;
   gridSize = 10;
   gridDivisions = 10;
+  activeObject = null;
   constructor() {
     this.camera = new Camera;
   }
@@ -19300,10 +19309,21 @@ class Scene {
     const index = this.objects.indexOf(obj);
     if (index !== -1) {
       this.objects.splice(index, 1);
+      if (this.activeObject === obj) {
+        this.activeObject = null;
+      }
+      for (const o of this.objects) {
+        if (o.parent === obj) {
+          o.parent = null;
+        }
+      }
     }
   }
   getSelectedObjects() {
     return this.objects.filter((obj) => obj.selected);
+  }
+  getActiveObject() {
+    return this.activeObject;
   }
   selectObject(obj, addToSelection = false) {
     if (!addToSelection) {
@@ -19313,12 +19333,16 @@ class Scene {
     }
     if (obj) {
       obj.selected = true;
+      this.activeObject = obj;
+    } else if (!addToSelection) {
+      this.activeObject = null;
     }
   }
   deselectAll() {
     for (const obj of this.objects) {
       obj.selected = false;
     }
+    this.activeObject = null;
   }
   createGridLines() {
     const vertices = [];
@@ -20612,6 +20636,9 @@ class SelectionManager {
 class TransformManager {
   _mode = "none";
   _axisConstraint = "none";
+  objectStartPositions = new Map;
+  objectStartRotations = new Map;
+  objectStartScales = new Map;
   objectStartPos = null;
   objectStartRotation = null;
   objectStartScale = null;
@@ -20643,6 +20670,12 @@ class TransformManager {
       editPivot: this.editPivot
     };
   }
+  getMultiObjectStartPositions() {
+    return this.objectStartPositions;
+  }
+  getMultiObjectStartRotations() {
+    return this.objectStartRotations;
+  }
   setOnComplete(callback) {
     this.onCompleteCallback = callback;
   }
@@ -20652,6 +20685,24 @@ class TransformManager {
     this.transformInitialized = false;
     this.objectStartPos = obj.position.clone();
     this._transformOrigin = obj.getWorldCenter();
+    return true;
+  }
+  startMultiObjectGrab(objects) {
+    if (objects.length === 0)
+      return false;
+    this._mode = "grab";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+    this.objectStartPositions.clear();
+    for (const obj of objects) {
+      this.objectStartPositions.set(obj.name, obj.position.clone());
+    }
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
     return true;
   }
   startVertexGrab(mesh, vertexIndices, modelMatrix) {
@@ -20680,6 +20731,26 @@ class TransformManager {
     this._transformOrigin = obj.getWorldCenter();
     return true;
   }
+  startMultiObjectRotate(objects) {
+    if (objects.length === 0)
+      return false;
+    this._mode = "rotate";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+    this.objectStartRotations.clear();
+    this.objectStartPositions.clear();
+    for (const obj of objects) {
+      this.objectStartRotations.set(obj.name, obj.rotation.clone());
+      this.objectStartPositions.set(obj.name, obj.position.clone());
+    }
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
+    return true;
+  }
   startVertexRotate(mesh, vertexIndices, modelMatrix) {
     if (vertexIndices.size === 0)
       return false;
@@ -20705,6 +20776,24 @@ class TransformManager {
     this.transformInitialized = false;
     this.objectStartScale = obj.scale.clone();
     this._transformOrigin = obj.getWorldCenter();
+    return true;
+  }
+  startMultiObjectScale(objects) {
+    if (objects.length === 0)
+      return false;
+    this._mode = "scale";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+    this.objectStartScales.clear();
+    for (const obj of objects) {
+      this.objectStartScales.set(obj.name, obj.scale.clone());
+    }
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
     return true;
   }
   startVertexScale(mesh, vertexIndices, modelMatrix) {
@@ -20763,6 +20852,106 @@ class TransformManager {
       this.updateRotate(rotateSensitivity, getAxisMovement, obj, isEditMode);
     } else if (this._mode === "scale") {
       this.updateScale(deltaX, deltaY, scaleSensitivity, obj, isEditMode);
+    }
+  }
+  updateMultiObjectTransform(deltaX, deltaY, camera, objects) {
+    if (this._mode === "none" || objects.length === 0)
+      return;
+    if (!this.transformInitialized) {
+      this.transformInitialized = true;
+      return;
+    }
+    const forward = camera.target.sub(camera.position).normalize();
+    const right = forward.cross(new Vector3(0, 0, 1)).normalize();
+    const up = right.cross(forward).normalize();
+    const moveSensitivity = 0.02;
+    const rotateSensitivity = 0.02;
+    const scaleSensitivity = 0.02;
+    const getAxisMovement = (axis) => {
+      const screenX = axis.dot(right);
+      const screenY = -axis.dot(up);
+      const absX = Math.abs(screenX);
+      const absY = Math.abs(screenY);
+      if (absX + absY < 0.001) {
+        return deltaX;
+      }
+      return (deltaX * screenX + deltaY * screenY) / (absX + absY);
+    };
+    if (this._mode === "grab") {
+      this.updateMultiObjectGrab(deltaX, deltaY, right, up, moveSensitivity, getAxisMovement, objects);
+    } else if (this._mode === "rotate") {
+      this.updateMultiObjectRotate(rotateSensitivity, getAxisMovement, objects);
+    } else if (this._mode === "scale") {
+      this.updateMultiObjectScale(deltaX, deltaY, scaleSensitivity, objects);
+    }
+  }
+  updateMultiObjectGrab(deltaX, deltaY, right, up, sensitivity, getAxisMovement, objects) {
+    let movement = Vector3.zero();
+    if (this._axisConstraint === "none") {
+      movement = right.mul(deltaX * sensitivity).add(up.mul(-deltaY * sensitivity));
+    } else if (this._axisConstraint === "x") {
+      const amount = getAxisMovement(new Vector3(1, 0, 0));
+      movement = new Vector3(amount * sensitivity, 0, 0);
+    } else if (this._axisConstraint === "y") {
+      const amount = getAxisMovement(new Vector3(0, 1, 0));
+      movement = new Vector3(0, amount * sensitivity, 0);
+    } else if (this._axisConstraint === "z") {
+      const amount = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(0, 0, amount * sensitivity);
+    } else if (this._axisConstraint === "yz") {
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(0, amountY * sensitivity, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xz") {
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(amountX * sensitivity, 0, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xy") {
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      movement = new Vector3(amountX * sensitivity, amountY * sensitivity, 0);
+    }
+    for (const obj of objects) {
+      obj.position = obj.position.add(movement);
+    }
+    if (this._transformOrigin) {
+      this._transformOrigin = this._transformOrigin.add(movement);
+    }
+  }
+  updateMultiObjectRotate(sensitivity, getAxisMovement, objects) {
+    if (!this._transformOrigin)
+      return;
+    let axis = new Vector3(0, 0, 1);
+    if (this._axisConstraint === "x")
+      axis = new Vector3(1, 0, 0);
+    else if (this._axisConstraint === "y")
+      axis = new Vector3(0, 1, 0);
+    const amount = getAxisMovement(axis);
+    const angle = amount * sensitivity;
+    for (const obj of objects) {
+      if (this._axisConstraint === "x" || this._axisConstraint === "none") {
+        obj.rotation.x += angle;
+      }
+      if (this._axisConstraint === "y" || this._axisConstraint === "none") {
+        obj.rotation.y += angle;
+      }
+      if (this._axisConstraint === "z" || this._axisConstraint === "none") {
+        obj.rotation.z += angle;
+      }
+    }
+  }
+  updateMultiObjectScale(deltaX, deltaY, sensitivity, objects) {
+    const scaleFactor = 1 + (deltaX - deltaY) * sensitivity;
+    for (const obj of objects) {
+      if (this._axisConstraint === "none") {
+        obj.scale = obj.scale.mul(scaleFactor);
+      } else if (this._axisConstraint === "x") {
+        obj.scale.x *= scaleFactor;
+      } else if (this._axisConstraint === "y") {
+        obj.scale.y *= scaleFactor;
+      } else if (this._axisConstraint === "z") {
+        obj.scale.z *= scaleFactor;
+      }
     }
   }
   updateGrab(deltaX, deltaY, right, up, sensitivity, getAxisMovement, obj, isEditMode, ctrlKey = false, screenX = 0, screenY = 0, canvasWidth = 0, canvasHeight = 0, camera, selectedVertices) {
@@ -21053,12 +21242,122 @@ class TransformManager {
     this.clearState();
     this.onCompleteCallback?.(null);
   }
+  cancelMultiObject(objects) {
+    if (this._mode === "none")
+      return;
+    if (this._mode === "grab" && this.objectStartPositions.size > 0) {
+      for (const obj of objects) {
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startPos) {
+          obj.position = startPos.clone();
+        }
+      }
+    } else if (this._mode === "rotate" && this.objectStartRotations.size > 0) {
+      for (const obj of objects) {
+        const startRot = this.objectStartRotations.get(obj.name);
+        if (startRot) {
+          obj.rotation = startRot.clone();
+        }
+      }
+    } else if (this._mode === "scale" && this.objectStartScales.size > 0) {
+      for (const obj of objects) {
+        const startScale = this.objectStartScales.get(obj.name);
+        if (startScale) {
+          obj.scale = startScale.clone();
+        }
+      }
+    }
+    this.clearState();
+    this.onCompleteCallback?.(null);
+  }
+  confirmMultiObject(objects) {
+    if (this._mode === "none")
+      return null;
+    const results = [];
+    if (this._mode === "grab" && this.objectStartPositions.size > 0) {
+      for (const obj of objects) {
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startPos) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: startPos.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone()
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone()
+            }
+          });
+        }
+      }
+    } else if (this._mode === "rotate" && this.objectStartRotations.size > 0) {
+      for (const obj of objects) {
+        const startRot = this.objectStartRotations.get(obj.name);
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startRot) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: startPos?.clone() ?? obj.position.clone(),
+              rotation: startRot.clone(),
+              scale: obj.scale.clone()
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone()
+            }
+          });
+        }
+      }
+    } else if (this._mode === "scale" && this.objectStartScales.size > 0) {
+      for (const obj of objects) {
+        const startScale = this.objectStartScales.get(obj.name);
+        if (startScale) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: startScale.clone()
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone()
+            }
+          });
+        }
+      }
+    }
+    const transformType = this._mode;
+    this.clearState();
+    if (results.length === 0)
+      return null;
+    return {
+      type: "multi-object",
+      transformType,
+      objects: results
+    };
+  }
+  get isMultiObjectTransform() {
+    return this.objectStartPositions.size > 1 || this.objectStartRotations.size > 1 || this.objectStartScales.size > 1;
+  }
   clearState() {
     this._mode = "none";
     this._axisConstraint = "none";
     this.objectStartPos = null;
     this.objectStartRotation = null;
     this.objectStartScale = null;
+    this.objectStartPositions.clear();
+    this.objectStartRotations.clear();
+    this.objectStartScales.clear();
     this._transformOrigin = null;
     this.transformInitialized = false;
     this.vertexStartPositions.clear();
@@ -21561,6 +21860,67 @@ class MeshEditManager {
     }
     const nextPos = (pos0 + 1) % 3;
     return faceVerts[nextPos] === edgeV1;
+  }
+  extrudeFaces(mesh, selectedFaces) {
+    if (selectedFaces.size === 0) {
+      return { success: false, newVertices: new Set, newFaces: new Set };
+    }
+    const vertexMapping = new Map;
+    const newVertexIndices = new Set;
+    const newFaceIndices = new Set;
+    for (const faceIdx of selectedFaces) {
+      if (faceIdx >= mesh.faceData.length)
+        continue;
+      const face = mesh.faceData[faceIdx];
+      const faceVerts = face.vertices;
+      if (faceVerts.length < 3)
+        continue;
+      const localMapping = new Map;
+      for (const vIdx of faceVerts) {
+        if (!vertexMapping.has(vIdx)) {
+          const originalVertex = mesh.vertices[vIdx];
+          const newVertex = new Vertex(originalVertex.position.clone(), originalVertex.color.clone(), originalVertex.normal.clone(), originalVertex.u, originalVertex.v);
+          const newIdx = mesh.vertices.length;
+          mesh.vertices.push(newVertex);
+          vertexMapping.set(vIdx, newIdx);
+          newVertexIndices.add(newIdx);
+        }
+        localMapping.set(vIdx, vertexMapping.get(vIdx));
+      }
+      for (let i = 0;i < faceVerts.length; i++) {
+        const v0 = faceVerts[i];
+        const v1 = faceVerts[(i + 1) % faceVerts.length];
+        const newV0 = localMapping.get(v0);
+        const newV1 = localMapping.get(v1);
+        mesh.faceData.push({ vertices: [v1, v0, newV0, newV1] });
+        newFaceIndices.add(mesh.faceData.length - 1);
+      }
+      const newTopVerts = faceVerts.map((v) => localMapping.get(v));
+      mesh.faceData.push({ vertices: newTopVerts });
+      newFaceIndices.add(mesh.faceData.length - 1);
+    }
+    const sortedFaces = Array.from(selectedFaces).sort((a, b) => b - a);
+    for (const faceIdx of sortedFaces) {
+      mesh.faceData.splice(faceIdx, 1);
+      const adjustedIndices = new Set;
+      for (const idx of newFaceIndices) {
+        if (idx > faceIdx) {
+          adjustedIndices.add(idx - 1);
+        } else {
+          adjustedIndices.add(idx);
+        }
+      }
+      newFaceIndices.clear();
+      for (const idx of adjustedIndices) {
+        newFaceIndices.add(idx);
+      }
+    }
+    mesh.rebuildFromFaces();
+    return {
+      success: true,
+      newVertices: newVertexIndices,
+      newFaces: newFaceIndices
+    };
   }
 }
 
@@ -22373,6 +22733,19 @@ class Editor {
           }
         }
         break;
+      case "multi-object-transform":
+        if (action.multiObjectTransform) {
+          for (const objData of action.multiObjectTransform.objects) {
+            const state = undo ? objData.before : objData.after;
+            const obj = this.scene.objects.find((o) => o.name === state.objectName);
+            if (obj) {
+              obj.position = state.position.clone();
+              obj.rotation = state.rotation.clone();
+              obj.scale = state.scale.clone();
+            }
+          }
+        }
+        break;
       case "vertex-move":
         if (action.vertexMove) {
           const state = undo ? action.vertexMove.before : action.vertexMove.after;
@@ -22802,6 +23175,108 @@ class Editor {
     }
     return result.success;
   }
+  duplicateSelected() {
+    if (this.mode !== "object")
+      return false;
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0)
+      return false;
+    const newObjects = [];
+    for (const obj of selected) {
+      const baseName = obj.name.replace(/\.\d{3}$/, "");
+      let name = baseName;
+      let counter = 1;
+      while (this.scene.objects.some((o) => o.name === name)) {
+        name = `${baseName}.${String(counter).padStart(3, "0")}`;
+        counter++;
+      }
+      const meshData = serializeMesh(obj.mesh);
+      const newMesh = deserializeMesh(meshData);
+      newMesh.smoothShading = obj.mesh.smoothShading;
+      const newObj = new SceneObject(name, newMesh);
+      newObj.position = obj.position.clone();
+      newObj.rotation = obj.rotation.clone();
+      newObj.scale = obj.scale.clone();
+      this.scene.addObject(newObj);
+      newObjects.push(newObj);
+      this.pushHistoryAction({
+        type: "object-add",
+        description: `Duplicate ${obj.name}`,
+        objectData: {
+          name: newObj.name,
+          meshData: serializeMesh(newObj.mesh),
+          position: newObj.position.clone(),
+          rotation: newObj.rotation.clone(),
+          scale: newObj.scale.clone()
+        }
+      });
+    }
+    this.scene.deselectAll();
+    for (const newObj of newObjects) {
+      newObj.selected = true;
+    }
+    if (newObjects.length > 0) {
+      this.scene.activeObject = newObjects[newObjects.length - 1];
+    }
+    if (newObjects.length > 0) {
+      this.startGrab();
+    }
+    return true;
+  }
+  parentToActive() {
+    if (this.mode !== "object")
+      return false;
+    const selected = this.scene.getSelectedObjects();
+    const active = this.scene.getActiveObject();
+    if (selected.length < 2 || !active)
+      return false;
+    if (!active.selected)
+      return false;
+    const parentWorldMatrix = active.getModelMatrix();
+    const parentWorldMatrixInverse = parentWorldMatrix.invert();
+    if (!parentWorldMatrixInverse)
+      return false;
+    let parentedCount = 0;
+    for (const obj of selected) {
+      if (obj !== active) {
+        if (this.wouldCreateCycle(obj, active))
+          continue;
+        const worldPos = obj.getModelMatrix().transformPoint(Vector3.zero());
+        obj.parent = active;
+        const localPos = parentWorldMatrixInverse.transformPoint(worldPos);
+        obj.position = localPos;
+        parentedCount++;
+      }
+    }
+    if (parentedCount > 0) {
+      return true;
+    }
+    return false;
+  }
+  wouldCreateCycle(child, newParent) {
+    let current = newParent;
+    while (current) {
+      if (current === child)
+        return true;
+      current = current.parent;
+    }
+    return false;
+  }
+  clearParent() {
+    if (this.mode !== "object")
+      return false;
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0)
+      return false;
+    let clearedCount = 0;
+    for (const obj of selected) {
+      if (obj.parent) {
+        obj.parent = null;
+        clearedCount++;
+      }
+    }
+    return clearedCount > 0;
+  }
   extrudeEdges() {
     if (this.mode !== "edit")
       return false;
@@ -22866,6 +23341,39 @@ class Editor {
     });
     this.selection.clearAll();
     this.selection.addVertices(result.newVertices);
+    this.transform.startVertexGrab(mesh, result.newVertices, obj.getModelMatrix());
+    return true;
+  }
+  extrudeFaces() {
+    if (this.mode !== "edit")
+      return false;
+    if (this.selectionMode !== "face")
+      return false;
+    if (this.selectedFaces.size === 0)
+      return false;
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0)
+      return false;
+    const obj = selected[0];
+    const mesh = obj.mesh;
+    const beforeMesh = serializeMesh(mesh);
+    const result = this.meshEdit.extrudeFaces(mesh, this.selectedFaces);
+    if (!result.success)
+      return false;
+    const afterMesh = serializeMesh(mesh);
+    this.pushHistoryAction({
+      type: "mesh-edit",
+      description: "Extrude Faces",
+      meshEdit: {
+        objectName: obj.name,
+        before: beforeMesh,
+        after: afterMesh
+      }
+    });
+    this.selection.clearAll();
+    for (const faceIdx of result.newFaces) {
+      this.selection.addFace(faceIdx);
+    }
     this.transform.startVertexGrab(mesh, result.newVertices, obj.getModelMatrix());
     return true;
   }
@@ -22977,7 +23485,11 @@ class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0)
       return;
-    this.transform.startObjectGrab(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectGrab(selected[0]);
+    } else {
+      this.transform.startMultiObjectGrab(selected);
+    }
   }
   startRotate() {
     if (this.mode === "edit") {
@@ -22994,7 +23506,11 @@ class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0)
       return;
-    this.transform.startObjectRotate(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectRotate(selected[0]);
+    } else {
+      this.transform.startMultiObjectRotate(selected);
+    }
   }
   startScale() {
     if (this.mode === "edit") {
@@ -23011,15 +23527,19 @@ class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0)
       return;
-    this.transform.startObjectScale(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectScale(selected[0]);
+    } else {
+      this.transform.startMultiObjectScale(selected);
+    }
   }
   setAxisConstraint(axis) {
     if (this.transform.mode === "grab") {
       const selected = this.scene.getSelectedObjects();
       if (selected.length > 0) {
-        const obj = selected[0];
         const state = this.transform.getState();
         if (this.mode === "edit" && state.vertexStartPositions.size > 0) {
+          const obj = selected[0];
           const mesh = obj.mesh;
           for (const [idx, startPos] of state.vertexStartPositions) {
             mesh.vertices[idx].position = startPos.clone();
@@ -23032,7 +23552,22 @@ class Editor {
           center = center.div(state.vertexStartPositions.size);
           const modelMatrix = obj.getModelMatrix();
           this.transform.resetTransformOrigin(modelMatrix.transformPoint(center));
+        } else if (this.transform.isMultiObjectTransform) {
+          const startPositions = this.transform.getMultiObjectStartPositions();
+          for (const obj of selected) {
+            const startPos = startPositions.get(obj.name);
+            if (startPos) {
+              obj.position = startPos.clone();
+            }
+          }
+          let center = Vector3.zero();
+          for (const pos of startPositions.values()) {
+            center = center.add(pos);
+          }
+          center = center.div(startPositions.size);
+          this.transform.resetTransformOrigin(center);
         } else if (state.startPos) {
+          const obj = selected[0];
           obj.position = state.startPos.clone();
           this.transform.resetTransformOrigin(obj.getWorldCenter());
         }
@@ -23044,13 +23579,37 @@ class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0 || this.transformMode === "none")
       return;
-    const obj = selected[0];
-    this.transform.updateTransform(deltaX, deltaY, this.scene.camera, obj, this.mode === "edit", ctrlKey, screenX, screenY, canvasWidth, canvasHeight, this.selectedVertices);
+    if (this.mode === "edit" || selected.length === 1) {
+      const obj = selected[0];
+      this.transform.updateTransform(deltaX, deltaY, this.scene.camera, obj, this.mode === "edit", ctrlKey, screenX, screenY, canvasWidth, canvasHeight, this.selectedVertices);
+    } else {
+      this.transform.updateMultiObjectTransform(deltaX, deltaY, this.scene.camera, selected);
+    }
   }
   confirmTransform() {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0)
       return;
+    if (this.transform.isMultiObjectTransform) {
+      const result2 = this.transform.confirmMultiObject(selected);
+      if (result2 && result2.objects.length > 0) {
+        const actionNames = {
+          grab: "Move",
+          rotate: "Rotate",
+          scale: "Scale",
+          none: "Transform"
+        };
+        const actionName = actionNames[result2.transformType];
+        this.pushHistoryAction({
+          type: "multi-object-transform",
+          description: `${actionName} ${result2.objects.length} objects`,
+          multiObjectTransform: {
+            objects: result2.objects
+          }
+        });
+      }
+      return;
+    }
     const obj = selected[0];
     const result = this.transform.confirm(obj, this.mode === "edit");
     if (!result)
@@ -23093,15 +23652,25 @@ class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0)
       return;
-    this.transform.cancel(selected[0], this.mode === "edit");
+    if (this.transform.isMultiObjectTransform) {
+      this.transform.cancelMultiObject(selected);
+    } else {
+      this.transform.cancel(selected[0], this.mode === "edit");
+    }
   }
-  handleKeyDown(key, ctrlKey = false, shiftKey = false) {
+  handleKeyDown(key, ctrlKey = false, shiftKey = false, altKey = false) {
     const lowerKey = key.toLowerCase();
     if (ctrlKey && lowerKey === "z" && !shiftKey) {
       return this.undo();
     }
     if (ctrlKey && (lowerKey === "z" && shiftKey || lowerKey === "y")) {
       return this.redo();
+    }
+    if (ctrlKey && lowerKey === "p" && this.mode === "object") {
+      return this.parentToActive();
+    }
+    if (altKey && lowerKey === "p" && this.mode === "object") {
+      return this.clearParent();
     }
     if (ctrlKey && lowerKey === "l" && this.mode === "edit") {
       this.selectLinked();
@@ -23152,6 +23721,11 @@ class Editor {
       }
       return true;
     }
+    if (lowerKey === "d" && shiftKey && this.transformMode === "none") {
+      if (this.mode === "object") {
+        return this.duplicateSelected();
+      }
+    }
     if (lowerKey === "g") {
       this.startGrab();
       return true;
@@ -23170,6 +23744,8 @@ class Editor {
           return this.extrudeVertices();
         } else if (this.selectionMode === "edge") {
           return this.extrudeEdges();
+        } else if (this.selectionMode === "face") {
+          return this.extrudeFaces();
         }
       }
     }
@@ -23498,10 +24074,13 @@ function useEditorUIState(editorRef, sceneRef) {
     setSelectedVertexCount(editor.selectedVertices.size);
     setSelectedEdgeCount(editor.selectedEdges.size);
     setSelectedFaceCount(editor.selectedFaces.size);
+    const editModeObjectName = editor.mode === "edit" ? scene.getSelectedObjects()[0]?.name ?? null : null;
     const objects = scene.objects.map((obj) => ({
       name: obj.name,
       selected: obj.selected,
-      visible: obj.visible
+      visible: obj.visible,
+      parentName: obj.parent?.name ?? null,
+      inEditMode: obj.name === editModeObjectName
     }));
     setSceneObjects(objects);
     const selected = scene.getSelectedObjects();
@@ -23977,6 +24556,9 @@ function Toolbar({
   }, undefined, true, undefined, this);
 }
 
+// src/components/SceneTree.tsx
+var import_react2 = __toESM(require_react(), 1);
+
 // src/icons/hide_on.svg
 var hide_on_default = "./hide_on-sbmkbsw2.svg";
 
@@ -23985,11 +24567,97 @@ var hide_off_default = "./hide_off-afbwcne5.svg";
 
 // src/components/SceneTree.tsx
 var jsx_dev_runtime3 = __toESM(require_jsx_dev_runtime(), 1);
+function TreeItem({
+  obj,
+  objects,
+  depth,
+  onSelectObject,
+  onToggleVisibility,
+  collapsedItems,
+  toggleCollapsed
+}) {
+  const children = objects.filter((o) => o.parentName === obj.name);
+  const hasChildren = children.length > 0;
+  const isCollapsed = collapsedItems.has(obj.name);
+  return /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(jsx_dev_runtime3.Fragment, {
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+        className: `tree-item object-item ${obj.selected ? "selected" : ""}`,
+        onClick: () => onSelectObject(obj.name),
+        children: [
+          Array.from({ length: depth }).map((_, i) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+            className: "tree-indent"
+          }, i, false, undefined, this)),
+          hasChildren ? /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+            className: "tree-collapse",
+            onClick: (e) => {
+              e.stopPropagation();
+              toggleCollapsed(obj.name);
+            },
+            children: isCollapsed ? "▶" : "▼"
+          }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+            className: "tree-icon",
+            children: "◆"
+          }, undefined, false, undefined, this),
+          obj.inEditMode && /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("img", {
+            src: editmode_hlt_default,
+            className: "icon edit-mode-icon",
+            width: 14,
+            height: 14,
+            alt: "Edit Mode",
+            title: "Edit Mode"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+            className: "tree-label",
+            children: obj.name
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("button", {
+            className: `visibility-btn ${obj.visible ? "visible" : "hidden"}`,
+            onClick: (e) => {
+              e.stopPropagation();
+              onToggleVisibility(obj.name);
+            },
+            title: obj.visible ? "Hide" : "Show",
+            children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("img", {
+              src: obj.visible ? hide_off_default : hide_on_default,
+              className: "icon",
+              width: 18,
+              height: 18,
+              alt: obj.visible ? "Visible" : "Hidden"
+            }, undefined, false, undefined, this)
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      !isCollapsed && children.map((child) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(TreeItem, {
+        obj: child,
+        objects,
+        depth: depth + 1,
+        onSelectObject,
+        onToggleVisibility,
+        collapsedItems,
+        toggleCollapsed
+      }, child.name, false, undefined, this))
+    ]
+  }, undefined, true, undefined, this);
+}
 function SceneTree({
   objects,
   onSelectObject,
   onToggleVisibility
 }) {
+  const [collapsedItems, setCollapsedItems] = import_react2.useState(new Set);
+  const toggleCollapsed = (name) => {
+    setCollapsedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+  const rootObjects = objects.filter((obj) => obj.parentName === null);
   return /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
     className: "panel scene-tree",
     children: [
@@ -24016,38 +24684,15 @@ function SceneTree({
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          objects.map((obj) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
-            className: `tree-item object-item ${obj.selected ? "selected" : ""}`,
-            onClick: () => onSelectObject(obj.name),
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
-                className: "tree-indent"
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
-                className: "tree-icon",
-                children: "◆"
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
-                className: "tree-label",
-                children: obj.name
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("button", {
-                className: `visibility-btn ${obj.visible ? "visible" : "hidden"}`,
-                onClick: (e) => {
-                  e.stopPropagation();
-                  onToggleVisibility(obj.name);
-                },
-                title: obj.visible ? "Hide" : "Show",
-                children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("img", {
-                  src: obj.visible ? hide_off_default : hide_on_default,
-                  className: "icon",
-                  width: 18,
-                  height: 18,
-                  alt: obj.visible ? "Visible" : "Hidden"
-                }, undefined, false, undefined, this)
-              }, undefined, false, undefined, this)
-            ]
-          }, obj.name, true, undefined, this)),
+          rootObjects.map((obj) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(TreeItem, {
+            obj,
+            objects,
+            depth: 1,
+            onSelectObject,
+            onToggleVisibility,
+            collapsedItems,
+            toggleCollapsed
+          }, obj.name, false, undefined, this)),
           objects.length === 0 && /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "tree-empty",
             children: "No objects in scene"
@@ -24059,7 +24704,7 @@ function SceneTree({
 }
 
 // src/components/PropertiesPanel.tsx
-var import_react2 = __toESM(require_react(), 1);
+var import_react3 = __toESM(require_react(), 1);
 var jsx_dev_runtime4 = __toESM(require_jsx_dev_runtime(), 1);
 function VectorInput({
   label,
@@ -24068,15 +24713,15 @@ function VectorInput({
   step = 0.1,
   precision = 3
 }) {
-  const [localX, setLocalX] = import_react2.useState(value.x.toFixed(precision));
-  const [localY, setLocalY] = import_react2.useState(value.y.toFixed(precision));
-  const [localZ, setLocalZ] = import_react2.useState(value.z.toFixed(precision));
-  import_react2.useEffect(() => {
+  const [localX, setLocalX] = import_react3.useState(value.x.toFixed(precision));
+  const [localY, setLocalY] = import_react3.useState(value.y.toFixed(precision));
+  const [localZ, setLocalZ] = import_react3.useState(value.z.toFixed(precision));
+  import_react3.useEffect(() => {
     setLocalX(value.x.toFixed(precision));
     setLocalY(value.y.toFixed(precision));
     setLocalZ(value.z.toFixed(precision));
   }, [value.x, value.y, value.z, precision]);
-  const handleChange = import_react2.useCallback((axis, newValue) => {
+  const handleChange = import_react3.useCallback((axis, newValue) => {
     if (axis === "x")
       setLocalX(newValue);
     else if (axis === "y")
@@ -24084,7 +24729,7 @@ function VectorInput({
     else
       setLocalZ(newValue);
   }, []);
-  const handleBlur = import_react2.useCallback((axis) => {
+  const handleBlur = import_react3.useCallback((axis) => {
     const parsed = axis === "x" ? parseFloat(localX) : axis === "y" ? parseFloat(localY) : parseFloat(localZ);
     if (!isNaN(parsed)) {
       const newValue = new Vector3(axis === "x" ? parsed : value.x, axis === "y" ? parsed : value.y, axis === "z" ? parsed : value.z);
@@ -24098,7 +24743,7 @@ function VectorInput({
         setLocalZ(value.z.toFixed(precision));
     }
   }, [localX, localY, localZ, value, onChange, precision]);
-  const handleKeyDown = import_react2.useCallback((e, axis) => {
+  const handleKeyDown = import_react3.useCallback((e, axis) => {
     if (e.key === "Enter") {
       handleBlur(axis);
       e.target.blur();
@@ -24177,7 +24822,7 @@ function PropertiesPanel({
   onScaleChange
 }) {
   const rotationDeg = new Vector3(rotation.x * 180 / Math.PI, rotation.y * 180 / Math.PI, rotation.z * 180 / Math.PI);
-  const handleRotationChange = import_react2.useCallback((degValue) => {
+  const handleRotationChange = import_react3.useCallback((degValue) => {
     onRotationChange(new Vector3(degValue.x * Math.PI / 180, degValue.y * Math.PI / 180, degValue.z * Math.PI / 180));
   }, [onRotationChange]);
   return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
@@ -24410,7 +25055,7 @@ function Instructions() {
 }
 
 // src/components/AddMenu.tsx
-var import_react3 = __toESM(require_react(), 1);
+var import_react4 = __toESM(require_react(), 1);
 
 // src/icons/mesh_plane.svg
 var mesh_plane_default = "./mesh_plane-011tjaxx.svg";
@@ -24429,8 +25074,8 @@ var PRIMITIVES = [
   { type: "circle", label: "Circle", icon: mesh_circle_default }
 ];
 function AddMenu({ x, y, onSelect, onClose }) {
-  const menuRef = import_react3.useRef(null);
-  import_react3.useEffect(() => {
+  const menuRef = import_react4.useRef(null);
+  import_react4.useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         onClose();
@@ -24485,7 +25130,7 @@ function AddMenu({ x, y, onSelect, onClose }) {
 }
 
 // src/components/ShadingContextMenu.tsx
-var import_react4 = __toESM(require_react(), 1);
+var import_react5 = __toESM(require_react(), 1);
 var jsx_dev_runtime8 = __toESM(require_jsx_dev_runtime(), 1);
 function ObjectContextMenu({
   x,
@@ -24493,8 +25138,8 @@ function ObjectContextMenu({
   onAction,
   onClose
 }) {
-  const menuRef = import_react4.useRef(null);
-  import_react4.useEffect(() => {
+  const menuRef = import_react5.useRef(null);
+  import_react5.useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         onClose();
@@ -24652,13 +25297,13 @@ function ViewportGizmo({
 // src/App.tsx
 var jsx_dev_runtime10 = __toESM(require_jsx_dev_runtime(), 1);
 function App() {
-  const canvasRef = import_react5.useRef(null);
-  const viewportRef = import_react5.useRef(null);
-  const rasterizerRef = import_react5.useRef(null);
-  const sceneRef = import_react5.useRef(new Scene);
-  const editorRef = import_react5.useRef(null);
-  const gridDataRef = import_react5.useRef(null);
-  const renderLoopRef = import_react5.useRef(null);
+  const canvasRef = import_react6.useRef(null);
+  const viewportRef = import_react6.useRef(null);
+  const rasterizerRef = import_react6.useRef(null);
+  const sceneRef = import_react6.useRef(new Scene);
+  const editorRef = import_react6.useRef(null);
+  const gridDataRef = import_react6.useRef(null);
+  const renderLoopRef = import_react6.useRef(null);
   const {
     state: uiState,
     setters,
@@ -24689,11 +25334,11 @@ function App() {
     handleViewModeChange,
     handleSelectionModeChange
   } = actions;
-  const inputManagerRef = import_react5.useRef(new InputManager);
-  const [addMenuPos, setAddMenuPos] = import_react5.useState(null);
-  const [contextMenuPos, setContextMenuPos] = import_react5.useState(null);
-  const [isOrtho, setIsOrtho] = import_react5.useState(false);
-  const resizeCanvas = import_react5.useCallback(() => {
+  const inputManagerRef = import_react6.useRef(new InputManager);
+  const [addMenuPos, setAddMenuPos] = import_react6.useState(null);
+  const [contextMenuPos, setContextMenuPos] = import_react6.useState(null);
+  const [isOrtho, setIsOrtho] = import_react6.useState(false);
+  const resizeCanvas = import_react6.useCallback(() => {
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
     const rasterizer = rasterizerRef.current;
@@ -24714,7 +25359,7 @@ function App() {
       rasterizer.setRenderResolution(baseWidth, baseHeight);
     }
   }, []);
-  const loadOBJ = import_react5.useCallback(async (url, name) => {
+  const loadOBJ = import_react6.useCallback(async (url, name) => {
     const rasterizer = rasterizerRef.current;
     const scene = sceneRef.current;
     if (!rasterizer)
@@ -24741,7 +25386,7 @@ function App() {
       console.warn(`Could not load OBJ file: ${error}`);
     }
   }, []);
-  const handleSelectObject = import_react5.useCallback((name) => {
+  const handleSelectObject = import_react6.useCallback((name) => {
     const scene = sceneRef.current;
     const obj = scene.objects.find((o) => o.name === name);
     if (obj) {
@@ -24749,7 +25394,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleToggleVisibility = import_react5.useCallback((name) => {
+  const handleToggleVisibility = import_react6.useCallback((name) => {
     const scene = sceneRef.current;
     const obj = scene.objects.find((o) => o.name === name);
     if (obj) {
@@ -24757,7 +25402,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleAddPrimitive = import_react5.useCallback((type) => {
+  const handleAddPrimitive = import_react6.useCallback((type) => {
     const scene = sceneRef.current;
     const editor = editorRef.current;
     const baseName = type.charAt(0).toUpperCase() + type.slice(1);
@@ -24789,7 +25434,7 @@ function App() {
     updateUIState(true);
     setAddMenuPos(null);
   }, [updateUIState]);
-  const handlePositionChange = import_react5.useCallback((position) => {
+  const handlePositionChange = import_react6.useCallback((position) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -24797,7 +25442,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleRotationChange = import_react5.useCallback((rotation) => {
+  const handleRotationChange = import_react6.useCallback((rotation) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -24805,7 +25450,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleScaleChange = import_react5.useCallback((scale) => {
+  const handleScaleChange = import_react6.useCallback((scale) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -24813,17 +25458,17 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleViewpointChange = import_react5.useCallback((viewpoint) => {
+  const handleViewpointChange = import_react6.useCallback((viewpoint) => {
     const scene = sceneRef.current;
     scene.camera.setViewpoint(viewpoint);
     setIsOrtho(scene.camera.orthographic);
   }, []);
-  const handleToggleOrtho = import_react5.useCallback(() => {
+  const handleToggleOrtho = import_react6.useCallback(() => {
     const scene = sceneRef.current;
     scene.camera.orthographic = !scene.camera.orthographic;
     setIsOrtho(scene.camera.orthographic);
   }, []);
-  import_react5.useEffect(() => {
+  import_react6.useEffect(() => {
     const rasterizer = rasterizerRef.current;
     if (!rasterizer)
       return;
@@ -24834,7 +25479,7 @@ function App() {
     rasterizer.enableVertexSnapping = true;
     rasterizer.enableTexturing = settings.texturing;
   }, [settings]);
-  import_react5.useEffect(() => {
+  import_react6.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas)
       return;
@@ -24882,7 +25527,7 @@ function App() {
             return;
           }
         }
-        if (editor && editor.handleKeyDown(e.key, e.ctrlKey || e.metaKey, e.shiftKey)) {
+        if (editor && editor.handleKeyDown(e.key, e.ctrlKey || e.metaKey, e.shiftKey, e.altKey)) {
           e.preventDefault();
           return;
         }

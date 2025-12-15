@@ -402,7 +402,12 @@ function App() {
         // Let editor handle shortcuts first (pass modifier keys)
         if (
           editor &&
-          editor.handleKeyDown(e.key, e.ctrlKey || e.metaKey, e.shiftKey)
+          editor.handleKeyDown(
+            e.key,
+            e.ctrlKey || e.metaKey,
+            e.shiftKey,
+            e.altKey
+          )
         ) {
           e.preventDefault();
           return;

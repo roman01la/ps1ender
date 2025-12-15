@@ -74,6 +74,18 @@ export interface TransformResult {
 }
 
 /**
+ * Result of a multi-object transform for history
+ */
+export interface MultiObjectTransformResult {
+  type: "multi-object";
+  transformType: TransformMode;
+  objects: Array<{
+    before: ObjectTransformData;
+    after: ObjectTransformData;
+  }>;
+}
+
+/**
  * Callback when transform completes
  */
 export type TransformCompleteCallback = (
@@ -88,7 +100,12 @@ export class TransformManager {
   private _mode: TransformMode = "none";
   private _axisConstraint: AxisConstraint = "none";
 
-  // Object transform start state
+  // Object transform start states (for multiple objects)
+  private objectStartPositions: Map<string, Vector3> = new Map();
+  private objectStartRotations: Map<string, Vector3> = new Map();
+  private objectStartScales: Map<string, Vector3> = new Map();
+
+  // Legacy single-object (for backward compatibility with edit mode)
   private objectStartPos: Vector3 | null = null;
   private objectStartRotation: Vector3 | null = null;
   private objectStartScale: Vector3 | null = null;
@@ -158,6 +175,20 @@ export class TransformManager {
   }
 
   /**
+   * Get multi-object start positions
+   */
+  getMultiObjectStartPositions(): Map<string, Vector3> {
+    return this.objectStartPositions;
+  }
+
+  /**
+   * Get multi-object start rotations
+   */
+  getMultiObjectStartRotations(): Map<string, Vector3> {
+    return this.objectStartRotations;
+  }
+
+  /**
    * Set callback for transform completion
    */
   setOnComplete(callback: TransformCompleteCallback | null): void {
@@ -167,7 +198,7 @@ export class TransformManager {
   // ==================== Transform Start ====================
 
   /**
-   * Start grab (move) transform for object mode
+   * Start grab (move) transform for object mode (supports multiple objects)
    */
   startObjectGrab(obj: SceneObject): boolean {
     this._mode = "grab";
@@ -175,6 +206,33 @@ export class TransformManager {
     this.transformInitialized = false;
     this.objectStartPos = obj.position.clone();
     this._transformOrigin = obj.getWorldCenter();
+    return true;
+  }
+
+  /**
+   * Start grab (move) transform for multiple objects
+   */
+  startMultiObjectGrab(objects: SceneObject[]): boolean {
+    if (objects.length === 0) return false;
+
+    this._mode = "grab";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+
+    // Store start positions for all objects
+    this.objectStartPositions.clear();
+    for (const obj of objects) {
+      this.objectStartPositions.set(obj.name, obj.position.clone());
+    }
+
+    // Calculate combined center for gizmo
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
+
     return true;
   }
 
@@ -223,6 +281,35 @@ export class TransformManager {
   }
 
   /**
+   * Start rotate transform for multiple objects
+   */
+  startMultiObjectRotate(objects: SceneObject[]): boolean {
+    if (objects.length === 0) return false;
+
+    this._mode = "rotate";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+
+    // Store start rotations and positions for all objects
+    this.objectStartRotations.clear();
+    this.objectStartPositions.clear();
+    for (const obj of objects) {
+      this.objectStartRotations.set(obj.name, obj.rotation.clone());
+      this.objectStartPositions.set(obj.name, obj.position.clone());
+    }
+
+    // Calculate combined center for rotation pivot
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
+
+    return true;
+  }
+
+  /**
    * Start rotate transform for edit mode vertices
    */
   startVertexRotate(
@@ -266,6 +353,33 @@ export class TransformManager {
     this.transformInitialized = false;
     this.objectStartScale = obj.scale.clone();
     this._transformOrigin = obj.getWorldCenter();
+    return true;
+  }
+
+  /**
+   * Start scale transform for multiple objects
+   */
+  startMultiObjectScale(objects: SceneObject[]): boolean {
+    if (objects.length === 0) return false;
+
+    this._mode = "scale";
+    this._axisConstraint = "none";
+    this.transformInitialized = false;
+
+    // Store start scales for all objects
+    this.objectStartScales.clear();
+    for (const obj of objects) {
+      this.objectStartScales.set(obj.name, obj.scale.clone());
+    }
+
+    // Calculate combined center for scale pivot
+    let center = Vector3.zero();
+    for (const obj of objects) {
+      center = center.add(obj.getWorldCenter());
+    }
+    center = center.div(objects.length);
+    this._transformOrigin = center;
+
     return true;
   }
 
@@ -394,6 +508,166 @@ export class TransformManager {
       this.updateRotate(rotateSensitivity, getAxisMovement, obj, isEditMode);
     } else if (this._mode === "scale") {
       this.updateScale(deltaX, deltaY, scaleSensitivity, obj, isEditMode);
+    }
+  }
+
+  /**
+   * Update transform for multiple objects based on mouse movement
+   */
+  updateMultiObjectTransform(
+    deltaX: number,
+    deltaY: number,
+    camera: Camera,
+    objects: SceneObject[]
+  ): void {
+    if (this._mode === "none" || objects.length === 0) return;
+
+    // Skip the first update to avoid initial jump
+    if (!this.transformInitialized) {
+      this.transformInitialized = true;
+      return;
+    }
+
+    // Get camera-relative directions
+    const forward = camera.target.sub(camera.position).normalize();
+    const right = forward.cross(new Vector3(0, 0, 1)).normalize();
+    const up = right.cross(forward).normalize();
+
+    // Sensitivity
+    const moveSensitivity = 0.02;
+    const rotateSensitivity = 0.02;
+    const scaleSensitivity = 0.02;
+
+    // Helper: project world axis to screen and get best mouse direction
+    const getAxisMovement = (axis: Vector3): number => {
+      const screenX = axis.dot(right);
+      const screenY = -axis.dot(up);
+
+      const absX = Math.abs(screenX);
+      const absY = Math.abs(screenY);
+
+      if (absX + absY < 0.001) {
+        return deltaX;
+      }
+
+      return (deltaX * screenX + deltaY * screenY) / (absX + absY);
+    };
+
+    if (this._mode === "grab") {
+      this.updateMultiObjectGrab(
+        deltaX,
+        deltaY,
+        right,
+        up,
+        moveSensitivity,
+        getAxisMovement,
+        objects
+      );
+    } else if (this._mode === "rotate") {
+      this.updateMultiObjectRotate(rotateSensitivity, getAxisMovement, objects);
+    } else if (this._mode === "scale") {
+      this.updateMultiObjectScale(deltaX, deltaY, scaleSensitivity, objects);
+    }
+  }
+
+  private updateMultiObjectGrab(
+    deltaX: number,
+    deltaY: number,
+    right: Vector3,
+    up: Vector3,
+    sensitivity: number,
+    getAxisMovement: (axis: Vector3) => number,
+    objects: SceneObject[]
+  ): void {
+    // Calculate movement based on axis constraint
+    let movement = Vector3.zero();
+
+    if (this._axisConstraint === "none") {
+      movement = right
+        .mul(deltaX * sensitivity)
+        .add(up.mul(-deltaY * sensitivity));
+    } else if (this._axisConstraint === "x") {
+      const amount = getAxisMovement(new Vector3(1, 0, 0));
+      movement = new Vector3(amount * sensitivity, 0, 0);
+    } else if (this._axisConstraint === "y") {
+      const amount = getAxisMovement(new Vector3(0, 1, 0));
+      movement = new Vector3(0, amount * sensitivity, 0);
+    } else if (this._axisConstraint === "z") {
+      const amount = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(0, 0, amount * sensitivity);
+    } else if (this._axisConstraint === "yz") {
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(0, amountY * sensitivity, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xz") {
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
+      movement = new Vector3(amountX * sensitivity, 0, amountZ * sensitivity);
+    } else if (this._axisConstraint === "xy") {
+      const amountX = getAxisMovement(new Vector3(1, 0, 0));
+      const amountY = getAxisMovement(new Vector3(0, 1, 0));
+      movement = new Vector3(amountX * sensitivity, amountY * sensitivity, 0);
+    }
+
+    // Apply movement to all objects
+    for (const obj of objects) {
+      obj.position = obj.position.add(movement);
+    }
+
+    // Update gizmo origin
+    if (this._transformOrigin) {
+      this._transformOrigin = this._transformOrigin.add(movement);
+    }
+  }
+
+  private updateMultiObjectRotate(
+    sensitivity: number,
+    getAxisMovement: (axis: Vector3) => number,
+    objects: SceneObject[]
+  ): void {
+    if (!this._transformOrigin) return;
+
+    // Determine rotation axis
+    let axis = new Vector3(0, 0, 1); // Default to Z axis (up in Z-up)
+    if (this._axisConstraint === "x") axis = new Vector3(1, 0, 0);
+    else if (this._axisConstraint === "y") axis = new Vector3(0, 1, 0);
+
+    const amount = getAxisMovement(axis);
+    const angle = amount * sensitivity;
+
+    // Rotate each object around its own local axis
+    for (const obj of objects) {
+      if (this._axisConstraint === "x" || this._axisConstraint === "none") {
+        obj.rotation.x += angle;
+      }
+      if (this._axisConstraint === "y" || this._axisConstraint === "none") {
+        obj.rotation.y += angle;
+      }
+      if (this._axisConstraint === "z" || this._axisConstraint === "none") {
+        obj.rotation.z += angle;
+      }
+    }
+  }
+
+  private updateMultiObjectScale(
+    deltaX: number,
+    deltaY: number,
+    sensitivity: number,
+    objects: SceneObject[]
+  ): void {
+    // Calculate scale factor from mouse movement
+    const scaleFactor = 1.0 + (deltaX - deltaY) * sensitivity;
+
+    for (const obj of objects) {
+      if (this._axisConstraint === "none") {
+        obj.scale = obj.scale.mul(scaleFactor);
+      } else if (this._axisConstraint === "x") {
+        obj.scale.x *= scaleFactor;
+      } else if (this._axisConstraint === "y") {
+        obj.scale.y *= scaleFactor;
+      } else if (this._axisConstraint === "z") {
+        obj.scale.z *= scaleFactor;
+      }
     }
   }
 
@@ -887,6 +1161,144 @@ export class TransformManager {
   }
 
   /**
+   * Cancel multi-object transform (restore original values)
+   */
+  cancelMultiObject(objects: SceneObject[]): void {
+    if (this._mode === "none") return;
+
+    if (this._mode === "grab" && this.objectStartPositions.size > 0) {
+      for (const obj of objects) {
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startPos) {
+          obj.position = startPos.clone();
+        }
+      }
+    } else if (this._mode === "rotate" && this.objectStartRotations.size > 0) {
+      for (const obj of objects) {
+        const startRot = this.objectStartRotations.get(obj.name);
+        if (startRot) {
+          obj.rotation = startRot.clone();
+        }
+      }
+    } else if (this._mode === "scale" && this.objectStartScales.size > 0) {
+      for (const obj of objects) {
+        const startScale = this.objectStartScales.get(obj.name);
+        if (startScale) {
+          obj.scale = startScale.clone();
+        }
+      }
+    }
+
+    // Clear state
+    this.clearState();
+
+    // Notify callback (null = cancelled)
+    this.onCompleteCallback?.(null);
+  }
+
+  /**
+   * Confirm multi-object transform
+   * Returns transform results for all objects for undo history
+   */
+  confirmMultiObject(
+    objects: SceneObject[]
+  ): MultiObjectTransformResult | null {
+    if (this._mode === "none") return null;
+
+    const results: Array<{
+      before: ObjectTransformData;
+      after: ObjectTransformData;
+    }> = [];
+
+    if (this._mode === "grab" && this.objectStartPositions.size > 0) {
+      for (const obj of objects) {
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startPos) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: startPos.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone(),
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone(),
+            },
+          });
+        }
+      }
+    } else if (this._mode === "rotate" && this.objectStartRotations.size > 0) {
+      for (const obj of objects) {
+        const startRot = this.objectStartRotations.get(obj.name);
+        const startPos = this.objectStartPositions.get(obj.name);
+        if (startRot) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: startPos?.clone() ?? obj.position.clone(),
+              rotation: startRot.clone(),
+              scale: obj.scale.clone(),
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone(),
+            },
+          });
+        }
+      }
+    } else if (this._mode === "scale" && this.objectStartScales.size > 0) {
+      for (const obj of objects) {
+        const startScale = this.objectStartScales.get(obj.name);
+        if (startScale) {
+          results.push({
+            before: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: startScale.clone(),
+            },
+            after: {
+              objectName: obj.name,
+              position: obj.position.clone(),
+              rotation: obj.rotation.clone(),
+              scale: obj.scale.clone(),
+            },
+          });
+        }
+      }
+    }
+
+    const transformType = this._mode;
+
+    // Clear state
+    this.clearState();
+
+    if (results.length === 0) return null;
+
+    return {
+      type: "multi-object",
+      transformType,
+      objects: results,
+    };
+  }
+
+  /**
+   * Check if this is a multi-object transform
+   */
+  get isMultiObjectTransform(): boolean {
+    return (
+      this.objectStartPositions.size > 1 ||
+      this.objectStartRotations.size > 1 ||
+      this.objectStartScales.size > 1
+    );
+  }
+
+  /**
    * Clear all transform state
    */
   private clearState(): void {
@@ -895,6 +1307,9 @@ export class TransformManager {
     this.objectStartPos = null;
     this.objectStartRotation = null;
     this.objectStartScale = null;
+    this.objectStartPositions.clear();
+    this.objectStartRotations.clear();
+    this.objectStartScales.clear();
     this._transformOrigin = null;
     this.transformInitialized = false;
     this.vertexStartPositions.clear();

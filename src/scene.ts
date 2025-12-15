@@ -12,6 +12,7 @@ export class SceneObject {
   public scale: Vector3;
   public selected: boolean = false;
   public visible: boolean = true;
+  public parent: SceneObject | null = null;
 
   constructor(name: string, mesh: Mesh) {
     this.name = name;
@@ -22,10 +23,17 @@ export class SceneObject {
   }
 
   /**
-   * Get the model matrix for this object
+   * Get children of this object
+   */
+  getChildren(allObjects: SceneObject[]): SceneObject[] {
+    return allObjects.filter((obj) => obj.parent === this);
+  }
+
+  /**
+   * Get the model matrix for this object (includes parent transforms)
    */
   getModelMatrix(): Matrix4 {
-    return Matrix4.translation(
+    const localMatrix = Matrix4.translation(
       this.position.x,
       this.position.y,
       this.position.z
@@ -34,6 +42,11 @@ export class SceneObject {
       .multiply(Matrix4.rotationX(this.rotation.x))
       .multiply(Matrix4.rotationZ(this.rotation.z))
       .multiply(Matrix4.scaling(this.scale.x, this.scale.y, this.scale.z));
+
+    if (this.parent) {
+      return this.parent.getModelMatrix().multiply(localMatrix);
+    }
+    return localMatrix;
   }
 
   /**
@@ -266,6 +279,8 @@ export class Scene {
   public camera: Camera;
   public gridSize: number = 10;
   public gridDivisions: number = 10;
+  /** The active (last selected) object - used for parenting and other operations */
+  public activeObject: SceneObject | null = null;
 
   constructor() {
     this.camera = new Camera();
@@ -285,6 +300,16 @@ export class Scene {
     const index = this.objects.indexOf(obj);
     if (index !== -1) {
       this.objects.splice(index, 1);
+      // Clear active object if it was removed
+      if (this.activeObject === obj) {
+        this.activeObject = null;
+      }
+      // Clear parent references to removed object
+      for (const o of this.objects) {
+        if (o.parent === obj) {
+          o.parent = null;
+        }
+      }
     }
   }
 
@@ -296,7 +321,15 @@ export class Scene {
   }
 
   /**
+   * Get the active object (last selected)
+   */
+  getActiveObject(): SceneObject | null {
+    return this.activeObject;
+  }
+
+  /**
    * Select an object (optionally clearing previous selection)
+   * The selected object becomes the active object
    */
   selectObject(obj: SceneObject | null, addToSelection: boolean = false): void {
     if (!addToSelection) {
@@ -307,6 +340,11 @@ export class Scene {
     }
     if (obj) {
       obj.selected = true;
+      // The newly selected object becomes the active object
+      this.activeObject = obj;
+    } else if (!addToSelection) {
+      // If deselecting all, clear active object
+      this.activeObject = null;
     }
   }
 
@@ -317,6 +355,7 @@ export class Scene {
     for (const obj of this.objects) {
       obj.selected = false;
     }
+    this.activeObject = null;
   }
 
   /**

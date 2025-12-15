@@ -287,6 +287,22 @@ export class Editor {
         }
         break;
 
+      case "multi-object-transform":
+        if (action.multiObjectTransform) {
+          for (const objData of action.multiObjectTransform.objects) {
+            const state = undo ? objData.before : objData.after;
+            const obj = this.scene.objects.find(
+              (o) => o.name === state.objectName
+            );
+            if (obj) {
+              obj.position = state.position.clone();
+              obj.rotation = state.rotation.clone();
+              obj.scale = state.scale.clone();
+            }
+          }
+        }
+        break;
+
       case "vertex-move":
         if (action.vertexMove) {
           const state = undo
@@ -1093,6 +1109,161 @@ export class Editor {
   }
 
   /**
+   * Duplicate selected objects - creates copies and starts grab transform
+   * Called with Shift+D in object mode
+   */
+  duplicateSelected(): boolean {
+    if (this.mode !== "object") return false;
+
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0) return false;
+
+    const newObjects: SceneObject[] = [];
+
+    for (const obj of selected) {
+      // Generate unique name with .001, .002 suffix
+      const baseName = obj.name.replace(/\.\d{3}$/, ""); // Strip existing suffix
+      let name = baseName;
+      let counter = 1;
+      while (this.scene.objects.some((o) => o.name === name)) {
+        name = `${baseName}.${String(counter).padStart(3, "0")}`;
+        counter++;
+      }
+
+      // Clone the mesh using serialize/deserialize
+      const meshData = serializeMesh(obj.mesh);
+      const newMesh = deserializeMesh(meshData);
+      newMesh.smoothShading = obj.mesh.smoothShading;
+
+      // Create new object with same transform
+      const newObj = new SceneObject(name, newMesh);
+      newObj.position = obj.position.clone();
+      newObj.rotation = obj.rotation.clone();
+      newObj.scale = obj.scale.clone();
+
+      // Add to scene
+      this.scene.addObject(newObj);
+      newObjects.push(newObj);
+
+      // Record in history
+      this.pushHistoryAction({
+        type: "object-add",
+        description: `Duplicate ${obj.name}`,
+        objectData: {
+          name: newObj.name,
+          meshData: serializeMesh(newObj.mesh),
+          position: newObj.position.clone(),
+          rotation: newObj.rotation.clone(),
+          scale: newObj.scale.clone(),
+        },
+      });
+    }
+
+    // Deselect original objects, select the new ones
+    this.scene.deselectAll();
+    for (const newObj of newObjects) {
+      newObj.selected = true;
+    }
+    // Set the last duplicated object as active
+    if (newObjects.length > 0) {
+      this.scene.activeObject = newObjects[newObjects.length - 1];
+    }
+
+    // Start grab transform on the new objects
+    if (newObjects.length > 0) {
+      this.startGrab();
+    }
+
+    return true;
+  }
+
+  /**
+   * Parent selected objects to the active object
+   * Called with Ctrl+P in object mode
+   */
+  parentToActive(): boolean {
+    if (this.mode !== "object") return false;
+
+    const selected = this.scene.getSelectedObjects();
+    const active = this.scene.getActiveObject();
+
+    // Need at least 2 selected objects and an active object
+    if (selected.length < 2 || !active) return false;
+
+    // The active object must be in the selection
+    if (!active.selected) return false;
+
+    // Get the inverse of the new parent's world transform
+    const parentWorldMatrix = active.getModelMatrix();
+    const parentWorldMatrixInverse = parentWorldMatrix.invert();
+    if (!parentWorldMatrixInverse) return false; // Can't parent if matrix is singular
+
+    // Parent all other selected objects to the active one
+    let parentedCount = 0;
+    for (const obj of selected) {
+      if (obj !== active) {
+        // Prevent circular parenting
+        if (this.wouldCreateCycle(obj, active)) continue;
+
+        // Get current world position before parenting
+        const worldPos = obj.getModelMatrix().transformPoint(Vector3.zero());
+
+        // Set the parent
+        obj.parent = active;
+
+        // Convert world position to local position relative to new parent
+        const localPos = parentWorldMatrixInverse.transformPoint(worldPos);
+        obj.position = localPos;
+
+        parentedCount++;
+      }
+    }
+
+    if (parentedCount > 0) {
+      // TODO: Add undo support for parenting
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if parenting child to parent would create a cycle
+   */
+  private wouldCreateCycle(
+    child: SceneObject,
+    newParent: SceneObject
+  ): boolean {
+    let current: SceneObject | null = newParent;
+    while (current) {
+      if (current === child) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
+  /**
+   * Clear parent of selected objects
+   * Called with Alt+P in object mode
+   */
+  clearParent(): boolean {
+    if (this.mode !== "object") return false;
+
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0) return false;
+
+    let clearedCount = 0;
+    for (const obj of selected) {
+      if (obj.parent) {
+        obj.parent = null;
+        clearedCount++;
+      }
+    }
+
+    return clearedCount > 0;
+  }
+
+  /**
    * Extrude selected edges - creates new geometry and starts grab transform
    * Called with E key in edge mode
    */
@@ -1195,6 +1366,62 @@ export class Editor {
     // Stay in vertex mode
     this.selection.clearAll();
     this.selection.addVertices(result.newVertices);
+
+    // Immediately start grab transform on the new vertices ONLY
+    // (don't use startGrab() which expands to co-located vertices)
+    this.transform.startVertexGrab(
+      mesh,
+      result.newVertices,
+      obj.getModelMatrix()
+    );
+
+    return true;
+  }
+
+  /**
+   * Extrude selected faces - creates new geometry and starts grab transform
+   * Called with E key in face mode
+   */
+  extrudeFaces(): boolean {
+    if (this.mode !== "edit") return false;
+    if (this.selectionMode !== "face") return false;
+    if (this.selectedFaces.size === 0) return false;
+
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0) return false;
+
+    const obj = selected[0];
+    const mesh = obj.mesh;
+
+    // Store before state for undo
+    const beforeMesh = serializeMesh(mesh);
+
+    // Perform the extrusion
+    const result = this.meshEdit.extrudeFaces(
+      mesh,
+      this.selectedFaces as Set<number>
+    );
+
+    if (!result.success) return false;
+
+    // Store undo action
+    const afterMesh = serializeMesh(mesh);
+    this.pushHistoryAction({
+      type: "mesh-edit",
+      description: "Extrude Faces",
+      meshEdit: {
+        objectName: obj.name,
+        before: beforeMesh,
+        after: afterMesh,
+      },
+    });
+
+    // Update selection to the new faces (the extruded top faces)
+    // Stay in face mode
+    this.selection.clearAll();
+    for (const faceIdx of result.newFaces) {
+      this.selection.addFace(faceIdx);
+    }
 
     // Immediately start grab transform on the new vertices ONLY
     // (don't use startGrab() which expands to co-located vertices)
@@ -1361,11 +1588,15 @@ export class Editor {
       return;
     }
 
-    // Object mode
+    // Object mode - support multiple objects
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return;
 
-    this.transform.startObjectGrab(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectGrab(selected[0]);
+    } else {
+      this.transform.startMultiObjectGrab(selected);
+    }
   }
 
   /**
@@ -1388,11 +1619,15 @@ export class Editor {
       return;
     }
 
-    // Object mode
+    // Object mode - support multiple objects
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return;
 
-    this.transform.startObjectRotate(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectRotate(selected[0]);
+    } else {
+      this.transform.startMultiObjectRotate(selected);
+    }
   }
 
   /**
@@ -1415,11 +1650,15 @@ export class Editor {
       return;
     }
 
-    // Object mode
+    // Object mode - support multiple objects
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return;
 
-    this.transform.startObjectScale(selected[0]);
+    if (selected.length === 1) {
+      this.transform.startObjectScale(selected[0]);
+    } else {
+      this.transform.startMultiObjectScale(selected);
+    }
   }
 
   /**
@@ -1431,11 +1670,11 @@ export class Editor {
     if (this.transform.mode === "grab") {
       const selected = this.scene.getSelectedObjects();
       if (selected.length > 0) {
-        const obj = selected[0];
         const state = this.transform.getState();
 
         if (this.mode === "edit" && state.vertexStartPositions.size > 0) {
           // Edit mode: reset vertices to original positions
+          const obj = selected[0];
           const mesh = obj.mesh;
           for (const [idx, startPos] of state.vertexStartPositions) {
             mesh.vertices[idx].position = startPos.clone();
@@ -1452,8 +1691,25 @@ export class Editor {
           this.transform.resetTransformOrigin(
             modelMatrix.transformPoint(center)
           );
+        } else if (this.transform.isMultiObjectTransform) {
+          // Multi-object mode: reset all objects to original positions
+          const startPositions = this.transform.getMultiObjectStartPositions();
+          for (const obj of selected) {
+            const startPos = startPositions.get(obj.name);
+            if (startPos) {
+              obj.position = startPos.clone();
+            }
+          }
+          // Reset gizmo origin to original combined center
+          let center = Vector3.zero();
+          for (const pos of startPositions.values()) {
+            center = center.add(pos);
+          }
+          center = center.div(startPositions.size);
+          this.transform.resetTransformOrigin(center);
         } else if (state.startPos) {
-          // Object mode: reset object to original position
+          // Single object mode: reset object to original position
+          const obj = selected[0];
           obj.position = state.startPos.clone();
           this.transform.resetTransformOrigin(obj.getWorldCenter());
         }
@@ -1478,20 +1734,31 @@ export class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0 || this.transformMode === "none") return;
 
-    const obj = selected[0];
-    this.transform.updateTransform(
-      deltaX,
-      deltaY,
-      this.scene.camera,
-      obj,
-      this.mode === "edit",
-      ctrlKey,
-      screenX,
-      screenY,
-      canvasWidth,
-      canvasHeight,
-      this.selectedVertices
-    );
+    if (this.mode === "edit" || selected.length === 1) {
+      // Single object or edit mode - use single object update
+      const obj = selected[0];
+      this.transform.updateTransform(
+        deltaX,
+        deltaY,
+        this.scene.camera,
+        obj,
+        this.mode === "edit",
+        ctrlKey,
+        screenX,
+        screenY,
+        canvasWidth,
+        canvasHeight,
+        this.selectedVertices
+      );
+    } else {
+      // Multiple objects - use multi-object update
+      this.transform.updateMultiObjectTransform(
+        deltaX,
+        deltaY,
+        this.scene.camera,
+        selected
+      );
+    }
   }
 
   /**
@@ -1500,6 +1767,29 @@ export class Editor {
   confirmTransform(): void {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return;
+
+    // Check if this is a multi-object transform
+    if (this.transform.isMultiObjectTransform) {
+      const result = this.transform.confirmMultiObject(selected);
+      if (result && result.objects.length > 0) {
+        const actionNames = {
+          grab: "Move",
+          rotate: "Rotate",
+          scale: "Scale",
+          none: "Transform",
+        };
+        const actionName = actionNames[result.transformType];
+
+        this.pushHistoryAction({
+          type: "multi-object-transform",
+          description: `${actionName} ${result.objects.length} objects`,
+          multiObjectTransform: {
+            objects: result.objects,
+          },
+        });
+      }
+      return;
+    }
 
     const obj = selected[0];
     const result = this.transform.confirm(obj, this.mode === "edit");
@@ -1551,7 +1841,12 @@ export class Editor {
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return;
 
-    this.transform.cancel(selected[0], this.mode === "edit");
+    // Check if this is a multi-object transform
+    if (this.transform.isMultiObjectTransform) {
+      this.transform.cancelMultiObject(selected);
+    } else {
+      this.transform.cancel(selected[0], this.mode === "edit");
+    }
   }
 
   /**
@@ -1560,7 +1855,8 @@ export class Editor {
   handleKeyDown(
     key: string,
     ctrlKey: boolean = false,
-    shiftKey: boolean = false
+    shiftKey: boolean = false,
+    altKey: boolean = false
   ): boolean {
     const lowerKey = key.toLowerCase();
 
@@ -1572,6 +1868,16 @@ export class Editor {
     // Redo: Ctrl+Shift+Z or Ctrl+Y
     if (ctrlKey && ((lowerKey === "z" && shiftKey) || lowerKey === "y")) {
       return this.redo();
+    }
+
+    // Parent selected objects to active: Ctrl+P (in Object mode)
+    if (ctrlKey && lowerKey === "p" && this.mode === "object") {
+      return this.parentToActive();
+    }
+
+    // Clear parent: Alt+P (in Object mode)
+    if (altKey && lowerKey === "p" && this.mode === "object") {
+      return this.clearParent();
     }
 
     // Select Linked: Ctrl+L (in Edit mode)
@@ -1637,6 +1943,13 @@ export class Editor {
       return true;
     }
 
+    // Shift+D to duplicate selected objects (object mode)
+    if (lowerKey === "d" && shiftKey && this.transformMode === "none") {
+      if (this.mode === "object") {
+        return this.duplicateSelected();
+      }
+    }
+
     // Start transforms
     if (lowerKey === "g") {
       this.startGrab();
@@ -1652,13 +1965,15 @@ export class Editor {
       return true;
     }
 
-    // E key for extrude (in vertex or edge mode)
+    // E key for extrude (in vertex, edge, or face mode)
     if (lowerKey === "e" && this.transformMode === "none") {
       if (this.mode === "edit") {
         if (this.selectionMode === "vertex") {
           return this.extrudeVertices();
         } else if (this.selectionMode === "edge") {
           return this.extrudeEdges();
+        } else if (this.selectionMode === "face") {
+          return this.extrudeFaces();
         }
       }
     }

@@ -26,6 +26,8 @@ export interface SceneObjectInfo {
   name: string;
   selected: boolean;
   visible: boolean;
+  parentName: string | null;
+  inEditMode: boolean;
 }
 
 /**
@@ -179,10 +181,18 @@ export function useEditorUIState(
     setSelectedFaceCount(editor.selectedFaces.size);
 
     // Update scene objects list
+    // Determine which object is in edit mode (first selected object when editor is in edit mode)
+    const editModeObjectName =
+      editor.mode === "edit"
+        ? scene.getSelectedObjects()[0]?.name ?? null
+        : null;
+
     const objects: SceneObjectInfo[] = scene.objects.map((obj) => ({
       name: obj.name,
       selected: obj.selected,
       visible: obj.visible,
+      parentName: obj.parent?.name ?? null,
+      inEditMode: obj.name === editModeObjectName,
     }));
     setSceneObjects(objects);
 
