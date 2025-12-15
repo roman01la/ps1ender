@@ -9,7 +9,7 @@
  * - Transform confirmation and cancellation
  */
 
-import { Vector3 } from "../math";
+import { Vector3, Matrix4 } from "../math";
 import { Mesh } from "../primitives";
 import { SceneObject, Camera } from "../scene";
 
@@ -24,6 +24,13 @@ export type TransformMode = "none" | "grab" | "rotate" | "scale";
  * Plane (two axes): "yz", "xz", "xy" - movement on that plane (excludes the missing axis)
  */
 export type AxisConstraint = "none" | "x" | "y" | "z" | "yz" | "xz" | "xy";
+
+/**
+ * Axis space for transforms
+ * "world" - axes aligned to world coordinates
+ * "local" - axes aligned to object's local coordinates
+ */
+export type AxisSpace = "world" | "local";
 
 /**
  * Transform state snapshot for undo/redo
@@ -99,6 +106,7 @@ export class TransformManager {
   // Transform mode
   private _mode: TransformMode = "none";
   private _axisConstraint: AxisConstraint = "none";
+  private _axisSpace: AxisSpace = "world";
 
   // Object transform start states (for multiple objects)
   private objectStartPositions: Map<string, Vector3> = new Map();
@@ -135,6 +143,13 @@ export class TransformManager {
    */
   get axisConstraint(): AxisConstraint {
     return this._axisConstraint;
+  }
+
+  /**
+   * Get current axis space (world or local)
+   */
+  get axisSpace(): AxisSpace {
+    return this._axisSpace;
   }
 
   /**
@@ -203,6 +218,7 @@ export class TransformManager {
   startObjectGrab(obj: SceneObject): boolean {
     this._mode = "grab";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
     this.objectStartPos = obj.position.clone();
     this._transformOrigin = obj.getWorldCenter();
@@ -217,6 +233,7 @@ export class TransformManager {
 
     this._mode = "grab";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store start positions for all objects
@@ -248,6 +265,7 @@ export class TransformManager {
 
     this._mode = "grab";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store initial vertex positions
@@ -274,6 +292,7 @@ export class TransformManager {
   startObjectRotate(obj: SceneObject): boolean {
     this._mode = "rotate";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
     this.objectStartRotation = obj.rotation.clone();
     this._transformOrigin = obj.getWorldCenter();
@@ -288,6 +307,7 @@ export class TransformManager {
 
     this._mode = "rotate";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store start rotations and positions for all objects
@@ -321,6 +341,7 @@ export class TransformManager {
 
     this._mode = "rotate";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store initial vertex positions
@@ -350,6 +371,7 @@ export class TransformManager {
   startObjectScale(obj: SceneObject): boolean {
     this._mode = "scale";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
     this.objectStartScale = obj.scale.clone();
     this._transformOrigin = obj.getWorldCenter();
@@ -364,6 +386,7 @@ export class TransformManager {
 
     this._mode = "scale";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store start scales for all objects
@@ -395,6 +418,7 @@ export class TransformManager {
 
     this._mode = "scale";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.transformInitialized = false;
 
     // Store initial vertex positions
@@ -421,11 +445,17 @@ export class TransformManager {
   // ==================== Axis Constraint ====================
 
   /**
-   * Set axis constraint
+   * Set axis constraint and optionally axis space
    */
-  setAxisConstraint(axis: AxisConstraint): void {
+  setAxisConstraint(axis: AxisConstraint, space?: AxisSpace): void {
     if (this._mode === "none") return;
     this._axisConstraint = axis;
+    if (space !== undefined) {
+      this._axisSpace = space;
+    } else if (axis === "none") {
+      // Reset to world when constraint is cleared
+      this._axisSpace = "world";
+    }
   }
 
   /**
@@ -582,31 +612,52 @@ export class TransformManager {
     // Calculate movement based on axis constraint
     let movement = Vector3.zero();
 
+    // Get local axes if in local space mode (use first object's rotation)
+    let xAxis = new Vector3(1, 0, 0);
+    let yAxis = new Vector3(0, 1, 0);
+    let zAxis = new Vector3(0, 0, 1);
+
+    if (this._axisSpace === "local" && objects.length > 0) {
+      const rot = objects[0].rotation;
+      const rotMatrix = Matrix4.rotationY(rot.y)
+        .multiply(Matrix4.rotationX(rot.x))
+        .multiply(Matrix4.rotationZ(rot.z));
+      xAxis = rotMatrix.transformDirection(xAxis);
+      yAxis = rotMatrix.transformDirection(yAxis);
+      zAxis = rotMatrix.transformDirection(zAxis);
+    }
+
     if (this._axisConstraint === "none") {
       movement = right
         .mul(deltaX * sensitivity)
         .add(up.mul(-deltaY * sensitivity));
     } else if (this._axisConstraint === "x") {
-      const amount = getAxisMovement(new Vector3(1, 0, 0));
-      movement = new Vector3(amount * sensitivity, 0, 0);
+      const amount = getAxisMovement(xAxis);
+      movement = xAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "y") {
-      const amount = getAxisMovement(new Vector3(0, 1, 0));
-      movement = new Vector3(0, amount * sensitivity, 0);
+      const amount = getAxisMovement(yAxis);
+      movement = yAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "z") {
-      const amount = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(0, 0, amount * sensitivity);
+      const amount = getAxisMovement(zAxis);
+      movement = zAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "yz") {
-      const amountY = getAxisMovement(new Vector3(0, 1, 0));
-      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(0, amountY * sensitivity, amountZ * sensitivity);
+      const amountY = getAxisMovement(yAxis);
+      const amountZ = getAxisMovement(zAxis);
+      movement = yAxis
+        .mul(amountY * sensitivity)
+        .add(zAxis.mul(amountZ * sensitivity));
     } else if (this._axisConstraint === "xz") {
-      const amountX = getAxisMovement(new Vector3(1, 0, 0));
-      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(amountX * sensitivity, 0, amountZ * sensitivity);
+      const amountX = getAxisMovement(xAxis);
+      const amountZ = getAxisMovement(zAxis);
+      movement = xAxis
+        .mul(amountX * sensitivity)
+        .add(zAxis.mul(amountZ * sensitivity));
     } else if (this._axisConstraint === "xy") {
-      const amountX = getAxisMovement(new Vector3(1, 0, 0));
-      const amountY = getAxisMovement(new Vector3(0, 1, 0));
-      movement = new Vector3(amountX * sensitivity, amountY * sensitivity, 0);
+      const amountX = getAxisMovement(xAxis);
+      const amountY = getAxisMovement(yAxis);
+      movement = xAxis
+        .mul(amountX * sensitivity)
+        .add(yAxis.mul(amountY * sensitivity));
     }
 
     // Apply movement to all objects
@@ -627,24 +678,45 @@ export class TransformManager {
   ): void {
     if (!this._transformOrigin) return;
 
-    // Determine rotation axis
+    // Determine rotation axis - for rotation, local space means rotating in local axes
+    // which is what we already do when we modify obj.rotation directly
     let axis = new Vector3(0, 0, 1); // Default to Z axis (up in Z-up)
     if (this._axisConstraint === "x") axis = new Vector3(1, 0, 0);
     else if (this._axisConstraint === "y") axis = new Vector3(0, 1, 0);
 
-    const amount = getAxisMovement(axis);
-    const angle = amount * sensitivity;
+    // For world space rotation with axis constraint, we need to transform the axis
+    // For local space, we rotate around the object's local axis (direct euler modification)
+    if (
+      this._axisSpace === "world" &&
+      this._axisConstraint !== "none" &&
+      objects.length > 0
+    ) {
+      // World space: compute world axis and convert rotation appropriately
+      const amount = getAxisMovement(axis);
+      const angle = amount * sensitivity;
 
-    // Rotate each object around its own local axis
-    for (const obj of objects) {
-      if (this._axisConstraint === "x" || this._axisConstraint === "none") {
-        obj.rotation.x += angle;
+      // For single-axis world space rotation, we directly apply to the euler angle
+      // This is a simplification - full world space would require quaternion math
+      for (const obj of objects) {
+        if (this._axisConstraint === "x") obj.rotation.x += angle;
+        else if (this._axisConstraint === "y") obj.rotation.y += angle;
+        else if (this._axisConstraint === "z") obj.rotation.z += angle;
       }
-      if (this._axisConstraint === "y" || this._axisConstraint === "none") {
-        obj.rotation.y += angle;
-      }
-      if (this._axisConstraint === "z" || this._axisConstraint === "none") {
-        obj.rotation.z += angle;
+    } else {
+      // Local space (default behavior) or no constraint
+      const amount = getAxisMovement(axis);
+      const angle = amount * sensitivity;
+
+      for (const obj of objects) {
+        if (this._axisConstraint === "x" || this._axisConstraint === "none") {
+          obj.rotation.x += angle;
+        }
+        if (this._axisConstraint === "y" || this._axisConstraint === "none") {
+          obj.rotation.y += angle;
+        }
+        if (this._axisConstraint === "z" || this._axisConstraint === "none") {
+          obj.rotation.z += angle;
+        }
       }
     }
   }
@@ -755,34 +827,55 @@ export class TransformManager {
     // Normal grab behavior
     let movement = Vector3.zero();
 
+    // Get local axes if in local space mode
+    let xAxis = new Vector3(1, 0, 0);
+    let yAxis = new Vector3(0, 1, 0);
+    let zAxis = new Vector3(0, 0, 1);
+
+    if (this._axisSpace === "local") {
+      const rot = obj.rotation;
+      const rotMatrix = Matrix4.rotationY(rot.y)
+        .multiply(Matrix4.rotationX(rot.x))
+        .multiply(Matrix4.rotationZ(rot.z));
+      xAxis = rotMatrix.transformDirection(xAxis);
+      yAxis = rotMatrix.transformDirection(yAxis);
+      zAxis = rotMatrix.transformDirection(zAxis);
+    }
+
     if (this._axisConstraint === "none") {
       movement = right
         .mul(deltaX * sensitivity)
         .add(up.mul(-deltaY * sensitivity));
     } else if (this._axisConstraint === "x") {
-      const amount = getAxisMovement(new Vector3(1, 0, 0));
-      movement = new Vector3(amount * sensitivity, 0, 0);
+      const amount = getAxisMovement(xAxis);
+      movement = xAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "y") {
-      const amount = getAxisMovement(new Vector3(0, 1, 0));
-      movement = new Vector3(0, amount * sensitivity, 0);
+      const amount = getAxisMovement(yAxis);
+      movement = yAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "z") {
-      const amount = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(0, 0, amount * sensitivity);
+      const amount = getAxisMovement(zAxis);
+      movement = zAxis.mul(amount * sensitivity);
     } else if (this._axisConstraint === "yz") {
       // YZ plane: move on Y and Z axes (exclude X)
-      const amountY = getAxisMovement(new Vector3(0, 1, 0));
-      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(0, amountY * sensitivity, amountZ * sensitivity);
+      const amountY = getAxisMovement(yAxis);
+      const amountZ = getAxisMovement(zAxis);
+      movement = yAxis
+        .mul(amountY * sensitivity)
+        .add(zAxis.mul(amountZ * sensitivity));
     } else if (this._axisConstraint === "xz") {
       // XZ plane: move on X and Z axes (exclude Y)
-      const amountX = getAxisMovement(new Vector3(1, 0, 0));
-      const amountZ = getAxisMovement(new Vector3(0, 0, 1));
-      movement = new Vector3(amountX * sensitivity, 0, amountZ * sensitivity);
+      const amountX = getAxisMovement(xAxis);
+      const amountZ = getAxisMovement(zAxis);
+      movement = xAxis
+        .mul(amountX * sensitivity)
+        .add(zAxis.mul(amountZ * sensitivity));
     } else if (this._axisConstraint === "xy") {
       // XY plane: move on X and Y axes (exclude Z)
-      const amountX = getAxisMovement(new Vector3(1, 0, 0));
-      const amountY = getAxisMovement(new Vector3(0, 1, 0));
-      movement = new Vector3(amountX * sensitivity, amountY * sensitivity, 0);
+      const amountX = getAxisMovement(xAxis);
+      const amountY = getAxisMovement(yAxis);
+      movement = xAxis
+        .mul(amountX * sensitivity)
+        .add(yAxis.mul(amountY * sensitivity));
     }
 
     if (isEditMode && this.vertexStartPositions.size > 0) {
@@ -1304,6 +1397,7 @@ export class TransformManager {
   private clearState(): void {
     this._mode = "none";
     this._axisConstraint = "none";
+    this._axisSpace = "world";
     this.objectStartPos = null;
     this.objectStartRotation = null;
     this.objectStartScale = null;

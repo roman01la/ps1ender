@@ -146,7 +146,7 @@ interface WasmExports {
  * Load and initialize the WASM rasterizer module
  */
 export async function loadWasmRasterizer(
-  wasmPath: string = "/rasterizer.wasm"
+  wasmPath: string = "rasterizer.wasm"
 ): Promise<WasmRasterizerInstance> {
   // Fetch and instantiate the WASM module
   const response = await fetch(wasmPath);

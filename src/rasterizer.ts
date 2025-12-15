@@ -109,7 +109,7 @@ export class Rasterizer {
   public async initWasm(): Promise<void> {
     if (this.wasmReady) return;
 
-    this.wasmInstance = await loadWasmRasterizer("/rasterizer.wasm");
+    this.wasmInstance = await loadWasmRasterizer("rasterizer.wasm");
     this.wasmReady = true;
     this.wasmInstance.setRenderResolution(this.renderWidth, this.renderHeight);
     this.syncSettingsToWasm();

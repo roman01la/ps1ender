@@ -21,6 +21,7 @@ import {
   TransformManager,
   TransformMode as TransformModeType,
   AxisConstraint as AxisConstraintType,
+  AxisSpace as AxisSpaceType,
 } from "./systems/transform";
 import { MeshEditManager } from "./systems/mesh-edit";
 import { getPositionKey } from "./utils/geometry";
@@ -60,6 +61,12 @@ export type TransformMode = TransformModeType;
  * Re-exported from transform system for backward compatibility
  */
 export type AxisConstraint = AxisConstraintType;
+
+/**
+ * Axis space for transforms (world or local)
+ * Re-exported from transform system
+ */
+export type AxisSpace = AxisSpaceType;
 
 // Edge type is now imported from selection system and re-exported
 export type { Edge } from "./systems/selection";
@@ -118,6 +125,9 @@ export class Editor {
   }
   get axisConstraint(): AxisConstraint {
     return this.transform.axisConstraint;
+  }
+  get axisSpace(): AxisSpace {
+    return this.transform.axisSpace;
   }
 
   // History system (undo/redo)
@@ -1662,10 +1672,10 @@ export class Editor {
   }
 
   /**
-   * Set axis constraint
+   * Set axis constraint and optionally axis space
    * When changing axis during an active transform, reset to original position first
    */
-  setAxisConstraint(axis: AxisConstraint): void {
+  setAxisConstraint(axis: AxisConstraint, space?: AxisSpace): void {
     // If in grab mode, reset to original positions before switching axis
     if (this.transform.mode === "grab") {
       const selected = this.scene.getSelectedObjects();
@@ -1716,7 +1726,7 @@ export class Editor {
       }
     }
 
-    this.transform.setAxisConstraint(axis);
+    this.transform.setAxisConstraint(axis, space);
   }
 
   /**
@@ -2000,27 +2010,69 @@ export class Editor {
       if (lowerKey === "x") {
         if (shiftKey) {
           // Shift+X = YZ plane (exclude X)
-          this.setAxisConstraint(this.axisConstraint === "yz" ? "none" : "yz");
+          // Cycle: none → yz(world) → yz(local) → none
+          if (this.axisConstraint !== "yz") {
+            this.setAxisConstraint("yz", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("yz", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         } else {
-          this.setAxisConstraint(this.axisConstraint === "x" ? "none" : "x");
+          // Cycle: none → x(world) → x(local) → none
+          if (this.axisConstraint !== "x") {
+            this.setAxisConstraint("x", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("x", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         }
         return true;
       }
       if (lowerKey === "y") {
         if (shiftKey) {
           // Shift+Y = XZ plane (exclude Y)
-          this.setAxisConstraint(this.axisConstraint === "xz" ? "none" : "xz");
+          // Cycle: none → xz(world) → xz(local) → none
+          if (this.axisConstraint !== "xz") {
+            this.setAxisConstraint("xz", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("xz", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         } else {
-          this.setAxisConstraint(this.axisConstraint === "y" ? "none" : "y");
+          // Cycle: none → y(world) → y(local) → none
+          if (this.axisConstraint !== "y") {
+            this.setAxisConstraint("y", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("y", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         }
         return true;
       }
       if (lowerKey === "z") {
         if (shiftKey) {
           // Shift+Z = XY plane (exclude Z)
-          this.setAxisConstraint(this.axisConstraint === "xy" ? "none" : "xy");
+          // Cycle: none → xy(world) → xy(local) → none
+          if (this.axisConstraint !== "xy") {
+            this.setAxisConstraint("xy", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("xy", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         } else {
-          this.setAxisConstraint(this.axisConstraint === "z" ? "none" : "z");
+          // Cycle: none → z(world) → z(local) → none
+          if (this.axisConstraint !== "z") {
+            this.setAxisConstraint("z", "world");
+          } else if (this.axisSpace === "world") {
+            this.setAxisConstraint("z", "local");
+          } else {
+            this.setAxisConstraint("none");
+          }
         }
         return true;
       }
@@ -2068,7 +2120,9 @@ export class Editor {
     return this.visualization.createGizmoData(
       center,
       this.gizmoSize,
-      this.axisConstraint
+      this.axisConstraint,
+      // Pass object's rotation only for local space gizmo
+      this.axisSpace === "local" ? obj.rotation : undefined
     );
   }
 

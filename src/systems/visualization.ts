@@ -263,11 +263,16 @@ export class VisualizationManager {
 
   /**
    * Create gizmo line data for transform visualization
+   * @param center - World space center position
+   * @param size - Length of gizmo axes
+   * @param axisConstraint - Current axis constraint for highlighting
+   * @param rotation - Object rotation (Euler angles in radians) for local space gizmo
    */
   createGizmoData(
     center: Vector3,
     size: number,
-    axisConstraint: AxisConstraint
+    axisConstraint: AxisConstraint,
+    rotation?: Vector3
   ): GizmoData {
     const vertices: Vertex[] = [];
     const lineIndices: number[] = [];
@@ -294,25 +299,36 @@ export class VisualizationManager {
         ? this.activeAxisColor
         : this.zAxisColor;
 
+    // Calculate axis directions based on object rotation
+    let xDir = new Vector3(size, 0, 0);
+    let yDir = new Vector3(0, size, 0);
+    let zDir = new Vector3(0, 0, size);
+
+    if (rotation) {
+      // Build rotation matrix from Euler angles (Y * X * Z order to match getModelMatrix)
+      const rotMatrix = Matrix4.rotationY(rotation.y)
+        .multiply(Matrix4.rotationX(rotation.x))
+        .multiply(Matrix4.rotationZ(rotation.z));
+
+      // Transform axis directions to local space
+      xDir = rotMatrix.transformDirection(xDir);
+      yDir = rotMatrix.transformDirection(yDir);
+      zDir = rotMatrix.transformDirection(zDir);
+    }
+
     // X axis
     vertices.push(new Vertex(center.clone(), activeX, Vector3.zero()));
-    vertices.push(
-      new Vertex(center.add(new Vector3(size, 0, 0)), activeX, Vector3.zero())
-    );
+    vertices.push(new Vertex(center.add(xDir), activeX, Vector3.zero()));
     lineIndices.push(0, 1);
 
     // Y axis
     vertices.push(new Vertex(center.clone(), activeY, Vector3.zero()));
-    vertices.push(
-      new Vertex(center.add(new Vector3(0, size, 0)), activeY, Vector3.zero())
-    );
+    vertices.push(new Vertex(center.add(yDir), activeY, Vector3.zero()));
     lineIndices.push(2, 3);
 
     // Z axis
     vertices.push(new Vertex(center.clone(), activeZ, Vector3.zero()));
-    vertices.push(
-      new Vertex(center.add(new Vector3(0, 0, size)), activeZ, Vector3.zero())
-    );
+    vertices.push(new Vertex(center.add(zDir), activeZ, Vector3.zero()));
     lineIndices.push(4, 5);
 
     return { vertices, lineIndices };
