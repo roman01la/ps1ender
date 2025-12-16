@@ -13,6 +13,21 @@ const MAX_INDICES = 65536 * 3;
 const MAX_TEXTURES = 16;
 const MAX_TEXTURE_SIZE = 512 * 512 * 4;
 
+// Material baking constants
+const MAX_BAKE_SIZE = 512 * 512;
+const MAX_BAKE_INSTRUCTIONS = 256;
+const MAX_COLOR_RAMP_STOPS = 16;
+
+// Bake opcodes (must match C++ enum)
+export const BAKE_OP_FLAT_COLOR = 0;
+export const BAKE_OP_SAMPLE_TEXTURE = 1;
+export const BAKE_OP_MIX_MULTIPLY = 2;
+export const BAKE_OP_MIX_ADD = 3;
+export const BAKE_OP_MIX_LERP = 4;
+export const BAKE_OP_COLOR_RAMP = 5;
+export const BAKE_OP_VORONOI = 6;
+export const BAKE_OP_END = 255;
+
 // Vertex format: x, y, z, nx, ny, nz, u, v, r, g, b, a (12 floats)
 const FLOATS_PER_VERTEX = 12;
 
@@ -82,6 +97,14 @@ export interface WasmRasterizerInstance {
     mvpMatrix: Float32Array,
     pointSize: number
   ): void;
+
+  // Material baking
+  getBakeProgramBuffer(): Uint8Array;
+  getBakeOutputBuffer(): Uint8Array;
+  getColorRampBuffer(): Uint8Array;
+  setBakeParams(width: number, height: number, sourceTexture: number): void;
+  setColorRampCount(count: number): void;
+  bakeMaterial(): void;
 }
 
 interface WasmExports {
@@ -140,6 +163,18 @@ interface WasmExports {
   malloc: (size: number) => number;
   free: (ptr: number) => void;
   _initialize: () => void;
+
+  // Material baking exports
+  get_bake_output_ptr: () => number;
+  get_bake_program_ptr: () => number;
+  get_color_ramp_ptr: () => number;
+  set_bake_params: (
+    width: number,
+    height: number,
+    sourceTexture: number
+  ) => void;
+  set_color_ramp_count: (count: number) => void;
+  bake_material: () => void;
 }
 
 /**
@@ -200,6 +235,27 @@ export async function loadWasmRasterizer(
       textureBuffers[i] = new Uint8Array(memory.buffer, ptr, MAX_TEXTURE_SIZE);
     }
   }
+
+  // Material baking buffers
+  const bakeOutputPtr = exports.get_bake_output_ptr();
+  const bakeProgramPtr = exports.get_bake_program_ptr();
+  const colorRampPtr = exports.get_color_ramp_ptr();
+
+  const bakeOutputBuffer = new Uint8Array(
+    memory.buffer,
+    bakeOutputPtr,
+    MAX_BAKE_SIZE * 4
+  );
+  const bakeProgramBuffer = new Uint8Array(
+    memory.buffer,
+    bakeProgramPtr,
+    MAX_BAKE_INSTRUCTIONS * 16
+  );
+  const colorRampBuffer = new Uint8Array(
+    memory.buffer,
+    colorRampPtr,
+    MAX_COLOR_RAMP_STOPS * 5
+  );
 
   // Pre-allocated buffers for renderPointsBatch to avoid malloc/free per call
   // Max vertices in edit mode is MAX_VERTICES, 6 floats per vertex
@@ -357,6 +413,31 @@ export async function loadWasmRasterizer(
         pointsMvpPtr,
         pointSize
       );
+    },
+
+    // Material baking methods
+    getBakeProgramBuffer(): Uint8Array {
+      return bakeProgramBuffer;
+    },
+
+    getBakeOutputBuffer(): Uint8Array {
+      return bakeOutputBuffer;
+    },
+
+    getColorRampBuffer(): Uint8Array {
+      return colorRampBuffer;
+    },
+
+    setBakeParams(width: number, height: number, sourceTexture: number) {
+      exports.set_bake_params(width, height, sourceTexture);
+    },
+
+    setColorRampCount(count: number) {
+      exports.set_color_ramp_count(count);
+    },
+
+    bakeMaterial() {
+      exports.bake_material();
     },
   };
 }

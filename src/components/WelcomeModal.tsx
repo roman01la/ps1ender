@@ -84,12 +84,26 @@ export function WelcomeModal({ onClose }: WelcomeModalProps) {
                 selection
               </li>
               <li>
-                <kbd>A</kbd> Select all
+                <kbd>E</kbd> Extrude edges/faces
               </li>
               <li>
-                <kbd>B</kbd> Box select
+                <kbd>F</kbd> Fill selection (create face/edge)
+              </li>
+              <li>
+                <kbd>A</kbd> Select all
               </li>
               <li>Same G/R/S transforms work on selection</li>
+            </ul>
+          </div>
+
+          <div className="welcome-section">
+            <h3>🎨 Shading Workspace</h3>
+            <ul>
+              <li>Click "Shading" tab to open node editor</li>
+              <li>
+                <kbd>⇧ + A</kbd> Add node (Texture, Color, Mix, Voronoi...)
+              </li>
+              <li>Drag connections between sockets</li>
             </ul>
           </div>
 
@@ -103,7 +117,7 @@ export function WelcomeModal({ onClose }: WelcomeModalProps) {
                 <kbd>⌘ + ⇧ + Z</kbd> Redo
               </li>
               <li>
-                <kbd>Delete</kbd> Delete selected
+                <kbd>X</kbd> Delete selected
               </li>
               <li>Drag & drop .OBJ files to import</li>
             </ul>
@@ -113,7 +127,7 @@ export function WelcomeModal({ onClose }: WelcomeModalProps) {
         <div className="welcome-footer">
           <p className="welcome-note">
             🤖 This project was entirely written by AI (Claude) under human
-            supervision. Total cost: ~$50 in tokens.
+            supervision. Total cost: ~$60 in tokens.
           </p>
           <div className="welcome-footer-actions">
             <label className="welcome-checkbox">

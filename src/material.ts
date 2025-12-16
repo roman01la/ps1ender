@@ -8,7 +8,8 @@ export type NodeType =
   | "texture"
   | "flat-color"
   | "mix"
-  | "color-ramp";
+  | "color-ramp"
+  | "voronoi";
 
 export type SocketType = "color" | "float";
 
@@ -132,48 +133,449 @@ export function materialUsesTexture(material: Material): boolean {
   return hasTextureInChain(outputNode.id, "color");
 }
 
+// ============================================================================
+// WASM Material Baking
+// ============================================================================
+
+import {
+  WasmRasterizerInstance,
+  BAKE_OP_FLAT_COLOR,
+  BAKE_OP_SAMPLE_TEXTURE,
+  BAKE_OP_MIX_MULTIPLY,
+  BAKE_OP_MIX_ADD,
+  BAKE_OP_MIX_LERP,
+  BAKE_OP_COLOR_RAMP,
+  BAKE_OP_VORONOI,
+  BAKE_OP_END,
+} from "./wasm-rasterizer";
+
 /**
- * Bake a material's node graph to a texture
- *
- * This evaluates the entire node graph at every pixel, allowing procedural
- * nodes (noise, gradients, etc.) and texture combinations to be pre-computed.
- * The resulting texture can then be uploaded to the WASM rasterizer.
- *
- * @param material The material to bake
- * @param width Output texture width
- * @param height Output texture height
- * @param textures Map of texture IDs/paths to loaded Texture objects
- * @returns A new Texture containing the baked result
+ * Compile a material's node graph to WASM bytecode
+ * Returns the compiled program as a Uint8Array
  */
-export function bakeMaterialToTexture(
+export function compileMaterialToWasm(
+  material: Material,
+  wasm: WasmRasterizerInstance
+): { program: Uint8Array; hasTexture: boolean } {
+  const program: number[] = [];
+  let hasTexture = false;
+
+  // Find the output node
+  const outputNode = material.nodes.find((n) => n.type === "output");
+  if (!outputNode) {
+    // No output node - just emit flat color
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255, BAKE_OP_END);
+    return { program: new Uint8Array(program), hasTexture: false };
+  }
+
+  // Compile the node connected to the output
+  const connection = material.connections.find(
+    (c) => c.toNodeId === outputNode.id && c.toSocketId === "color"
+  );
+
+  if (!connection) {
+    // Nothing connected - default gray
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255, BAKE_OP_END);
+    return { program: new Uint8Array(program), hasTexture: false };
+  }
+
+  // Recursively compile from source node
+  hasTexture = compileNodeToWasm(
+    material,
+    connection.fromNodeId,
+    connection.fromSocketId,
+    program,
+    wasm
+  );
+
+  program.push(BAKE_OP_END);
+  return { program: new Uint8Array(program), hasTexture };
+}
+
+/**
+ * Compile a single node recursively
+ */
+function compileNodeToWasm(
+  material: Material,
+  nodeId: string,
+  socketId: string,
+  program: number[],
+  wasm: WasmRasterizerInstance
+): boolean {
+  const node = material.nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    // Not found - emit default gray
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+    return false;
+  }
+
+  let hasTexture = false;
+
+  switch (node.type) {
+    case "flat-color": {
+      const colorHex = (node.data.color as string) || "#808080";
+      const rgba = hexToRGBA(colorHex);
+      program.push(BAKE_OP_FLAT_COLOR, rgba.r, rgba.g, rgba.b, rgba.a);
+      break;
+    }
+
+    case "texture": {
+      program.push(BAKE_OP_SAMPLE_TEXTURE);
+      hasTexture = true;
+      break;
+    }
+
+    case "mix": {
+      const blendMode = (node.data.blendMode as BlendMode) || "multiply";
+      const factor = Math.round(((node.data.factor as number) ?? 1.0) * 255);
+
+      // First compile color1 (will be on stack first)
+      const c1Conn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "color1"
+      );
+      if (c1Conn) {
+        hasTexture =
+          compileNodeToWasm(
+            material,
+            c1Conn.fromNodeId,
+            c1Conn.fromSocketId,
+            program,
+            wasm
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      // Then compile color2 (will be on top of stack)
+      const c2Conn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "color2"
+      );
+      if (c2Conn) {
+        hasTexture =
+          compileNodeToWasm(
+            material,
+            c2Conn.fromNodeId,
+            c2Conn.fromSocketId,
+            program,
+            wasm
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      // Emit blend instruction
+      switch (blendMode) {
+        case "multiply":
+          program.push(BAKE_OP_MIX_MULTIPLY, factor);
+          break;
+        case "add":
+          program.push(BAKE_OP_MIX_ADD, factor);
+          break;
+        case "mix":
+        default:
+          program.push(BAKE_OP_MIX_LERP, factor);
+          break;
+      }
+      break;
+    }
+
+    case "color-ramp": {
+      const stops = (node.data.stops as ColorStop[]) || [
+        { position: 0, color: "#000000" },
+        { position: 1, color: "#ffffff" },
+      ];
+
+      // Upload color ramp data to WASM
+      const rampBuffer = wasm.getColorRampBuffer();
+      const sortedStops = [...stops].sort((a, b) => a.position - b.position);
+      wasm.setColorRampCount(sortedStops.length);
+
+      for (let i = 0; i < sortedStops.length && i < 16; i++) {
+        const stop = sortedStops[i];
+        const rgba = hexToRGBA(stop.color);
+        const offset = i * 5;
+        rampBuffer[offset] = Math.round(stop.position * 255);
+        rampBuffer[offset + 1] = rgba.r;
+        rampBuffer[offset + 2] = rgba.g;
+        rampBuffer[offset + 3] = rgba.b;
+        rampBuffer[offset + 4] = rgba.a;
+      }
+
+      // Compile factor input
+      const facConn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "fac"
+      );
+      if (facConn) {
+        hasTexture =
+          compileNodeToWasm(
+            material,
+            facConn.fromNodeId,
+            facConn.fromSocketId,
+            program,
+            wasm
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      program.push(BAKE_OP_COLOR_RAMP);
+      break;
+    }
+
+    default:
+      // Unknown node - emit magenta
+      program.push(BAKE_OP_FLAT_COLOR, 255, 0, 255, 255);
+      break;
+  }
+
+  return hasTexture;
+}
+
+/**
+ * Compile a material's node graph to bytecode for sending to render worker.
+ * This version doesn't require a WASM instance - it returns all data needed.
+ */
+export function compileMaterialForWorker(material: Material): {
+  program: Uint8Array;
+  colorRampData: Uint8Array;
+  colorRampCount: number;
+  hasTexture: boolean;
+} {
+  const program: number[] = [];
+  const colorRampData = new Uint8Array(16 * 5); // 16 stops * 5 bytes each
+  let colorRampCount = 0;
+  let hasTexture = false;
+
+  // Find the output node
+  const outputNode = material.nodes.find((n) => n.type === "output");
+  if (!outputNode) {
+    // No output node - just emit flat color
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255, BAKE_OP_END);
+    return {
+      program: new Uint8Array(program),
+      colorRampData,
+      colorRampCount: 0,
+      hasTexture: false,
+    };
+  }
+
+  // Compile the node connected to the output
+  const connection = material.connections.find(
+    (c) => c.toNodeId === outputNode.id && c.toSocketId === "color"
+  );
+
+  if (!connection) {
+    // Nothing connected - default gray
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255, BAKE_OP_END);
+    return {
+      program: new Uint8Array(program),
+      colorRampData,
+      colorRampCount: 0,
+      hasTexture: false,
+    };
+  }
+
+  // Compile context to pass around
+  const compileCtx = { colorRampData, colorRampCount: 0 };
+
+  // Recursively compile from source node
+  hasTexture = compileNodeForWorker(
+    material,
+    connection.fromNodeId,
+    connection.fromSocketId,
+    program,
+    compileCtx
+  );
+
+  program.push(BAKE_OP_END);
+  return {
+    program: new Uint8Array(program),
+    colorRampData,
+    colorRampCount: compileCtx.colorRampCount,
+    hasTexture,
+  };
+}
+
+/**
+ * Compile a single node recursively (worker version without WASM)
+ */
+function compileNodeForWorker(
+  material: Material,
+  nodeId: string,
+  socketId: string,
+  program: number[],
+  ctx: { colorRampData: Uint8Array; colorRampCount: number }
+): boolean {
+  const node = material.nodes.find((n) => n.id === nodeId);
+  if (!node) {
+    // Not found - emit default gray
+    program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+    return false;
+  }
+
+  let hasTexture = false;
+
+  switch (node.type) {
+    case "flat-color": {
+      const colorHex = (node.data.color as string) || "#808080";
+      const rgba = hexToRGBA(colorHex);
+      program.push(BAKE_OP_FLAT_COLOR, rgba.r, rgba.g, rgba.b, rgba.a);
+      break;
+    }
+
+    case "texture": {
+      program.push(BAKE_OP_SAMPLE_TEXTURE);
+      hasTexture = true;
+      break;
+    }
+
+    case "mix": {
+      const blendMode = (node.data.blendMode as BlendMode) || "multiply";
+      const factor = Math.round(((node.data.factor as number) ?? 1.0) * 255);
+
+      // First compile color1 (will be on stack first)
+      const c1Conn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "color1"
+      );
+      if (c1Conn) {
+        hasTexture =
+          compileNodeForWorker(
+            material,
+            c1Conn.fromNodeId,
+            c1Conn.fromSocketId,
+            program,
+            ctx
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      // Then compile color2 (will be on top of stack)
+      const c2Conn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "color2"
+      );
+      if (c2Conn) {
+        hasTexture =
+          compileNodeForWorker(
+            material,
+            c2Conn.fromNodeId,
+            c2Conn.fromSocketId,
+            program,
+            ctx
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      // Emit blend instruction
+      switch (blendMode) {
+        case "multiply":
+          program.push(BAKE_OP_MIX_MULTIPLY, factor);
+          break;
+        case "add":
+          program.push(BAKE_OP_MIX_ADD, factor);
+          break;
+        case "mix":
+        default:
+          program.push(BAKE_OP_MIX_LERP, factor);
+          break;
+      }
+      break;
+    }
+
+    case "color-ramp": {
+      const stops = (node.data.stops as ColorStop[]) || [
+        { position: 0, color: "#000000" },
+        { position: 1, color: "#ffffff" },
+      ];
+
+      // Store color ramp data in context
+      const sortedStops = [...stops].sort((a, b) => a.position - b.position);
+      ctx.colorRampCount = sortedStops.length;
+
+      for (let i = 0; i < sortedStops.length && i < 16; i++) {
+        const stop = sortedStops[i];
+        const rgba = hexToRGBA(stop.color);
+        const offset = i * 5;
+        ctx.colorRampData[offset] = Math.round(stop.position * 255);
+        ctx.colorRampData[offset + 1] = rgba.r;
+        ctx.colorRampData[offset + 2] = rgba.g;
+        ctx.colorRampData[offset + 3] = rgba.b;
+        ctx.colorRampData[offset + 4] = rgba.a;
+      }
+
+      // Compile factor input
+      const facConn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "fac"
+      );
+      if (facConn) {
+        hasTexture =
+          compileNodeForWorker(
+            material,
+            facConn.fromNodeId,
+            facConn.fromSocketId,
+            program,
+            ctx
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      program.push(BAKE_OP_COLOR_RAMP);
+      break;
+    }
+
+    case "voronoi": {
+      // Voronoi texture - scale parameter (1-255) and mode (0=F1, 1=edge)
+      const scale = Math.round(
+        Math.max(1, Math.min(255, (node.data.scale as number) || 5))
+      );
+      const mode = Math.round(
+        Math.max(0, Math.min(1, (node.data.mode as number) || 0))
+      );
+      program.push(BAKE_OP_VORONOI, scale, mode);
+      break;
+    }
+
+    default:
+      // Unknown node - emit magenta
+      program.push(BAKE_OP_FLAT_COLOR, 255, 0, 255, 255);
+      break;
+  }
+
+  return hasTexture;
+}
+
+/**
+ * Bake a material using WASM acceleration
+ */
+export function bakeMaterialToTextureWasm(
   material: Material,
   width: number,
   height: number,
-  textures?: TextureSampler
+  wasm: WasmRasterizerInstance,
+  sourceTextureSlot: number = -1
 ): Texture {
+  // Compile material to WASM program
+  const { program } = compileMaterialToWasm(material, wasm);
+
+  // Upload program to WASM
+  const programBuffer = wasm.getBakeProgramBuffer();
+  programBuffer.set(program);
+
+  // Set bake parameters
+  wasm.setBakeParams(width, height, sourceTextureSlot);
+
+  // Execute baking
+  wasm.bakeMaterial();
+
+  // Copy result to texture
   const result = new Texture(width, height);
-  const data = result.getData();
+  const outputData = wasm.getBakeOutputBuffer();
+  const resultData = result.getData();
 
-  // Evaluate material at each pixel
-  for (let y = 0; y < height; y++) {
-    // V coordinate (0 at bottom, 1 at top - OpenGL convention)
-    const v = 1 - (y + 0.5) / height;
-
-    for (let x = 0; x < width; x++) {
-      // U coordinate (0 at left, 1 at right)
-      const u = (x + 0.5) / width;
-
-      // Evaluate material at this UV
-      const color = evaluateMaterial(material, { u, v, textures });
-
-      // Write to output texture
-      const idx = (y * width + x) * 4;
-      data[idx] = color.r;
-      data[idx + 1] = color.g;
-      data[idx + 2] = color.b;
-      data[idx + 3] = color.a;
-    }
-  }
+  // Copy output buffer to texture data
+  resultData.set(outputData.subarray(0, width * height * 4));
 
   result.loaded = true;
   return result;
@@ -231,14 +633,13 @@ function evaluateSocket(
   }
 
   // Evaluate the source node
-  return evaluateNode(material, sourceNode, connection.fromSocketId, ctx);
+  return evaluateNode(material, sourceNode, ctx);
 }
 
 // Evaluate a node's output
 function evaluateNode(
   material: Material,
   node: ShaderNode,
-  outputSocketId: string,
   ctx: ShaderContext
 ): RGBA {
   switch (node.type) {
@@ -247,68 +648,27 @@ function evaluateNode(
       return hexToRGBA(colorHex);
     }
 
-    case "texture": {
-      // Get texture from context sampler
-      const textureId = node.data.textureId as string | undefined;
-      const imagePath = node.data.imagePath as string | undefined;
-
-      // Try to find texture by ID first, then by path
-      let texture: Texture | undefined;
-      if (ctx.textures) {
-        if (textureId) {
-          texture = ctx.textures.get(textureId);
-        }
-        if (!texture && imagePath) {
-          texture = ctx.textures.get(imagePath);
-        }
-      }
-
-      if (texture && texture.loaded) {
-        // Sample texture at UV coordinates
-        const color = texture.sample(ctx.u, ctx.v);
-        return { r: color.r, g: color.g, b: color.b, a: color.a };
-      }
-
-      // No texture available - return checkerboard pattern to indicate missing texture
-      const checker = (Math.floor(ctx.u * 8) + Math.floor(ctx.v * 8)) % 2 === 0;
-      return checker
-        ? { r: 255, g: 0, b: 255, a: 255 } // Magenta
-        : { r: 0, g: 0, b: 0, a: 255 }; // Black
-    }
-
     case "mix": {
-      // Get blend mode and factor
-      const blendMode = (node.data.blendMode as BlendMode) || "multiply";
-      const factor = (node.data.factor as number) ?? 1.0;
-
-      // Evaluate input colors
+      // Evaluate input colors - allows following flat-color chains
       const color1 = evaluateSocket(material, node.id, "color1", ctx);
       const color2 = evaluateSocket(material, node.id, "color2", ctx);
-
+      const blendMode = (node.data.blendMode as BlendMode) || "multiply";
+      const factor = (node.data.factor as number) ?? 1.0;
       return blendColors(color1, color2, blendMode, factor);
     }
 
-    case "color-ramp": {
-      // Get color stops from node data
-      const stops = (node.data.stops as ColorStop[]) || [
-        { position: 0, color: "#000000" },
-        { position: 1, color: "#ffffff" },
-      ];
-
-      // Evaluate the factor input (0-1 value)
-      const factorColor = evaluateSocket(material, node.id, "fac", ctx);
-      // Use luminance of input color as factor (allows connecting any color output)
-      const factor = Math.max(0, Math.min(1, factorColor.r / 255));
-
-      return evaluateColorRamp(stops, factor);
-    }
+    // Texture, voronoi, color-ramp, and other procedural nodes
+    // return neutral gray - these need WASM baking for proper results
+    case "texture":
+    case "voronoi":
+    case "color-ramp":
+      return { r: 128, g: 128, b: 128, a: 255 };
 
     case "output":
-      // Output node shouldn't be evaluated as a source
-      return { r: 255, g: 0, b: 255, a: 255 };
+      return { r: 128, g: 128, b: 128, a: 255 };
 
     default:
-      return { r: 255, g: 0, b: 255, a: 255 };
+      return { r: 128, g: 128, b: 128, a: 255 };
   }
 }
 
@@ -765,7 +1125,7 @@ function createDefaultMaterialData(id: string, name: string): Material {
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false },
         ],
-        data: { color: "#808080" },
+        data: { color: "#dcdcdcff" },
       },
     ],
     connections: [

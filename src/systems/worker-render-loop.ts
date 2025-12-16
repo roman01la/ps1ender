@@ -19,6 +19,7 @@ import {
   RenderPoints,
   RenderTransparentTris,
   SerializedMesh,
+  MaterialBakeRequest,
 } from "../render-worker";
 import { Texture } from "../texture";
 import {
@@ -26,44 +27,30 @@ import {
   evaluateMaterial,
   materialUsesTexture,
   materialNeedsBaking,
-  bakeMaterialToTexture,
+  compileMaterialForWorker,
   TextureSampler,
   RGBA,
 } from "../material";
 
 /**
- * Baked material cache entry
- */
-interface BakedMaterialCache {
-  texture: Texture;
-  materialHash: string;
-  textureHash: string; // Hash of source texture (in case it changes)
-}
-
-// Cache for baked materials - keyed by material ID + texture hash
-const bakedMaterialCache = new Map<string, BakedMaterialCache>();
-
-/**
- * Generate cache key from material ID and texture
- */
-function getBakeCacheKey(materialId: string, texture: Texture | null): string {
-  return `${materialId}:${hashTexture(texture)}`;
-}
-
-/**
  * Create a simple hash of material state for cache invalidation
+ * Note: Node order shouldn't affect the hash (just for z-ordering)
  */
 function hashMaterial(material: Material): string {
-  // Include node data and connections in hash
-  const nodeData = material.nodes.map((n) => ({
-    id: n.id,
-    type: n.type,
-    data: n.data,
-  }));
-  const connections = material.connections.map((c) => ({
-    from: `${c.fromNodeId}:${c.fromSocketId}`,
-    to: `${c.toNodeId}:${c.toSocketId}`,
-  }));
+  // Include node data and connections in hash, sorted by ID for order-independence
+  const nodeData = material.nodes
+    .map((n) => ({
+      id: n.id,
+      type: n.type,
+      data: n.data,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const connections = material.connections
+    .map((c) => ({
+      from: `${c.fromNodeId}:${c.fromSocketId}`,
+      to: `${c.toNodeId}:${c.toSocketId}`,
+    }))
+    .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   return JSON.stringify({ nodes: nodeData, connections });
 }
 
@@ -518,43 +505,31 @@ export function buildRenderFrame(
         ? materialUsesTexture(material) && !!obj.texture
         : false;
 
-      // If material needs baking, bake it to a texture (with caching)
+      // Build material bake request if needed (worker will do the baking)
+      let materialBake: MaterialBakeRequest | undefined;
       if (needsBaking && material) {
-        // Bake at reasonable resolution (use source texture size or default)
-        const bakeWidth = obj.texture?.width || 256;
-        const bakeHeight = obj.texture?.height || 256;
+        // Compile material to bytecode for worker
+        const compiled = compileMaterialForWorker(material);
 
-        // Check cache - key includes both material ID and texture
-        const materialHash = hashMaterial(material);
-        const cacheKey = getBakeCacheKey(material.id, obj.texture);
-        const cached = bakedMaterialCache.get(cacheKey);
-
-        if (cached && cached.materialHash === materialHash) {
-          // Use cached baked texture
-          bakedTexture = cached.texture;
-        } else {
-          // Bake and cache
-          const bakeStart = performance.now();
-          bakedTexture = bakeMaterialToTexture(
-            material,
-            bakeWidth,
-            bakeHeight,
-            textureSampler
-          );
-          const bakeTime = performance.now() - bakeStart;
-          console.log(
-            `Material bake: ${bakeWidth}x${bakeHeight} in ${bakeTime.toFixed(
-              2
-            )}ms`
-          );
-
-          // Store in cache
-          bakedMaterialCache.set(cacheKey, {
-            texture: bakedTexture,
-            materialHash,
-            textureHash: hashTexture(obj.texture),
-          });
+        // Include source texture if the material uses texture and object has one
+        let sourceTexture: MaterialBakeRequest["sourceTexture"];
+        if (compiled.hasTexture && obj.texture && obj.texture.loaded) {
+          sourceTexture = {
+            data: new Uint8Array(obj.texture.getData()),
+            width: obj.texture.width,
+            height: obj.texture.height,
+          };
         }
+
+        materialBake = {
+          materialId: material.id + ":" + hashMaterial(material),
+          program: compiled.program,
+          colorRampData: compiled.colorRampData,
+          colorRampCount: compiled.colorRampCount,
+          bakeWidth: obj.texture?.width || 256,
+          bakeHeight: obj.texture?.height || 256,
+          sourceTexture,
+        };
 
         useTexture = true; // Baked result is always a texture
       }
@@ -565,6 +540,7 @@ export function buildRenderFrame(
         isEdgeOnly: false,
         smoothShading: obj.mesh.smoothShading,
         hasTexture: useTexture,
+        materialBake,
       });
     }
   }
@@ -670,7 +646,7 @@ export function buildRenderFrame(
   const texturingEnabled = editor.viewMode === "material";
   const textureToSend = bakedTexture || objectTexture || ctx.currentTexture;
 
-  if (textureToSend && (textureChanged || texturingEnabled || bakedTexture)) {
+  if (textureToSend && texturingEnabled && (textureChanged || bakedTexture)) {
     frame.texture = {
       slot: 0,
       width: textureToSend.width,
@@ -679,9 +655,8 @@ export function buildRenderFrame(
     };
   }
 
-  // Set per-frame texturing flag based on view mode
-  // If we baked a material, force enable texturing
-  frame.enableTexturing = texturingEnabled || bakedTexture !== null;
+  // Set per-frame texturing flag based on view mode only
+  frame.enableTexturing = texturingEnabled;
 
   return frame;
 }

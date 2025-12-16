@@ -799,7 +799,94 @@ export class PickingManager {
   }
 
   /**
+   * Check if a face is backfacing relative to camera
+   * Returns true if the face normal points away from the camera
+   */
+  private isFaceBackfacing(
+    faceIdx: number,
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    cameraPosition: Vector3
+  ): boolean {
+    const triangles = mesh.getTrianglesForFace(faceIdx);
+    if (triangles.length === 0) return true;
+
+    // Use first triangle to compute face normal
+    const triIdx = triangles[0];
+    const base = triIdx * 3;
+    const i0 = mesh.indices[base];
+    const i1 = mesh.indices[base + 1];
+    const i2 = mesh.indices[base + 2];
+
+    const p0 = modelMatrix.transformPoint(mesh.vertices[i0].position);
+    const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
+    const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
+
+    // Compute face normal
+    const edge1 = p1.sub(p0);
+    const edge2 = p2.sub(p0);
+    const normal = edge1.cross(edge2);
+
+    // Compute view direction (from face center to camera)
+    const faceCenter = p0
+      .add(p1)
+      .add(p2)
+      .mul(1 / 3);
+    const viewDir = cameraPosition.sub(faceCenter);
+
+    // Face is backfacing if normal points away from camera
+    return normal.dot(viewDir) < 0;
+  }
+
+  /**
+   * Get face indices that share a vertex
+   */
+  private getFacesForVertex(vertexIdx: number, mesh: Mesh): number[] {
+    const faces: number[] = [];
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      for (const triIdx of triangles) {
+        const base = triIdx * 3;
+        if (
+          mesh.indices[base] === vertexIdx ||
+          mesh.indices[base + 1] === vertexIdx ||
+          mesh.indices[base + 2] === vertexIdx
+        ) {
+          faces.push(faceIdx);
+          break;
+        }
+      }
+    }
+    return faces;
+  }
+
+  /**
+   * Get face indices that share an edge
+   */
+  private getFacesForEdge(v0: number, v1: number, mesh: Mesh): number[] {
+    const faces: number[] = [];
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      for (const triIdx of triangles) {
+        const base = triIdx * 3;
+        const ti0 = mesh.indices[base];
+        const ti1 = mesh.indices[base + 1];
+        const ti2 = mesh.indices[base + 2];
+        const triVerts = [ti0, ti1, ti2];
+
+        // Check if edge is part of this triangle
+        if (triVerts.includes(v0) && triVerts.includes(v1)) {
+          faces.push(faceIdx);
+          break;
+        }
+      }
+    }
+    return faces;
+  }
+
+  /**
    * Box select vertices - returns all vertex indices within the screen-space box
+   * Excludes backfacing vertices (vertices where all adjacent faces are backfacing)
    */
   boxSelectVertices(
     boxMinX: number,
@@ -811,6 +898,7 @@ export class PickingManager {
     ctx: PickContext
   ): number[] {
     const result: number[] = [];
+    const cameraPosition = ctx.camera.position;
 
     for (let i = 0; i < mesh.vertices.length; i++) {
       const localPos = mesh.vertices[i].position;
@@ -826,6 +914,14 @@ export class PickingManager {
         screen.y >= boxMinY &&
         screen.y <= boxMaxY
       ) {
+        // Check backfacing - vertex is backfacing if ALL adjacent faces are backfacing
+        const adjacentFaces = this.getFacesForVertex(i, mesh);
+        if (adjacentFaces.length > 0) {
+          const allBackfacing = adjacentFaces.every((faceIdx) =>
+            this.isFaceBackfacing(faceIdx, mesh, modelMatrix, cameraPosition)
+          );
+          if (allBackfacing) continue;
+        }
         result.push(i);
       }
     }
@@ -836,6 +932,7 @@ export class PickingManager {
   /**
    * Box select edges - returns all edge keys for edges within the screen-space box
    * An edge is selected if BOTH of its vertices are within the box
+   * Excludes backfacing edges (edges where all adjacent faces are backfacing)
    */
   boxSelectEdges(
     boxMinX: number,
@@ -847,6 +944,7 @@ export class PickingManager {
     ctx: PickContext
   ): string[] {
     const result: string[] = [];
+    const cameraPosition = ctx.camera.position;
 
     // Get all edges
     const edges = getMeshEdges(mesh, true); // Skip quad diagonals
@@ -876,6 +974,14 @@ export class PickingManager {
         screen1.y <= boxMaxY;
 
       if (v0InBox && v1InBox) {
+        // Check backfacing - edge is backfacing if ALL adjacent faces are backfacing
+        const adjacentFaces = this.getFacesForEdge(edge.v0, edge.v1, mesh);
+        if (adjacentFaces.length > 0) {
+          const allBackfacing = adjacentFaces.every((faceIdx) =>
+            this.isFaceBackfacing(faceIdx, mesh, modelMatrix, cameraPosition)
+          );
+          if (allBackfacing) continue;
+        }
         result.push(makeEdgeKey(edge.v0, edge.v1));
       }
     }
@@ -886,6 +992,7 @@ export class PickingManager {
   /**
    * Box select faces - returns all face indices for faces within the screen-space box
    * A face is selected if ALL of its vertices are within the box
+   * Excludes backfacing faces
    */
   boxSelectFaces(
     boxMinX: number,
@@ -897,9 +1004,15 @@ export class PickingManager {
     ctx: PickContext
   ): number[] {
     const result: number[] = [];
+    const cameraPosition = ctx.camera.position;
 
     // Use logical faces (handles quads properly)
     for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
+      // Skip backfacing faces
+      if (this.isFaceBackfacing(faceIdx, mesh, modelMatrix, cameraPosition)) {
+        continue;
+      }
+
       const triangles = mesh.getTrianglesForFace(faceIdx);
       if (triangles.length === 0) continue;
 

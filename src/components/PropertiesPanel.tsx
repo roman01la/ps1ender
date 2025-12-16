@@ -24,6 +24,8 @@ interface VectorInputProps {
   precision?: number;
 }
 
+type Axis = "x" | "y" | "z";
+
 function VectorInput({
   label,
   value,
@@ -33,32 +35,37 @@ function VectorInput({
   step = 0.1,
   precision = 3,
 }: VectorInputProps) {
+  // Shared input value when multiple fields are selected
+  const [sharedInput, setSharedInput] = useState("");
   const [localX, setLocalX] = useState(value.x.toFixed(precision));
   const [localY, setLocalY] = useState(value.y.toFixed(precision));
   const [localZ, setLocalZ] = useState(value.z.toFixed(precision));
 
-  // Drag state refs (not state to avoid re-renders during drag)
-  const dragRef = useRef<{
-    axis: "x" | "y" | "z";
-    startX: number;
-    startValue: number;
-  } | null>(null);
+  // Multi-select state
+  const [selectedAxes, setSelectedAxes] = useState<Set<Axis>>(new Set());
+  const [isMultiEditing, setIsMultiEditing] = useState(false);
+  const [focusedAxis, setFocusedAxis] = useState<Axis | null>(null);
 
-  // Update local values when prop changes
+  // Refs for field elements and inputs
+  const fieldRefs = useRef<{ [key in Axis]: HTMLDivElement | null }>({
+    x: null,
+    y: null,
+    z: null,
+  });
+  const inputRefs = useRef<{ [key in Axis]: HTMLInputElement | null }>({
+    x: null,
+    y: null,
+    z: null,
+  });
+
+  // Update local values when prop changes (only when not editing)
   useEffect(() => {
-    setLocalX(value.x.toFixed(precision));
-    setLocalY(value.y.toFixed(precision));
-    setLocalZ(value.z.toFixed(precision));
-  }, [value.x, value.y, value.z, precision]);
-
-  const handleChange = useCallback(
-    (axis: "x" | "y" | "z", newValue: string) => {
-      if (axis === "x") setLocalX(newValue);
-      else if (axis === "y") setLocalY(newValue);
-      else setLocalZ(newValue);
-    },
-    []
-  );
+    if (!isMultiEditing) {
+      setLocalX(value.x.toFixed(precision));
+      setLocalY(value.y.toFixed(precision));
+      setLocalZ(value.z.toFixed(precision));
+    }
+  }, [value.x, value.y, value.z, precision, isMultiEditing]);
 
   // Evaluate math expression or parse number
   const evaluateInput = useCallback((input: string): number | null => {
@@ -69,9 +76,7 @@ function VectorInput({
     const hasMathOps = /[+\-*/]/.test(trimmed.replace(/^-/, "")); // ignore leading minus
 
     if (hasMathOps) {
-      // Try evaluating as math expression
       try {
-        // Only allow safe math characters
         if (!/^[\d\s+\-*/().]+$/.test(trimmed)) return null;
         // eslint-disable-next-line no-eval
         const result = eval(trimmed);
@@ -84,15 +89,65 @@ function VectorInput({
       return null;
     }
 
-    // Simple number parsing
     const simple = parseFloat(trimmed);
     if (!isNaN(simple) && isFinite(simple)) return simple;
-
     return null;
   }, []);
 
-  const handleBlur = useCallback(
-    (axis: "x" | "y" | "z") => {
+  // Handle change for multi-edit mode
+  const handleMultiChange = useCallback(
+    (newValue: string) => {
+      setSharedInput(newValue);
+      // Update all selected local values to show the same input
+      if (selectedAxes.has("x")) setLocalX(newValue);
+      if (selectedAxes.has("y")) setLocalY(newValue);
+      if (selectedAxes.has("z")) setLocalZ(newValue);
+    },
+    [selectedAxes]
+  );
+
+  // Handle change for single field
+  const handleSingleChange = useCallback((axis: Axis, newValue: string) => {
+    if (axis === "x") setLocalX(newValue);
+    else if (axis === "y") setLocalY(newValue);
+    else setLocalZ(newValue);
+  }, []);
+
+  // Commit multi-edit changes
+  const commitMultiEdit = useCallback(() => {
+    const parsed = evaluateInput(sharedInput);
+    if (parsed !== null && selectedAxes.size > 0) {
+      const newValue = new Vector3(
+        selectedAxes.has("x") ? parsed : value.x,
+        selectedAxes.has("y") ? parsed : value.y,
+        selectedAxes.has("z") ? parsed : value.z
+      );
+      onChange(newValue);
+    } else {
+      // Reset to original values
+      setLocalX(value.x.toFixed(precision));
+      setLocalY(value.y.toFixed(precision));
+      setLocalZ(value.z.toFixed(precision));
+    }
+    setIsMultiEditing(false);
+    setSelectedAxes(new Set());
+    setSharedInput("");
+    onEditEnd?.();
+  }, [
+    sharedInput,
+    selectedAxes,
+    value,
+    onChange,
+    precision,
+    evaluateInput,
+    onEditEnd,
+  ]);
+
+  // Commit single field change
+  const handleSingleBlur = useCallback(
+    (axis: Axis) => {
+      if (isMultiEditing) return; // Handled by commitMultiEdit
+
       const inputStr = axis === "x" ? localX : axis === "y" ? localY : localZ;
       const parsed = evaluateInput(inputStr);
 
@@ -104,12 +159,11 @@ function VectorInput({
         );
         onChange(newValue);
       } else {
-        // Reset to original value
         if (axis === "x") setLocalX(value.x.toFixed(precision));
         else if (axis === "y") setLocalY(value.y.toFixed(precision));
         else setLocalZ(value.z.toFixed(precision));
       }
-      // Signal edit end for undo tracking
+      setFocusedAxis(null);
       onEditEnd?.();
     },
     [
@@ -121,65 +175,94 @@ function VectorInput({
       precision,
       onEditEnd,
       evaluateInput,
+      isMultiEditing,
     ]
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, axis: "x" | "y" | "z") => {
+    (e: React.KeyboardEvent, axis: Axis) => {
       if (e.key === "Enter") {
-        handleBlur(axis);
+        if (isMultiEditing) {
+          commitMultiEdit();
+        } else {
+          handleSingleBlur(axis);
+        }
         (e.target as HTMLInputElement).blur();
+      } else if (e.key === "Escape") {
+        // Cancel edit
+        setLocalX(value.x.toFixed(precision));
+        setLocalY(value.y.toFixed(precision));
+        setLocalZ(value.z.toFixed(precision));
+        setIsMultiEditing(false);
+        setSelectedAxes(new Set());
+        setSharedInput("");
+        (e.target as HTMLInputElement).blur();
+        onEditEnd?.();
       }
     },
-    [handleBlur]
+    [
+      isMultiEditing,
+      commitMultiEdit,
+      handleSingleBlur,
+      value,
+      precision,
+      onEditEnd,
+    ]
   );
 
-  // Drag to scrub value (Blender-style)
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent, axis: "x" | "y" | "z") => {
-      // Only handle left mouse button on the label, not the input
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT") return;
+  // Check which axis input a point is over
+  const getAxisAtPoint = useCallback(
+    (clientX: number, clientY: number): Axis | null => {
+      for (const axis of ["x", "y", "z"] as Axis[]) {
+        const el = inputRefs.current[axis];
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (
+            clientX >= rect.left &&
+            clientX <= rect.right &&
+            clientY >= rect.top &&
+            clientY <= rect.bottom
+          ) {
+            return axis;
+          }
+        }
+      }
+      return null;
+    },
+    []
+  );
 
+  // Drag on label = scrub value (original behavior)
+  const handleLabelMouseDown = useCallback(
+    (e: React.MouseEvent, axis: Axis) => {
+      if (e.button !== 0) return;
       e.preventDefault();
+
+      const startX = e.clientX;
       const startValue =
         axis === "x" ? value.x : axis === "y" ? value.y : value.z;
 
-      dragRef.current = {
-        axis,
-        startX: e.clientX,
-        startValue,
-      };
-
-      // Signal edit start for undo tracking
       onEditStart?.();
-
       document.body.style.cursor = "ew-resize";
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
-        if (!dragRef.current) return;
-
-        const deltaX = moveEvent.clientX - dragRef.current.startX;
-        // Sensitivity: 1 pixel = step * 0.1, hold shift for fine control
+        const deltaX = moveEvent.clientX - startX;
         const sensitivity = moveEvent.shiftKey ? 0.01 : 0.1;
         const delta = deltaX * step * sensitivity;
-        const newAxisValue = dragRef.current.startValue + delta;
+        const newAxisValue = startValue + delta;
 
         const newValue = new Vector3(
-          dragRef.current.axis === "x" ? newAxisValue : value.x,
-          dragRef.current.axis === "y" ? newAxisValue : value.y,
-          dragRef.current.axis === "z" ? newAxisValue : value.z
+          axis === "x" ? newAxisValue : value.x,
+          axis === "y" ? newAxisValue : value.y,
+          axis === "z" ? newAxisValue : value.z
         );
         onChange(newValue);
       };
 
       const handleMouseUp = () => {
-        dragRef.current = null;
         document.body.style.cursor = "";
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
-        // Signal edit end for undo tracking
         onEditEnd?.();
       };
 
@@ -189,48 +272,209 @@ function VectorInput({
     [value, onChange, step, onEditStart, onEditEnd]
   );
 
+  // Drag on input = multi-field selection for keyboard editing
+  const handleInputMouseDown = useCallback(
+    (e: React.MouseEvent, axis: Axis) => {
+      if (e.button !== 0) return;
+
+      // Clear existing multi-select if clicking different input
+      if (selectedAxes.size > 0 && !selectedAxes.has(axis)) {
+        setSelectedAxes(new Set());
+        setIsMultiEditing(false);
+      }
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let isDragging = false;
+      const newSelected = new Set<Axis>([axis]);
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Only start selection mode after small movement threshold
+        if (distance > 5) {
+          isDragging = true;
+          setSelectedAxes(new Set(newSelected));
+
+          const hoveredAxis = getAxisAtPoint(
+            moveEvent.clientX,
+            moveEvent.clientY
+          );
+          if (hoveredAxis && !newSelected.has(hoveredAxis)) {
+            newSelected.add(hoveredAxis);
+            setSelectedAxes(new Set(newSelected));
+          }
+        }
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+
+        if (isDragging && newSelected.size > 1) {
+          // Enter multi-edit mode
+          setIsMultiEditing(true);
+          setSharedInput("");
+          onEditStart?.();
+          // Focus the first selected input
+          const firstAxis = newSelected.has("x")
+            ? "x"
+            : newSelected.has("y")
+            ? "y"
+            : "z";
+          setTimeout(() => {
+            const input = inputRefs.current[firstAxis];
+            if (input) {
+              input.focus();
+              input.select();
+            }
+          }, 0);
+        } else if (!isDragging) {
+          // Normal click - clear selection, let default focus happen
+          setSelectedAxes(new Set());
+          setIsMultiEditing(false);
+        }
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [selectedAxes, onEditStart, getAxisAtPoint]
+  );
+
+  const handleFocus = useCallback(
+    (axis: Axis) => {
+      setFocusedAxis(axis);
+      if (!isMultiEditing) {
+        onEditStart?.();
+      }
+    },
+    [isMultiEditing, onEditStart]
+  );
+
+  const handleBlur = useCallback(
+    (axis: Axis) => {
+      if (isMultiEditing) {
+        // Check if focus is moving to another selected input
+        setTimeout(() => {
+          const activeEl = document.activeElement;
+          const isStillInSelection = Array.from(selectedAxes).some(
+            (a) => inputRefs.current[a] === activeEl
+          );
+          if (!isStillInSelection) {
+            commitMultiEdit();
+          }
+        }, 0);
+      } else {
+        handleSingleBlur(axis);
+      }
+    },
+    [isMultiEditing, selectedAxes, commitMultiEdit, handleSingleBlur]
+  );
+
+  const getFieldClassName = (axis: Axis) => {
+    let className = "vector-field";
+    if (selectedAxes.has(axis)) {
+      className += " selected";
+    }
+    if (isMultiEditing && selectedAxes.has(axis)) {
+      className += " multi-editing";
+    }
+    return className;
+  };
+
+  const getInputValue = (axis: Axis) => {
+    if (isMultiEditing && selectedAxes.has(axis)) {
+      return sharedInput;
+    }
+    return axis === "x" ? localX : axis === "y" ? localY : localZ;
+  };
+
+  const handleInputChange = (axis: Axis, newValue: string) => {
+    if (isMultiEditing && selectedAxes.has(axis)) {
+      handleMultiChange(newValue);
+    } else {
+      handleSingleChange(axis, newValue);
+    }
+  };
+
   return (
     <div className="vector-input">
       <span className="vector-label">{label}</span>
       <div className="vector-fields">
         <div
-          className="vector-field"
-          onMouseDown={(e) => handleMouseDown(e, "x")}
+          ref={(el) => {
+            fieldRefs.current.x = el;
+          }}
+          className={getFieldClassName("x")}
         >
-          <label className="axis-label x">X</label>
+          <label
+            className="axis-label x"
+            onMouseDown={(e) => handleLabelMouseDown(e, "x")}
+          >
+            X
+          </label>
           <input
+            ref={(el) => {
+              inputRefs.current.x = el;
+            }}
             type="text"
-            value={localX}
-            onChange={(e) => handleChange("x", e.target.value)}
-            onFocus={() => onEditStart?.()}
+            value={getInputValue("x")}
+            onChange={(e) => handleInputChange("x", e.target.value)}
+            onMouseDown={(e) => handleInputMouseDown(e, "x")}
+            onFocus={() => handleFocus("x")}
             onBlur={() => handleBlur("x")}
             onKeyDown={(e) => handleKeyDown(e, "x")}
           />
         </div>
         <div
-          className="vector-field"
-          onMouseDown={(e) => handleMouseDown(e, "y")}
+          ref={(el) => {
+            fieldRefs.current.y = el;
+          }}
+          className={getFieldClassName("y")}
         >
-          <label className="axis-label y">Y</label>
+          <label
+            className="axis-label y"
+            onMouseDown={(e) => handleLabelMouseDown(e, "y")}
+          >
+            Y
+          </label>
           <input
+            ref={(el) => {
+              inputRefs.current.y = el;
+            }}
             type="text"
-            value={localY}
-            onChange={(e) => handleChange("y", e.target.value)}
-            onFocus={() => onEditStart?.()}
+            value={getInputValue("y")}
+            onChange={(e) => handleInputChange("y", e.target.value)}
+            onMouseDown={(e) => handleInputMouseDown(e, "y")}
+            onFocus={() => handleFocus("y")}
             onBlur={() => handleBlur("y")}
             onKeyDown={(e) => handleKeyDown(e, "y")}
           />
         </div>
         <div
-          className="vector-field"
-          onMouseDown={(e) => handleMouseDown(e, "z")}
+          ref={(el) => {
+            fieldRefs.current.z = el;
+          }}
+          className={getFieldClassName("z")}
         >
-          <label className="axis-label z">Z</label>
+          <label
+            className="axis-label z"
+            onMouseDown={(e) => handleLabelMouseDown(e, "z")}
+          >
+            Z
+          </label>
           <input
+            ref={(el) => {
+              inputRefs.current.z = el;
+            }}
             type="text"
-            value={localZ}
-            onChange={(e) => handleChange("z", e.target.value)}
-            onFocus={() => onEditStart?.()}
+            value={getInputValue("z")}
+            onChange={(e) => handleInputChange("z", e.target.value)}
+            onMouseDown={(e) => handleInputMouseDown(e, "z")}
+            onFocus={() => handleFocus("z")}
             onBlur={() => handleBlur("z")}
             onKeyDown={(e) => handleKeyDown(e, "z")}
           />

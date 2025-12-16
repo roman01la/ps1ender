@@ -74,6 +74,22 @@ export interface SerializedMesh {
   indices: Uint32Array;
 }
 
+/** Material baking request - sent when material needs to be baked in worker */
+export interface MaterialBakeRequest {
+  materialId: string;
+  program: Uint8Array; // Compiled bytecode
+  colorRampData: Uint8Array; // Color ramp stops [pos, r, g, b, a]
+  colorRampCount: number;
+  bakeWidth: number;
+  bakeHeight: number;
+  // Source texture for baking (if material uses a texture node)
+  sourceTexture?: {
+    data: Uint8Array;
+    width: number;
+    height: number;
+  };
+}
+
 /** A single object to render */
 export interface RenderObject {
   mesh: SerializedMesh;
@@ -81,6 +97,8 @@ export interface RenderObject {
   isEdgeOnly: boolean;
   smoothShading: boolean;
   hasTexture: boolean; // Whether this object has a texture assigned
+  // Material baking (if present, worker will bake before rendering)
+  materialBake?: MaterialBakeRequest;
 }
 
 /** Line data for grid/wireframe/gizmo */
@@ -198,6 +216,30 @@ let running = false;
 let lastFrameTime = 0;
 let frameCount = 0;
 let fpsAccumulator = 0;
+
+// Baked material texture cache (keyed by materialId)
+// Stored as {data, width, height} to avoid re-baking every frame
+interface BakedTextureCache {
+  data: Uint8Array;
+  width: number;
+  height: number;
+  programHash: string; // Hash of program bytes to detect changes
+}
+const bakedTextureCache = new Map<string, BakedTextureCache>();
+
+// Slot dedicated for baked textures (we use slot 1, slot 0 is for source textures)
+const BAKED_TEXTURE_SLOT = 1;
+
+// Simple hash for baking program bytes (for cache invalidation)
+function hashProgram(data: Uint8Array): string {
+  // djb2-style hash converted to string
+  let hash = 5381;
+  for (let i = 0; i < data.length; i++) {
+    hash = ((hash << 5) + hash + data[i]) >>> 0;
+  }
+  return hash.toString(16);
+}
+
 let lastFpsUpdate = 0;
 
 let pendingFrame: RenderFrame | null = null;
@@ -871,6 +913,86 @@ function renderFullFrame(frame: RenderFrame): void {
     if (obj.isEdgeOnly) {
       // Edge-only objects rendered as lines (handled in main thread serialization)
       continue;
+    }
+
+    // Handle material baking if needed
+    if (obj.materialBake && wasmInstance) {
+      const bake = obj.materialBake;
+
+      // Check cache - hash the program bytes for change detection
+      const programHash = hashProgram(bake.program);
+      const cached = bakedTextureCache.get(bake.materialId);
+
+      if (
+        !cached ||
+        cached.programHash !== programHash ||
+        cached.width !== bake.bakeWidth ||
+        cached.height !== bake.bakeHeight
+      ) {
+        // Need to bake - upload program and color ramp
+        const programBuf = wasmInstance.getBakeProgramBuffer();
+        programBuf.set(bake.program);
+
+        const rampBuf = wasmInstance.getColorRampBuffer();
+        rampBuf.set(bake.colorRampData);
+        wasmInstance.setColorRampCount(bake.colorRampCount);
+
+        // Upload source texture for baking if provided
+        let sourceTextureSlot = -1;
+        if (bake.sourceTexture) {
+          // Use slot 2 for bake source to avoid conflicts with slot 0 (frame) and slot 1 (baked)
+          const BAKE_SOURCE_SLOT = 2;
+          const srcTexBuf = wasmInstance.getTextureBuffer(BAKE_SOURCE_SLOT);
+          srcTexBuf.set(bake.sourceTexture.data);
+          wasmInstance.setTextureSize(
+            BAKE_SOURCE_SLOT,
+            bake.sourceTexture.width,
+            bake.sourceTexture.height
+          );
+          sourceTextureSlot = BAKE_SOURCE_SLOT;
+        }
+
+        wasmInstance.setBakeParams(
+          bake.bakeWidth,
+          bake.bakeHeight,
+          sourceTextureSlot
+        );
+
+        // Execute baking
+        const bakeStart = performance.now();
+        wasmInstance.bakeMaterial();
+        const bakeTime = performance.now() - bakeStart;
+
+        // Get baked output
+        const output = wasmInstance.getBakeOutputBuffer();
+        const bakedData = new Uint8Array(bake.bakeWidth * bake.bakeHeight * 4);
+        bakedData.set(output.subarray(0, bakedData.length));
+
+        // Cache it
+        bakedTextureCache.set(bake.materialId, {
+          data: bakedData,
+          width: bake.bakeWidth,
+          height: bake.bakeHeight,
+          programHash,
+        });
+
+        console.log(
+          `Material bake (WASM): ${bake.bakeWidth}x${
+            bake.bakeHeight
+          } in ${bakeTime.toFixed(2)}ms`
+        );
+      }
+
+      // Upload baked texture to slot 1
+      const bakedCache = bakedTextureCache.get(bake.materialId)!;
+      const texBuf = wasmInstance.getTextureBuffer(BAKED_TEXTURE_SLOT);
+      texBuf.set(bakedCache.data);
+      wasmInstance.setTextureSize(
+        BAKED_TEXTURE_SLOT,
+        bakedCache.width,
+        bakedCache.height
+      );
+      wasmInstance.setCurrentTexture(BAKED_TEXTURE_SLOT);
     }
 
     // Apply settings for this render pass

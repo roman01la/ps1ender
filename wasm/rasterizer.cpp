@@ -1139,4 +1139,546 @@ extern "C"
         return result;
     }
 
+    // ============================================================================
+    // Material Baking System
+    // ============================================================================
+
+    // Instruction types for compiled material graph
+    enum BakeOpcode : uint8_t
+    {
+        BAKE_OP_FLAT_COLOR = 0,     // Push flat color (RGBA stored in data)
+        BAKE_OP_SAMPLE_TEXTURE = 1, // Sample texture at current UV
+        BAKE_OP_MIX_MULTIPLY = 2,   // Pop 2 colors, push result (multiply blend)
+        BAKE_OP_MIX_ADD = 3,        // Pop 2 colors, push result (additive blend)
+        BAKE_OP_MIX_LERP = 4,       // Pop 2 colors, push result (linear interp)
+        BAKE_OP_COLOR_RAMP = 5,     // Evaluate color ramp with factor
+        BAKE_OP_VORONOI = 6,        // Generate Voronoi texture (scale in data)
+        BAKE_OP_END = 255           // End of program
+    };
+
+    // Material baking buffers
+    constexpr int MAX_BAKE_SIZE = 512 * 512;
+    constexpr int MAX_BAKE_INSTRUCTIONS = 256;
+    constexpr int MAX_COLOR_RAMP_STOPS = 16;
+
+    alignas(16) uint8_t g_bake_output[MAX_BAKE_SIZE * 4];           // Output RGBA texture
+    alignas(16) uint8_t g_bake_program[MAX_BAKE_INSTRUCTIONS * 16]; // Compiled instructions
+    int32_t g_bake_width = 256;
+    int32_t g_bake_height = 256;
+    int32_t g_bake_source_texture = -1; // Source texture slot for sampling
+
+    // Color ramp data (position as 0-255, then RGBA)
+    alignas(16) uint8_t g_color_ramp_data[MAX_COLOR_RAMP_STOPS * 5]; // [pos, r, g, b, a] per stop
+    int32_t g_color_ramp_count = 0;
+
+    // Get pointers for JS to write to
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t *get_bake_output_ptr() { return g_bake_output; }
+
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t *get_bake_program_ptr() { return g_bake_program; }
+
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t *get_color_ramp_ptr() { return g_color_ramp_data; }
+
+    EMSCRIPTEN_KEEPALIVE
+    void set_bake_params(int32_t width, int32_t height, int32_t sourceTexture)
+    {
+        g_bake_width = width;
+        g_bake_height = height;
+        g_bake_source_texture = sourceTexture;
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void set_color_ramp_count(int32_t count)
+    {
+        g_color_ramp_count = count > MAX_COLOR_RAMP_STOPS ? MAX_COLOR_RAMP_STOPS : count;
+    }
+
+    // Evaluate color ramp at position (0-255)
+    static inline void eval_color_ramp(int32_t pos, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a)
+    {
+        if (g_color_ramp_count == 0)
+        {
+            r = g = b = 0;
+            a = 255;
+            return;
+        }
+
+        // Find surrounding stops
+        int lowIdx = 0;
+        int highIdx = g_color_ramp_count - 1;
+
+        for (int i = 0; i < g_color_ramp_count - 1; i++)
+        {
+            int stopPos = g_color_ramp_data[i * 5];
+            int nextPos = g_color_ramp_data[(i + 1) * 5];
+            if (pos >= stopPos && pos <= nextPos)
+            {
+                lowIdx = i;
+                highIdx = i + 1;
+                break;
+            }
+        }
+
+        uint8_t *low = &g_color_ramp_data[lowIdx * 5];
+        uint8_t *high = &g_color_ramp_data[highIdx * 5];
+
+        int lowPos = low[0];
+        int highPos = high[0];
+
+        if (pos <= lowPos)
+        {
+            r = low[1];
+            g = low[2];
+            b = low[3];
+            a = low[4];
+            return;
+        }
+        if (pos >= highPos)
+        {
+            r = high[1];
+            g = high[2];
+            b = high[3];
+            a = high[4];
+            return;
+        }
+
+        // Interpolate
+        int range = highPos - lowPos;
+        if (range <= 0)
+        {
+            r = low[1];
+            g = low[2];
+            b = low[3];
+            a = low[4];
+            return;
+        }
+
+        int t = ((pos - lowPos) * 255) / range; // 0-255 interpolation factor
+        r = (low[1] * (255 - t) + high[1] * t) / 255;
+        g = (low[2] * (255 - t) + high[2] * t) / 255;
+        b = (low[3] * (255 - t) + high[3] * t) / 255;
+        a = (low[4] * (255 - t) + high[4] * t) / 255;
+    }
+
+    // SIMD color ramp evaluation for 4 positions at once
+    // positions: 4 factor values (0-255), output: 4 RGBA values packed
+    static inline void eval_color_ramp_simd4(const int32_t pos[4],
+                                             uint8_t out_r[4], uint8_t out_g[4],
+                                             uint8_t out_b[4], uint8_t out_a[4])
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            eval_color_ramp(pos[i], out_r[i], out_g[i], out_b[i], out_a[i]);
+        }
+    }
+
+    // Execute bake program - SIMD optimized for 4 pixels at a time
+    EMSCRIPTEN_KEEPALIVE
+    void bake_material()
+    {
+        int width = g_bake_width;
+        int height = g_bake_height;
+        int texSlot = g_bake_source_texture;
+
+        // Get source texture info if available
+        int srcWidth = 0, srcHeight = 0;
+        uint8_t *srcTex = nullptr;
+        if (texSlot >= 0 && texSlot < MAX_TEXTURES)
+        {
+            srcWidth = g_texture_sizes[texSlot * 2];
+            srcHeight = g_texture_sizes[texSlot * 2 + 1];
+            if (srcWidth > 0 && srcHeight > 0)
+            {
+                srcTex = g_textures[texSlot];
+            }
+        }
+
+        // SIMD color stack for 4 pixels at a time
+        // Each stack entry holds 4 pixels worth of RGBA data
+        // Layout: r[4], g[4], b[4], a[4] as i32x4 vectors
+        constexpr int MAX_STACK = 8;
+        alignas(16) v128_t stack_r[MAX_STACK];
+        alignas(16) v128_t stack_g[MAX_STACK];
+        alignas(16) v128_t stack_b[MAX_STACK];
+        alignas(16) v128_t stack_a[MAX_STACK];
+
+        const v128_t v_zero = wasm_i32x4_splat(0);
+        const v128_t v_255 = wasm_i32x4_splat(255);
+        const v128_t v_srcWidth = wasm_f32x4_splat((float)srcWidth);
+        const v128_t v_srcHeight = wasm_f32x4_splat((float)srcHeight);
+        const v128_t v_invWidth = wasm_f32x4_splat(1.0f / (float)width);
+        const v128_t v_invHeight = wasm_f32x4_splat(1.0f / (float)height);
+        const v128_t v_half = wasm_f32x4_splat(0.5f);
+        const v128_t v_one = wasm_f32x4_splat(1.0f);
+        const v128_t v_eight = wasm_f32x4_splat(8.0f);
+
+        // Process pixels in groups of 4 (horizontally)
+        for (int y = 0; y < height; y++)
+        {
+            // V coordinate (1 at top, 0 at bottom - OpenGL convention)
+            float v = 1.0f - ((float)y + 0.5f) / (float)height;
+            v128_t v_v = wasm_f32x4_splat(v);
+
+            for (int x = 0; x < width; x += 4)
+            {
+                int stackPtr = 0;
+
+                // Handle edge case where we don't have full 4 pixels
+                int pixelCount = (x + 4 <= width) ? 4 : (width - x);
+
+                // U coordinates for 4 pixels
+                v128_t v_x = wasm_f32x4_add(
+                    wasm_f32x4_make((float)x, (float)(x + 1), (float)(x + 2), (float)(x + 3)),
+                    v_half);
+                v128_t v_u = wasm_f32x4_mul(v_x, v_invWidth);
+
+                // Execute program for all 4 pixels
+                uint8_t *pc = g_bake_program;
+                bool done = false;
+
+                while (!done)
+                {
+                    BakeOpcode op = (BakeOpcode)*pc++;
+
+                    switch (op)
+                    {
+                    case BAKE_OP_FLAT_COLOR:
+                    {
+                        // Same color for all 4 pixels
+                        int r = *pc++;
+                        int g = *pc++;
+                        int b = *pc++;
+                        int a = *pc++;
+                        stack_r[stackPtr] = wasm_i32x4_splat(r);
+                        stack_g[stackPtr] = wasm_i32x4_splat(g);
+                        stack_b[stackPtr] = wasm_i32x4_splat(b);
+                        stack_a[stackPtr] = wasm_i32x4_splat(a);
+                        stackPtr++;
+                        break;
+                    }
+
+                    case BAKE_OP_SAMPLE_TEXTURE:
+                    {
+                        if (srcTex && srcWidth > 0 && srcHeight > 0)
+                        {
+                            // Calculate texture coordinates for 4 pixels
+                            // Note: Invert V for texture sampling (1-v) to match image coordinate system
+                            // where row 0 is at top of image but V=1 is at top in OpenGL/UV space
+                            v128_t v_tx_f = wasm_f32x4_mul(v_u, v_srcWidth);
+                            v128_t v_ty_f = wasm_f32x4_mul(wasm_f32x4_sub(v_one, v_v), v_srcHeight);
+
+                            // Convert to int and wrap
+                            v128_t v_tx = wasm_i32x4_trunc_sat_f32x4(v_tx_f);
+                            v128_t v_ty = wasm_i32x4_trunc_sat_f32x4(v_ty_f);
+
+                            // Modulo wrap (simplified - assumes positive)
+                            v128_t v_srcW_i = wasm_i32x4_splat(srcWidth);
+                            v128_t v_srcH_i = wasm_i32x4_splat(srcHeight);
+
+                            // tx = tx % srcWidth (using mask for power-of-2 or fallback)
+                            // For simplicity, extract and sample individually
+                            alignas(16) int32_t tx[4], ty[4];
+                            wasm_v128_store(tx, v_tx);
+                            wasm_v128_store(ty, v_ty);
+
+                            alignas(16) int32_t r[4], g[4], b[4], a[4];
+                            for (int i = 0; i < 4; i++)
+                            {
+                                int txi = tx[i] % srcWidth;
+                                int tyi = ty[i] % srcHeight;
+                                if (txi < 0)
+                                    txi += srcWidth;
+                                if (tyi < 0)
+                                    tyi += srcHeight;
+                                int tidx = (tyi * srcWidth + txi) * 4;
+                                r[i] = srcTex[tidx];
+                                g[i] = srcTex[tidx + 1];
+                                b[i] = srcTex[tidx + 2];
+                                a[i] = srcTex[tidx + 3];
+                            }
+
+                            stack_r[stackPtr] = wasm_v128_load(r);
+                            stack_g[stackPtr] = wasm_v128_load(g);
+                            stack_b[stackPtr] = wasm_v128_load(b);
+                            stack_a[stackPtr] = wasm_v128_load(a);
+                        }
+                        else
+                        {
+                            // Checkerboard pattern
+                            v128_t v_cu = wasm_f32x4_mul(v_u, v_eight);
+                            v128_t v_cv = wasm_f32x4_mul(v_v, v_eight);
+                            v128_t v_cui = wasm_i32x4_trunc_sat_f32x4(v_cu);
+                            v128_t v_cvi = wasm_i32x4_trunc_sat_f32x4(v_cv);
+                            v128_t v_sum = wasm_i32x4_add(v_cui, v_cvi);
+                            v128_t v_checker = wasm_v128_and(v_sum, wasm_i32x4_splat(1));
+
+                            // checker ? 255 : 0 for R and B, 0 for G
+                            v128_t v_mask = wasm_i32x4_eq(v_checker, wasm_i32x4_splat(1));
+                            stack_r[stackPtr] = wasm_v128_and(v_mask, v_255);
+                            stack_g[stackPtr] = v_zero;
+                            stack_b[stackPtr] = wasm_v128_and(v_mask, v_255);
+                            stack_a[stackPtr] = v_255;
+                        }
+                        stackPtr++;
+                        break;
+                    }
+
+                    case BAKE_OP_MIX_MULTIPLY:
+                    {
+                        pc++; // skip factor byte
+                        if (stackPtr >= 2)
+                        {
+                            stackPtr--;
+                            // c1 * c2 / 255 using SIMD
+                            v128_t r1 = stack_r[stackPtr - 1];
+                            v128_t g1 = stack_g[stackPtr - 1];
+                            v128_t b1 = stack_b[stackPtr - 1];
+                            v128_t a1 = stack_a[stackPtr - 1];
+                            v128_t r2 = stack_r[stackPtr];
+                            v128_t g2 = stack_g[stackPtr];
+                            v128_t b2 = stack_b[stackPtr];
+                            v128_t a2 = stack_a[stackPtr];
+
+                            // Multiply and divide by 255
+                            stack_r[stackPtr - 1] = wasm_i32x4_shr(wasm_i32x4_mul(r1, r2), 8);
+                            stack_g[stackPtr - 1] = wasm_i32x4_shr(wasm_i32x4_mul(g1, g2), 8);
+                            stack_b[stackPtr - 1] = wasm_i32x4_shr(wasm_i32x4_mul(b1, b2), 8);
+                            stack_a[stackPtr - 1] = wasm_i32x4_shr(wasm_i32x4_mul(a1, a2), 8);
+                        }
+                        break;
+                    }
+
+                    case BAKE_OP_MIX_ADD:
+                    {
+                        int factor = *pc++;
+                        if (stackPtr >= 2)
+                        {
+                            stackPtr--;
+                            v128_t v_factor = wasm_i32x4_splat(factor);
+
+                            v128_t r1 = stack_r[stackPtr - 1];
+                            v128_t g1 = stack_g[stackPtr - 1];
+                            v128_t b1 = stack_b[stackPtr - 1];
+                            v128_t r2 = stack_r[stackPtr];
+                            v128_t g2 = stack_g[stackPtr];
+                            v128_t b2 = stack_b[stackPtr];
+
+                            // c1 + (c2 * factor) / 255, clamped to 255
+                            v128_t add_r = wasm_i32x4_add(r1, wasm_i32x4_shr(wasm_i32x4_mul(r2, v_factor), 8));
+                            v128_t add_g = wasm_i32x4_add(g1, wasm_i32x4_shr(wasm_i32x4_mul(g2, v_factor), 8));
+                            v128_t add_b = wasm_i32x4_add(b1, wasm_i32x4_shr(wasm_i32x4_mul(b2, v_factor), 8));
+
+                            stack_r[stackPtr - 1] = wasm_i32x4_min(add_r, v_255);
+                            stack_g[stackPtr - 1] = wasm_i32x4_min(add_g, v_255);
+                            stack_b[stackPtr - 1] = wasm_i32x4_min(add_b, v_255);
+                        }
+                        break;
+                    }
+
+                    case BAKE_OP_MIX_LERP:
+                    {
+                        int factor = *pc++;
+                        if (stackPtr >= 2)
+                        {
+                            stackPtr--;
+                            v128_t v_factor = wasm_i32x4_splat(factor);
+                            v128_t v_inv_factor = wasm_i32x4_splat(255 - factor);
+
+                            v128_t r1 = stack_r[stackPtr - 1];
+                            v128_t g1 = stack_g[stackPtr - 1];
+                            v128_t b1 = stack_b[stackPtr - 1];
+                            v128_t a1 = stack_a[stackPtr - 1];
+                            v128_t r2 = stack_r[stackPtr];
+                            v128_t g2 = stack_g[stackPtr];
+                            v128_t b2 = stack_b[stackPtr];
+                            v128_t a2 = stack_a[stackPtr];
+
+                            // (c1 * invF + c2 * factor) / 255
+                            stack_r[stackPtr - 1] = wasm_i32x4_shr(
+                                wasm_i32x4_add(wasm_i32x4_mul(r1, v_inv_factor), wasm_i32x4_mul(r2, v_factor)), 8);
+                            stack_g[stackPtr - 1] = wasm_i32x4_shr(
+                                wasm_i32x4_add(wasm_i32x4_mul(g1, v_inv_factor), wasm_i32x4_mul(g2, v_factor)), 8);
+                            stack_b[stackPtr - 1] = wasm_i32x4_shr(
+                                wasm_i32x4_add(wasm_i32x4_mul(b1, v_inv_factor), wasm_i32x4_mul(b2, v_factor)), 8);
+                            stack_a[stackPtr - 1] = wasm_i32x4_shr(
+                                wasm_i32x4_add(wasm_i32x4_mul(a1, v_inv_factor), wasm_i32x4_mul(a2, v_factor)), 8);
+                        }
+                        break;
+                    }
+
+                    case BAKE_OP_COLOR_RAMP:
+                    {
+                        if (stackPtr >= 1)
+                        {
+                            // Extract red channel as factor for each pixel
+                            alignas(16) int32_t fac[4];
+                            wasm_v128_store(fac, stack_r[stackPtr - 1]);
+
+                            alignas(16) int32_t r[4], g[4], b[4], a[4];
+                            for (int i = 0; i < 4; i++)
+                            {
+                                uint8_t rr, gg, bb, aa;
+                                eval_color_ramp(fac[i], rr, gg, bb, aa);
+                                r[i] = rr;
+                                g[i] = gg;
+                                b[i] = bb;
+                                a[i] = aa;
+                            }
+
+                            stack_r[stackPtr - 1] = wasm_v128_load(r);
+                            stack_g[stackPtr - 1] = wasm_v128_load(g);
+                            stack_b[stackPtr - 1] = wasm_v128_load(b);
+                            stack_a[stackPtr - 1] = wasm_v128_load(a);
+                        }
+                        break;
+                    }
+
+                    case BAKE_OP_VORONOI:
+                    {
+                        // Voronoi texture - scale is next byte (1-255), mode is next byte (0=F1, 1=edge)
+                        float scale = (float)*pc++;
+                        if (scale < 1.0f)
+                            scale = 1.0f;
+                        uint8_t mode = *pc++; // 0 = distance to point (F1), 1 = distance to edge (F2-F1)
+
+                        // Process 4 pixels - extract UV coordinates
+                        alignas(16) float u_arr[4], v_arr[4];
+                        wasm_v128_store(u_arr, v_u);
+                        // v_v is a splat, so all 4 values are the same
+                        float v_val = 1.0f - ((float)y + 0.5f) / (float)height;
+
+                        alignas(16) int32_t dist[4];
+                        for (int i = 0; i < 4; i++)
+                        {
+                            float pu = u_arr[i] * scale;
+                            float pv = v_val * scale;
+
+                            // Cell coordinates
+                            int cellX = (int)floorf(pu);
+                            int cellY = (int)floorf(pv);
+
+                            // Find F1 (nearest) and F2 (second nearest) distances
+                            float f1 = 1e10f;
+                            float f2 = 1e10f;
+
+                            // Check 3x3 neighborhood of cells
+                            for (int dy = -1; dy <= 1; dy++)
+                            {
+                                for (int dx = -1; dx <= 1; dx++)
+                                {
+                                    int cx = cellX + dx;
+                                    int cy = cellY + dy;
+
+                                    // Hash function for pseudo-random point in cell
+                                    // Simple but effective hash
+                                    uint32_t h = (uint32_t)(cx * 374761393 + cy * 668265263);
+                                    h = (h ^ (h >> 13)) * 1274126177;
+
+                                    // Random point in cell (0-1 range)
+                                    float rx = (float)(h & 0xFFFF) / 65535.0f;
+                                    h = h * 1103515245 + 12345;
+                                    float ry = (float)(h & 0xFFFF) / 65535.0f;
+
+                                    // Point position in world space
+                                    float px = (float)cx + rx;
+                                    float py = (float)cy + ry;
+
+                                    // Distance to this point
+                                    float ddx = pu - px;
+                                    float ddy = pv - py;
+                                    float d = sqrtf(ddx * ddx + ddy * ddy);
+
+                                    // Track F1 and F2
+                                    if (d < f1)
+                                    {
+                                        f2 = f1;
+                                        f1 = d;
+                                    }
+                                    else if (d < f2)
+                                    {
+                                        f2 = d;
+                                    }
+                                }
+                            }
+
+                            // Calculate output based on mode
+                            float outVal;
+                            if (mode == 1)
+                            {
+                                // Distance to edge: F2 - F1 (smaller = closer to edge)
+                                // Invert so edges are white
+                                outVal = 1.0f - (f2 - f1) * 2.0f;
+                                if (outVal < 0.0f)
+                                    outVal = 0.0f;
+                                if (outVal > 1.0f)
+                                    outVal = 1.0f;
+                            }
+                            else
+                            {
+                                // Distance to point (F1)
+                                outVal = f1 * 1.4f;
+                                if (outVal > 1.0f)
+                                    outVal = 1.0f;
+                            }
+
+                            int val = (int)(outVal * 255.0f);
+                            if (val > 255)
+                                val = 255;
+                            if (val < 0)
+                                val = 0;
+                            dist[i] = val;
+                        }
+
+                        // Push grayscale result (distance in all channels)
+                        stack_r[stackPtr] = wasm_v128_load(dist);
+                        stack_g[stackPtr] = wasm_v128_load(dist);
+                        stack_b[stackPtr] = wasm_v128_load(dist);
+                        stack_a[stackPtr] = v_255;
+                        stackPtr++;
+                        break;
+                    }
+
+                    case BAKE_OP_END:
+                    default:
+                        done = true;
+                        break;
+                    }
+                }
+
+                // Write output for 4 pixels
+                alignas(16) int32_t out_r[4], out_g[4], out_b[4], out_a[4];
+                if (stackPtr > 0)
+                {
+                    wasm_v128_store(out_r, stack_r[0]);
+                    wasm_v128_store(out_g, stack_g[0]);
+                    wasm_v128_store(out_b, stack_b[0]);
+                    wasm_v128_store(out_a, stack_a[0]);
+                }
+                else
+                {
+                    // Error - magenta
+                    for (int i = 0; i < 4; i++)
+                    {
+                        out_r[i] = 255;
+                        out_g[i] = 0;
+                        out_b[i] = 255;
+                        out_a[i] = 255;
+                    }
+                }
+
+                // Write to output buffer
+                for (int i = 0; i < pixelCount; i++)
+                {
+                    int outIdx = (y * width + x + i) * 4;
+                    g_bake_output[outIdx] = (uint8_t)out_r[i];
+                    g_bake_output[outIdx + 1] = (uint8_t)out_g[i];
+                    g_bake_output[outIdx + 2] = (uint8_t)out_b[i];
+                    g_bake_output[outIdx + 3] = (uint8_t)out_a[i];
+                }
+            }
+        }
+    }
+
 } // extern "C"

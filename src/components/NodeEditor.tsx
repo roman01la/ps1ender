@@ -39,6 +39,7 @@ const NODE_COLORS: Record<NodeType, string> = {
   "flat-color": "#5a3a6b",
   mix: "#3a5a6b",
   "color-ramp": "#3a6b5a",
+  voronoi: "#4a4a6b",
 };
 
 const SOCKET_COLORS: Record<SocketType, string> = {
@@ -127,6 +128,20 @@ function createNode(type: NodeType, x: number, y: number): ShaderNode {
           ] as ColorStop[],
         },
       };
+    case "voronoi":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 130,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Distance", type: "float", isInput: false },
+        ],
+        data: { scale: 5, mode: 0 }, // mode: 0=F1 (distance to point), 1=edge (F2-F1)
+      };
     default:
       throw new Error(`Unknown node type: ${type}`);
   }
@@ -145,6 +160,8 @@ function getNodeTitle(type: NodeType): string {
       return "Mix";
     case "color-ramp":
       return "Color Ramp";
+    case "voronoi":
+      return "Voronoi";
     default:
       return type;
   }
@@ -168,7 +185,9 @@ export function NodeEditor({
   const [connections, setConnections] = useState<NodeConnection[]>(
     material?.connections || []
   );
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(
+    new Set()
+  );
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
 
@@ -236,11 +255,11 @@ export function NodeEditor({
     if (material) {
       setNodes(material.nodes);
       setConnections(material.connections);
-      setSelectedNodeId(null);
+      setSelectedNodeIds(new Set());
     } else {
       setNodes([]);
       setConnections([]);
-      setSelectedNodeId(null);
+      setSelectedNodeIds(new Set());
     }
   }, [material?.id]);
 
@@ -260,7 +279,7 @@ export function NodeEditor({
 
   // Interaction state
   const [dragging, setDragging] = useState<{
-    type: "node" | "pan" | "socket";
+    type: "node" | "pan" | "socket" | "box";
     nodeId?: string;
     startX: number;
     startY: number;
@@ -268,6 +287,11 @@ export function NodeEditor({
     startNodeY?: number;
     socketId?: string;
     isInput?: boolean;
+    // For multi-node dragging
+    nodeStartPositions?: Map<string, { x: number; y: number }>;
+    // For box selection
+    boxStartCanvasX?: number;
+    boxStartCanvasY?: number;
   } | null>(null);
   const [pendingConnection, setPendingConnection] = useState<{
     fromNodeId: string;
@@ -275,6 +299,14 @@ export function NodeEditor({
     isInput: boolean;
     mouseX: number;
     mouseY: number;
+  } | null>(null);
+
+  // Box selection state
+  const [boxSelection, setBoxSelection] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
   } | null>(null);
 
   // Context menu state
@@ -464,7 +496,36 @@ export function NodeEditor({
       // Check for node click
       const node = findNodeAt(canvasPos.x, canvasPos.y);
       if (node && e.button === 0) {
-        setSelectedNodeId(node.id);
+        if (e.shiftKey) {
+          // Shift+click: toggle selection
+          setSelectedNodeIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(node.id)) {
+              next.delete(node.id);
+            } else {
+              next.add(node.id);
+            }
+            return next;
+          });
+        } else {
+          // Regular click: select only this node (unless already selected for multi-drag)
+          if (!selectedNodeIds.has(node.id)) {
+            setSelectedNodeIds(new Set([node.id]));
+          }
+        }
+
+        // Build start positions for all selected nodes (for multi-drag)
+        const nodeStartPositions = new Map<string, { x: number; y: number }>();
+        const idsToUse = selectedNodeIds.has(node.id)
+          ? selectedNodeIds
+          : new Set([node.id]);
+        for (const id of idsToUse) {
+          const n = nodes.find((n) => n.id === id);
+          if (n) {
+            nodeStartPositions.set(id, { x: n.x, y: n.y });
+          }
+        }
+
         setDragging({
           type: "node",
           nodeId: node.id,
@@ -472,6 +533,7 @@ export function NodeEditor({
           startY: e.clientY,
           startNodeX: node.x,
           startNodeY: node.y,
+          nodeStartPositions,
         });
         // Move node to top
         setNodes((prev) => {
@@ -485,17 +547,45 @@ export function NodeEditor({
         return;
       }
 
-      // Middle mouse or space+left click for pan
-      if (e.button === 1 || (e.button === 0 && !node)) {
-        setSelectedNodeId(null);
+      // Middle mouse button for pan
+      if (e.button === 1) {
         setDragging({
           type: "pan",
           startX: e.clientX - pan.x,
           startY: e.clientY - pan.y,
         });
+        return;
+      }
+
+      // Left click on empty space: start box selection
+      if (e.button === 0 && !node) {
+        if (!e.shiftKey) {
+          setSelectedNodeIds(new Set());
+        }
+        setBoxSelection({
+          startX: canvasPos.x,
+          startY: canvasPos.y,
+          currentX: canvasPos.x,
+          currentY: canvasPos.y,
+        });
+        setDragging({
+          type: "box",
+          startX: e.clientX,
+          startY: e.clientY,
+          boxStartCanvasX: canvasPos.x,
+          boxStartCanvasY: canvasPos.y,
+        });
       }
     },
-    [screenToCanvas, findNodeAt, findSocketAt, connections, pan]
+    [
+      screenToCanvas,
+      findNodeAt,
+      findSocketAt,
+      connections,
+      pan,
+      selectedNodeIds,
+      nodes,
+    ]
   );
 
   // Handle mouse move
@@ -506,16 +596,45 @@ export function NodeEditor({
       if (dragging.type === "node" && dragging.nodeId) {
         const dx = (e.clientX - dragging.startX) / zoom;
         const dy = (e.clientY - dragging.startY) / zoom;
-        setNodes((prev) =>
-          prev.map((n) =>
-            n.id === dragging.nodeId
-              ? {
+
+        // Multi-node drag if we have start positions
+        if (
+          dragging.nodeStartPositions &&
+          dragging.nodeStartPositions.size > 1
+        ) {
+          setNodes((prev) =>
+            prev.map((n) => {
+              const startPos = dragging.nodeStartPositions?.get(n.id);
+              if (startPos) {
+                return {
                   ...n,
-                  x: (dragging.startNodeX ?? 0) + dx,
-                  y: (dragging.startNodeY ?? 0) + dy,
-                }
-              : n
-          )
+                  x: startPos.x + dx,
+                  y: startPos.y + dy,
+                };
+              }
+              return n;
+            })
+          );
+        } else {
+          // Single node drag
+          setNodes((prev) =>
+            prev.map((n) =>
+              n.id === dragging.nodeId
+                ? {
+                    ...n,
+                    x: (dragging.startNodeX ?? 0) + dx,
+                    y: (dragging.startNodeY ?? 0) + dy,
+                  }
+                : n
+            )
+          );
+        }
+      } else if (dragging.type === "box") {
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        setBoxSelection((prev) =>
+          prev
+            ? { ...prev, currentX: canvasPos.x, currentY: canvasPos.y }
+            : null
         );
       } else if (dragging.type === "pan") {
         setPan({
@@ -613,6 +732,44 @@ export function NodeEditor({
         }
       }
 
+      // Complete box selection
+      if (dragging?.type === "box" && boxSelection) {
+        const minX = Math.min(boxSelection.startX, boxSelection.currentX);
+        const maxX = Math.max(boxSelection.startX, boxSelection.currentX);
+        const minY = Math.min(boxSelection.startY, boxSelection.currentY);
+        const maxY = Math.max(boxSelection.startY, boxSelection.currentY);
+
+        // Find nodes within box
+        const selectedIds = new Set<string>();
+        for (const node of nodes) {
+          const nodeRight = node.x + node.width;
+          const nodeBottom = node.y + node.height;
+
+          // Check if node intersects with box
+          if (
+            node.x < maxX &&
+            nodeRight > minX &&
+            node.y < maxY &&
+            nodeBottom > minY
+          ) {
+            selectedIds.add(node.id);
+          }
+        }
+
+        setSelectedNodeIds((prev) => {
+          // If shift was held, add to existing selection
+          if (e.shiftKey) {
+            const combined = new Set(prev);
+            for (const id of selectedIds) {
+              combined.add(id);
+            }
+            return combined;
+          }
+          return selectedIds;
+        });
+        setBoxSelection(null);
+      }
+
       if (dragging?.type === "socket" && pendingConnection) {
         const canvasPos = screenToCanvas(e.clientX, e.clientY);
         const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
@@ -691,6 +848,7 @@ export function NodeEditor({
       nodes,
       findConnectionAt,
       pushUndo,
+      boxSelection,
     ]
   );
 
@@ -755,27 +913,36 @@ export function NodeEditor({
       const newNode = createNode(type, canvasPos.x, canvasPos.y);
       setNodes((prev) => [...prev, newNode]);
       setContextMenu(null);
-      setSelectedNodeId(newNode.id);
+      setSelectedNodeIds(new Set([newNode.id]));
     },
     [contextMenu, screenToCanvas, pushUndo]
   );
 
   // Delete selected node
   const handleDeleteNode = useCallback(() => {
-    if (!selectedNodeId) return;
-    // Don't delete output node
-    const node = nodes.find((n) => n.id === selectedNodeId);
-    if (node?.type === "output") return;
+    if (selectedNodeIds.size === 0) return;
+
+    // Filter out the output node from deletion
+    const nodesToDelete = new Set<string>();
+    for (const id of selectedNodeIds) {
+      const node = nodes.find((n) => n.id === id);
+      if (node && node.type !== "output") {
+        nodesToDelete.add(id);
+      }
+    }
+
+    if (nodesToDelete.size === 0) return;
 
     pushUndo();
-    setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+    setNodes((prev) => prev.filter((n) => !nodesToDelete.has(n.id)));
     setConnections((prev) =>
       prev.filter(
-        (c) => c.fromNodeId !== selectedNodeId && c.toNodeId !== selectedNodeId
+        (c) =>
+          !nodesToDelete.has(c.fromNodeId) && !nodesToDelete.has(c.toNodeId)
       )
     );
-    setSelectedNodeId(null);
-  }, [selectedNodeId, nodes, pushUndo]);
+    setSelectedNodeIds(new Set());
+  }, [selectedNodeIds, nodes, pushUndo]);
 
   // Keyboard handler - only responds when mouse is over node editor
   useEffect(() => {
@@ -927,18 +1094,32 @@ export function NodeEditor({
 
     // Draw nodes
     for (const node of nodes) {
-      drawNode(ctx, node, node.id === selectedNodeId, zoom);
+      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom);
+    }
+
+    // Draw box selection
+    if (boxSelection) {
+      ctx.strokeStyle = "#4a90d9";
+      ctx.fillStyle = "rgba(74, 144, 217, 0.2)";
+      ctx.lineWidth = 1 / zoom;
+      const x = Math.min(boxSelection.startX, boxSelection.currentX);
+      const y = Math.min(boxSelection.startY, boxSelection.currentY);
+      const w = Math.abs(boxSelection.currentX - boxSelection.startX);
+      const h = Math.abs(boxSelection.currentY - boxSelection.startY);
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
     }
 
     ctx.restore();
   }, [
     nodes,
     connections,
-    selectedNodeId,
+    selectedNodeIds,
     pan,
     zoom,
     pendingConnection,
     getSocketPosition,
+    boxSelection,
   ]);
 
   return (
@@ -1052,6 +1233,7 @@ export function NodeEditor({
           <button onClick={() => handleAddNode("color-ramp")}>
             Color Ramp
           </button>
+          <button onClick={() => handleAddNode("voronoi")}>Voronoi</button>
         </div>
       )}
       {/* Color picker for flat-color nodes */}
@@ -1259,6 +1441,135 @@ export function NodeEditor({
                 </button>
               </div>
             </React.Fragment>
+          );
+        })}
+      {/* Voronoi scale slider */}
+      {nodes
+        .filter((n) => n.type === "voronoi")
+        .map((node) => {
+          const container = containerRef.current;
+          if (!container) return null;
+          const controlX = node.x * zoom + pan.x + 8 * zoom;
+          const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+          const controlW = (node.width - 16) * zoom;
+          const scale = (node.data.scale as number) || 5;
+          const mode = (node.data.mode as number) || 0;
+
+          return (
+            <div
+              key={node.id}
+              className="voronoi-scale-control"
+              style={{
+                position: "absolute",
+                left: controlX,
+                top: sliderY,
+                width: controlW,
+                zIndex: 10,
+              }}
+            >
+              {/* Mode selector */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                  marginBottom: 6 * zoom,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Mode
+                </span>
+                <select
+                  value={mode}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newMode = parseInt(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, mode: newMode } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value={0}>F1 (Distance)</option>
+                  <option value={1}>Edge</option>
+                </select>
+              </div>
+              {/* Scale slider */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Scale
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  step="1"
+                  value={scale}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newScale = parseInt(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, scale: newScale } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right",
+                  }}
+                >
+                  {scale}
+                </span>
+              </div>
+            </div>
           );
         })}
     </div>

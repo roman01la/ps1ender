@@ -20,7 +20,7 @@ src/
 ├── primitives.ts (~1300 lines)← Vertex/Triangle types + mesh factories + logical faces
 ├── obj-loader.ts (344 lines)← OBJ file parser
 ├── texture.ts (352 lines)   ← Texture loading
-├── material.ts (~800 lines) ← Material system + node evaluation + baking ✅
+├── material.ts (~1200 lines) ← Material system + WASM baking + bytecode compiler ✅
 ├── svg.d.ts                 ← TypeScript SVG module declaration
 ├── systems/
 │   ├── history.ts (~550 lines)      ← Unified undo/redo with multi-stack manager ✅
@@ -1271,7 +1271,7 @@ The current layout uses CSS Grid with a right sidebar:
 
 ### Overview
 
-Node-based material system inspired by Blender's shader nodes. Materials are evaluated (baked) into textures for the rasterizer.
+Node-based material system inspired by Blender's shader nodes. Materials are compiled to bytecode and evaluated via WASM with SIMD acceleration.
 
 ### Data Structures
 
@@ -1285,7 +1285,7 @@ interface Material {
 
 interface MaterialNode {
   id: string;
-  type: "output" | "texture" | "flat-color" | "mix" | "color-ramp";
+  type: "output" | "texture" | "flat-color" | "mix" | "color-ramp" | "voronoi";
   position: { x: number; y: number };
   inputs: Socket[];
   outputs: Socket[];
@@ -1303,28 +1303,50 @@ interface Connection {
 
 ### Node Types
 
-| Node       | Inputs                 | Outputs | Description                   |
-| ---------- | ---------------------- | ------- | ----------------------------- |
-| Output     | Color                  | -       | Final material color          |
-| Texture    | -                      | Color   | UV-mapped texture             |
-| Flat Color | -                      | Color   | Solid color picker            |
-| Mix        | Color1, Color2, Factor | Color   | Blends two colors             |
-| Color Ramp | Factor                 | Color   | Gradient with draggable stops |
+| Node       | Inputs                 | Outputs | Description                           |
+| ---------- | ---------------------- | ------- | ------------------------------------- |
+| Output     | Color                  | -       | Final material color                  |
+| Texture    | -                      | Color   | UV-mapped texture                     |
+| Flat Color | -                      | Color   | Solid color picker                    |
+| Mix        | Color1, Color2, Factor | Color   | Blends two colors                     |
+| Color Ramp | Factor                 | Color   | Gradient with draggable stops         |
+| Voronoi    | -                      | Float   | Cell noise (F1 distance or Edge mode) |
 
-### Material Baking
+### WASM Material Baking
 
-Node graphs are evaluated ("baked") into textures per-object:
+Material node graphs are compiled to bytecode and executed in WASM with SIMD:
 
-1. Get material assigned to object
-2. Check bake cache (key: `${materialId}:${hashTexture(texture)}`)
-3. If miss, evaluate node graph pixel-by-pixel
-4. Store result in cache, return baked texture
+**Bytecode Opcodes:**
 
-**Performance Optimizations:**
+```
+BAKE_OP_FLAT_COLOR     = 0   // R, G, B, A bytes follow
+BAKE_OP_SAMPLE_TEXTURE = 1   // Texture slot byte follows
+BAKE_OP_MIX_MULTIPLY   = 2   // Factor byte follows (0-255)
+BAKE_OP_MIX_ADD        = 3   // Factor byte follows
+BAKE_OP_MIX_LERP       = 4   // Factor byte follows
+BAKE_OP_COLOR_RAMP     = 5   // Uses color ramp buffer
+BAKE_OP_VORONOI        = 6   // Scale byte (1-255), Mode byte (0=F1, 1=Edge)
+BAKE_OP_END            = 255 // End of program
+```
 
-- `hexToRGBACache`: Map caching parsed hex colors
-- `colorRampCache`: Pre-processed sorted stops per node
-- Hoisted `clamp255()` function outside hot loops
+**Texture Slots:**
+
+- Slot 0: Frame rendering texture
+- Slot 1: Bake output texture
+- Slot 2: Bake source texture (for texture nodes)
+
+**SIMD Optimization:**
+
+- Processes 4 pixels per iteration using v128_t registers
+- Separate RGBA channel vectors for parallel operations
+- ~4x speedup over scalar implementation
+
+**JS Fallback Evaluator:**
+A simplified JS evaluator exists for vertex color generation (single-point evaluation at UV 0,0):
+
+- `flat-color`: Returns actual color
+- `mix`: Evaluates inputs for flat-color chains
+- Other nodes: Return neutral gray (need WASM baking for proper results)
 
 ### Shader Node Editor (`NodeEditor.tsx`)
 

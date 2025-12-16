@@ -152,16 +152,19 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 - [x] Per-object material assignment
 - [x] Material baking to texture (evaluates node graph)
 - [x] Bake caching with hash-based invalidation
+- [x] WASM-accelerated material baking with SIMD (4 pixels/iteration)
+- [x] Bytecode compiler for node graphs → WASM interpreter
 
 ### 3.2 Node Editor ✅
 
 - [x] Canvas-based node editor with pan/zoom
 - [x] Zoom relative to mouse pointer position
-- [x] Node types: Output, Texture, Flat Color, Mix, Color Ramp
+- [x] Node types: Output, Texture, Flat Color, Mix, Color Ramp, Voronoi
 - [x] Socket types: Color, Float (with color→float implicit conversion)
 - [x] Bezier curve connections between nodes
 - [x] Drag-and-drop node onto connection (auto-insert)
 - [x] Color Ramp with draggable color stops
+- [x] Voronoi with scale setting and mode (F1 distance / Edge)
 - [x] Context menu (right-click or Shift+A)
 - [x] Node deletion (X or Delete)
 - [x] Undo/redo (Cmd+Z / Cmd+Shift+Z)
