@@ -1,5 +1,5 @@
 import { Vector3, Matrix4, Color } from "./math";
-import { Mesh, Vertex, Triangle } from "./primitives";
+import { Mesh, Vertex } from "./primitives";
 
 /**
  * A scene object that can be transformed and rendered

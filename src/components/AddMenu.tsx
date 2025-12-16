@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import meshPlaneIcon from "../icons/mesh_plane.svg";
 import meshCubeIcon from "../icons/mesh_cube.svg";
 import meshCircleIcon from "../icons/mesh_circle.svg";

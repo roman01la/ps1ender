@@ -1,4 +1,3 @@
-import React from "react";
 import shadingSolidIcon from "../icons/shading_solid.svg";
 import shadingWireIcon from "../icons/shading_wire.svg";
 import shadingTextureIcon from "../icons/shading_texture.svg";

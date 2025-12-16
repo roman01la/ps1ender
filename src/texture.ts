@@ -1,4 +1,4 @@
-import { Color, clamp } from "./math";
+import { Color } from "./math";
 
 /**
  * Texture class for storing and sampling image data

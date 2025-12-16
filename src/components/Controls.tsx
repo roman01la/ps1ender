@@ -1,5 +1,3 @@
-import React from "react";
-
 interface ControlsProps {
   wireframe: boolean;
   setWireframe: (value: boolean) => void;

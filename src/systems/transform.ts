@@ -481,7 +481,7 @@ export class TransformManager {
     screenY: number = 0,
     canvasWidth: number = 0,
     canvasHeight: number = 0,
-    selectedVertices?: Set<number>
+    selectedVertices?: ReadonlySet<number>
   ): void {
     if (this._mode === "none") return;
 
@@ -758,7 +758,7 @@ export class TransformManager {
     canvasWidth: number = 0,
     canvasHeight: number = 0,
     camera?: Camera,
-    selectedVertices?: Set<number>
+    selectedVertices?: ReadonlySet<number>
   ): void {
     // Vertex snapping: when Ctrl is held in edit mode, snap to nearest unselected vertex
     if (
@@ -913,7 +913,7 @@ export class TransformManager {
     canvasWidth: number,
     canvasHeight: number,
     camera: Camera,
-    selectedVertices: Set<number>
+    selectedVertices: ReadonlySet<number>
   ): Vector3 | null {
     const mesh = obj.mesh;
     const modelMatrix = obj.getModelMatrix();

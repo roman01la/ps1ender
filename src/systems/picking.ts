@@ -11,15 +11,12 @@
  */
 
 import { Vector3, Matrix4, Ray } from "../math";
-import { Mesh, Vertex } from "../primitives";
+import { Mesh } from "../primitives";
 import { SceneObject, Camera } from "../scene";
 import {
   makeEdgeKey,
   parseEdgeKey,
-  getPositionKey,
   getMeshEdges as getMeshEdgesUtil,
-  POSITION_EPSILON,
-  Edge,
 } from "../utils/geometry";
 
 // Re-export for backward compatibility

@@ -46,6 +46,11 @@ clean:
 debug: CXXFLAGS := $(filter-out -O3,$(CXXFLAGS)) -O0 -g4
 debug: $(OUT)
 
+# Profile build (optimized but with function names for Chrome DevTools)
+profile: CXXFLAGS := $(CXXFLAGS) --profiling-funcs
+profile: $(OUT)
+	@echo "Profile build ready - function names visible in Chrome DevTools Performance tab"
+
 # Check if emcc is available
 check:
 	@if ! command -v emcc &> /dev/null; then \
@@ -56,4 +61,4 @@ check:
 	@echo "Using: $$(which emcc)"
 	@emcc --version | head -1
 
-.PHONY: all install clean debug check
+.PHONY: all install clean debug profile check

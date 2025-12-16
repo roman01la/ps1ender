@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
-    "build": "bun build src/App.tsx --outdir=public --target=browser --format=esm",
-    "prod": "bun build src/App.tsx --outdir=public --target=browser --format=esm --minify",
-    "watch": "bun build src/App.tsx --outdir=public --target=browser --format=esm --watch",
+    "build": "bun build --outdir=public --target=browser --format=esm --splitting src/App.tsx src/render-worker.ts",
+    "prod": "bun build --outdir=public --target=browser --format=esm --splitting --minify src/App.tsx src/render-worker.ts",
+    "watch": "bun build --outdir=public --target=browser --format=esm --splitting --watch src/App.tsx src/render-worker.ts",
     "dev": "bun run build && bunx serve public"
   },
   "keywords": [],

@@ -1,5 +1,5 @@
 import { Vector3, Color } from "./math";
-import { getPositionKey, POSITION_EPSILON } from "./utils/geometry";
+import { getPositionKey } from "./utils/geometry";
 
 // Vertex structure with position, color, normal, and UV coordinates
 export class Vertex {
@@ -68,17 +68,6 @@ export interface Face {
   vertices: number[];
 }
 
-/**
- * @deprecated Use Face instead. Kept for migration period.
- * Logical face - groups triangles into quads or keeps them as tris
- */
-export interface LogicalFace {
-  /** Triangle indices that make up this face (1 for tri, 2 for quad) */
-  triangles: number[];
-  /** Whether this is a quad (true) or triangle (false) */
-  isQuad: boolean;
-}
-
 // Mesh class to hold geometry
 export class Mesh {
   /** Triangle objects for rendering (generated from faces) */
@@ -96,12 +85,6 @@ export class Mesh {
    * This is the source of truth for topology.
    */
   public faceData: Face[] = [];
-
-  /**
-   * @deprecated Legacy logical faces for backward compatibility during migration.
-   * Will be removed once all code uses faceData.
-   */
-  public faces: LogicalFace[] = [];
 
   /**
    * Triangulated indices for GPU rendering (generated from faceData)
@@ -146,7 +129,6 @@ export class Mesh {
    * (forming the diagonal of the original quad) and are roughly coplanar.
    */
   private buildFacesFromIndices(): void {
-    this.faces = [];
     this.faceData = [];
     const numTris = this.triangles.length;
 
@@ -231,12 +213,6 @@ export class Mesh {
           !tri2EdgeOnly &&
           areCoplanarOrDegenerate(i, i + 1)
         ) {
-          // Legacy faces structure
-          this.faces.push({
-            triangles: [i, i + 1],
-            isQuad: true,
-          });
-
           // New faceData structure - extract quad vertices from the two triangles
           const base1 = i * 3;
           const base2 = (i + 1) * 3;
@@ -267,17 +243,9 @@ export class Mesh {
 
       if (i0 === i2) {
         // Edge-only face: [v0, v1, v0] -> edge between v0 and v1
-        this.faces.push({
-          triangles: [i],
-          isQuad: false,
-        });
         this.faceData.push({ vertices: [i0, i1] }); // 2-vertex edge face
       } else {
         // Regular triangle
-        this.faces.push({
-          triangles: [i],
-          isQuad: false,
-        });
         this.faceData.push({ vertices: [i0, i1, i2] });
       }
       i += 1;
@@ -492,54 +460,47 @@ export class Mesh {
   rebuildFromFaces(): void {
     this.triangulateFromFaces();
     this.buildTriangles();
-    // Also rebuild legacy faces for backward compatibility
-    this.buildLegacyFacesFromFaceData();
     // Recalculate normals for correct lighting on new geometry
     this.recalculateNormals();
   }
 
   /**
-   * Build legacy faces array from faceData for backward compatibility
+   * Get the number of triangles a face generates
+   * Edge (2 verts) -> 1 degenerate triangle
+   * Triangle (3 verts) -> 1 triangle
+   * Quad (4 verts) -> 2 triangles
+   * N-gon (n verts) -> n-2 triangles
    */
-  private buildLegacyFacesFromFaceData(): void {
-    this.faces = [];
-    let triIndex = 0;
-
-    for (const face of this.faceData) {
-      const numVerts = face.vertices.length;
-
-      if (numVerts === 2) {
-        // Edge face - 1 degenerate triangle
-        this.faces.push({ triangles: [triIndex], isQuad: false });
-        triIndex += 1;
-      } else if (numVerts === 3) {
-        // Triangle - 1 triangle
-        this.faces.push({ triangles: [triIndex], isQuad: false });
-        triIndex += 1;
-      } else if (numVerts === 4) {
-        // Quad - 2 triangles
-        this.faces.push({ triangles: [triIndex, triIndex + 1], isQuad: true });
-        triIndex += 2;
-      } else {
-        // N-gon - (n-2) triangles
-        const numTris = numVerts - 2;
-        const triIndices: number[] = [];
-        for (let i = 0; i < numTris; i++) {
-          triIndices.push(triIndex + i);
-        }
-        this.faces.push({ triangles: triIndices, isQuad: false });
-        triIndex += numTris;
-      }
-    }
+  private getTriangleCountForFace(faceIdx: number): number {
+    if (faceIdx < 0 || faceIdx >= this.faceData.length) return 0;
+    const numVerts = this.faceData[faceIdx].vertices.length;
+    if (numVerts < 2) return 0;
+    if (numVerts === 2) return 1; // Edge face
+    return numVerts - 2; // Fan triangulation
   }
+
+  /**
+   * Get the starting triangle index for a face
+   */
+  private getTriangleStartForFace(faceIdx: number): number {
+    let triStart = 0;
+    for (let i = 0; i < faceIdx && i < this.faceData.length; i++) {
+      triStart += this.getTriangleCountForFace(i);
+    }
+    return triStart;
+  }
+
   /**
    * Get the logical face index that contains a given triangle index
    */
   getFaceForTriangle(triIdx: number): number {
-    for (let i = 0; i < this.faces.length; i++) {
-      if (this.faces[i].triangles.includes(triIdx)) {
+    let triStart = 0;
+    for (let i = 0; i < this.faceData.length; i++) {
+      const triCount = this.getTriangleCountForFace(i);
+      if (triIdx >= triStart && triIdx < triStart + triCount) {
         return i;
       }
+      triStart += triCount;
     }
     return -1;
   }
@@ -548,10 +509,14 @@ export class Mesh {
    * Get all triangle indices for a logical face
    */
   getTrianglesForFace(faceIdx: number): number[] {
-    if (faceIdx >= 0 && faceIdx < this.faces.length) {
-      return this.faces[faceIdx].triangles;
+    if (faceIdx < 0 || faceIdx >= this.faceData.length) return [];
+    const triStart = this.getTriangleStartForFace(faceIdx);
+    const triCount = this.getTriangleCountForFace(faceIdx);
+    const result: number[] = [];
+    for (let i = 0; i < triCount; i++) {
+      result.push(triStart + i);
     }
-    return [];
+    return result;
   }
 
   /**
@@ -565,53 +530,14 @@ export class Mesh {
   getQuadDiagonalEdges(): Set<string> {
     const diagonals = new Set<string>();
 
-    // Use new faceData if available
-    if (this.faceData.length > 0) {
-      for (const face of this.faceData) {
-        if (face.vertices.length === 4) {
-          // Quad: diagonal is between vertices[0] and vertices[2]
-          const v0 = face.vertices[0];
-          const v2 = face.vertices[2];
-          const pos0 = getPositionKey(this.vertices[v0].position);
-          const pos2 = getPositionKey(this.vertices[v2].position);
-          const diagonalKey = [pos0, pos2].sort().join("|");
-          diagonals.add(diagonalKey);
-        }
-      }
-      return diagonals;
-    }
-
-    // Legacy path using faces
-    for (const face of this.faces) {
-      if (!face.isQuad || face.triangles.length !== 2) continue;
-
-      const [t1, t2] = face.triangles;
-      const base1 = t1 * 3;
-      const base2 = t2 * 3;
-
-      // Get position keys for both triangles
-      const posKeys1 = [
-        getPositionKey(this.vertices[this.indices[base1]].position),
-        getPositionKey(this.vertices[this.indices[base1 + 1]].position),
-        getPositionKey(this.vertices[this.indices[base1 + 2]].position),
-      ];
-      const posKeys2 = [
-        getPositionKey(this.vertices[this.indices[base2]].position),
-        getPositionKey(this.vertices[this.indices[base2 + 1]].position),
-        getPositionKey(this.vertices[this.indices[base2 + 2]].position),
-      ];
-
-      // Find the two shared positions (the diagonal)
-      const sharedPosKeys: string[] = [];
-      for (const key of posKeys1) {
-        if (posKeys2.includes(key)) {
-          sharedPosKeys.push(key);
-        }
-      }
-
-      if (sharedPosKeys.length === 2) {
-        // Create canonical edge key for the diagonal
-        const diagonalKey = sharedPosKeys.sort().join("|");
+    for (const face of this.faceData) {
+      if (face.vertices.length === 4) {
+        // Quad: diagonal is between vertices[0] and vertices[2]
+        const v0 = face.vertices[0];
+        const v2 = face.vertices[2];
+        const pos0 = getPositionKey(this.vertices[v0].position);
+        const pos2 = getPositionKey(this.vertices[v2].position);
+        const diagonalKey = [pos0, pos2].sort().join("|");
         diagonals.add(diagonalKey);
       }
     }

@@ -10,13 +10,7 @@
  */
 
 import { Mesh, Vertex } from "../primitives";
-import { Vector3, Color } from "../math";
-import {
-  makeEdgeKey,
-  parseEdgeKey,
-  getPositionKey,
-  POSITION_EPSILON,
-} from "../utils/geometry";
+import { makeEdgeKey, parseEdgeKey, getPositionKey } from "../utils/geometry";
 
 // Re-export for backward compatibility
 export { makeEdgeKey, parseEdgeKey };
@@ -290,19 +284,17 @@ export class MeshEditManager {
       return { success: false, deletedFaces: 0, deletedVertices: 0 };
     }
 
+    // Convert logical face indices to triangle indices (before faceData is modified)
+    const trianglesToDelete = new Set<number>();
+    for (const faceIdx of facesToDelete) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
+        trianglesToDelete.add(triIdx);
+      }
+    }
+
     // Update faceData (BMesh-style) - filter out deleted faces
     if (mesh.faceData.length > 0) {
       mesh.faceData = mesh.faceData.filter((_, idx) => !facesToDelete.has(idx));
-    }
-
-    // Convert logical face indices to triangle indices
-    const trianglesToDelete = new Set<number>();
-    for (const faceIdx of facesToDelete) {
-      if (faceIdx < mesh.faces.length) {
-        for (const triIdx of mesh.faces[faceIdx].triangles) {
-          trianglesToDelete.add(triIdx);
-        }
-      }
     }
 
     const numTriangles = Math.floor(mesh.indices.length / 3);

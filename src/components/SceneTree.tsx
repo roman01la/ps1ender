@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import hideOnIcon from "../icons/hide_on.svg";
 import hideOffIcon from "../icons/hide_off.svg";
 import editModeIcon from "../icons/editmode_hlt.svg";

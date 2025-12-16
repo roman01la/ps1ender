@@ -13,13 +13,10 @@
 import { Vector3, Vector4, Matrix4, Color } from "../math";
 import { Mesh, Vertex } from "../primitives";
 import { Camera } from "../scene";
-import { Rasterizer } from "../rasterizer";
 import {
   makeEdgeKey,
   parseEdgeKey,
-  getPositionKey,
   getMeshEdges as getMeshEdgesUtil,
-  POSITION_EPSILON,
   Edge,
 } from "../utils/geometry";
 
@@ -82,9 +79,24 @@ export type SelectionMode = "vertex" | "edge" | "face";
  * Context for visualization with depth buffer
  */
 export interface VisualizationContext {
-  rasterizer?: Rasterizer;
   viewMatrix?: Matrix4;
   projectionMatrix?: Matrix4;
+  // Direct dimensions for worker mode
+  renderWidth?: number;
+  renderHeight?: number;
+}
+
+/**
+ * Get render dimensions from context
+ */
+export function getRenderDimensions(ctx: VisualizationContext): {
+  width: number;
+  height: number;
+} | null {
+  if (ctx.renderWidth !== undefined && ctx.renderHeight !== undefined) {
+    return { width: ctx.renderWidth, height: ctx.renderHeight };
+  }
+  return null;
 }
 
 /**
@@ -135,8 +147,9 @@ export class VisualizationManager {
     p2: Vector3,
     ctx: VisualizationContext
   ): boolean {
-    const { viewMatrix, projectionMatrix, rasterizer } = ctx;
-    if (!viewMatrix || !projectionMatrix || !rasterizer) return true;
+    const { viewMatrix, projectionMatrix } = ctx;
+    const dims = getRenderDimensions(ctx);
+    if (!viewMatrix || !projectionMatrix || !dims) return true;
 
     const mvp = projectionMatrix.multiply(viewMatrix);
 
@@ -154,12 +167,12 @@ export class VisualizationManager {
     const ndc2 = clip2.perspectiveDivide();
 
     // Convert to screen space
-    const sx0 = (ndc0.x + 1) * 0.5 * rasterizer.renderWidth;
-    const sy0 = (1 - ndc0.y) * 0.5 * rasterizer.renderHeight;
-    const sx1 = (ndc1.x + 1) * 0.5 * rasterizer.renderWidth;
-    const sy1 = (1 - ndc1.y) * 0.5 * rasterizer.renderHeight;
-    const sx2 = (ndc2.x + 1) * 0.5 * rasterizer.renderWidth;
-    const sy2 = (1 - ndc2.y) * 0.5 * rasterizer.renderHeight;
+    const sx0 = (ndc0.x + 1) * 0.5 * dims.width;
+    const sy0 = (1 - ndc0.y) * 0.5 * dims.height;
+    const sx1 = (ndc1.x + 1) * 0.5 * dims.width;
+    const sy1 = (1 - ndc1.y) * 0.5 * dims.height;
+    const sx2 = (ndc2.x + 1) * 0.5 * dims.width;
+    const sy2 = (1 - ndc2.y) * 0.5 * dims.height;
 
     // Calculate signed area in screen space (same as rasterizer)
     const edge1x = sx1 - sx0;
@@ -205,21 +218,13 @@ export class VisualizationManager {
   /**
    * Build a set of edges that are part of at least one front-facing triangle
    */
-  private getFrontFacingEdges(
-    mesh: Mesh,
-    modelMatrix: Matrix4,
-    ctx: VisualizationContext
-  ): Set<string> {
+  private getFrontFacingEdges(mesh: Mesh): Set<string> {
     const frontFacingEdges = new Set<string>();
 
     for (let i = 0; i < mesh.indices.length; i += 3) {
       const i0 = mesh.indices[i];
       const i1 = mesh.indices[i + 1];
       const i2 = mesh.indices[i + 2];
-
-      const p0 = modelMatrix.transformPoint(mesh.vertices[i0].position);
-      const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
-      const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
 
       // For double-sided rendering, show edges from both front and back-facing triangles
       // Just add all edges that belong to any triangle
@@ -229,36 +234,6 @@ export class VisualizationManager {
     }
 
     return frontFacingEdges;
-  }
-
-  /**
-   * Check if a point is visible using the depth buffer
-   */
-  private isPointVisible(
-    worldPos: Vector3,
-    ctx: VisualizationContext
-  ): boolean {
-    const { rasterizer, viewMatrix, projectionMatrix } = ctx;
-    if (!rasterizer || !viewMatrix || !projectionMatrix) return true;
-
-    // In wireframe mode, skip depth check (no depth written)
-    if (rasterizer.wireframe) return true;
-
-    // Compute MVP and transform like the rasterizer does
-    const mvp = projectionMatrix.multiply(viewMatrix);
-    const clipPos = mvp.transformVector4(Vector4.fromVector3(worldPos, 1));
-
-    // Skip if behind camera
-    if (clipPos.w < 0.1) return false;
-
-    // Perspective divide to get NDC
-    const ndc = clipPos.perspectiveDivide();
-
-    const screenX = (ndc.x + 1) * 0.5 * rasterizer.renderWidth;
-    const screenY = (1 - ndc.y) * 0.5 * rasterizer.renderHeight;
-    const depth = Math.floor((ndc.z + 1) * 32767.5); // Same formula as rasterizer
-
-    return rasterizer.isPointVisible(screenX, screenY, depth);
   }
 
   /**
@@ -456,32 +431,19 @@ export class VisualizationManager {
     const lineIndices: number[] = [];
 
     // Get front-facing edges for backface culling
-    const { rasterizer } = ctx;
-    let frontFacingEdges: Set<string> | null = null;
-
-    // Only do backface culling in solid/textured mode (not wireframe)
-    if (rasterizer && !rasterizer.wireframe) {
-      frontFacingEdges = this.getFrontFacingEdges(mesh, modelMatrix, ctx);
-    }
+    const frontFacingEdges = this.getFrontFacingEdges(mesh);
 
     // Get all edges, skipping quad diagonals
     const edges = getMeshEdges(mesh, true);
 
     for (const edge of edges) {
-      // Skip backface edges in solid mode
-      if (
-        frontFacingEdges &&
-        !frontFacingEdges.has(makeEdgeKey(edge.v0, edge.v1))
-      ) {
+      // Skip backface edges
+      if (!frontFacingEdges.has(makeEdgeKey(edge.v0, edge.v1))) {
         continue;
       }
 
       const p0 = modelMatrix.transformPoint(mesh.vertices[edge.v0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[edge.v1].position);
-
-      // Check if both vertices are visible (depth occlusion)
-      if (!this.isPointVisible(p0, ctx) || !this.isPointVisible(p1, ctx))
-        continue;
 
       const idx = vertices.length;
       vertices.push(new Vertex(p0, this.unselectedColor, Vector3.zero()));
@@ -501,20 +463,13 @@ export class VisualizationManager {
   createEdgeLineData(
     mesh: Mesh,
     modelMatrix: Matrix4,
-    selectedEdges: ReadonlySet<string>,
-    ctx: VisualizationContext
+    selectedEdges: ReadonlySet<string>
   ): LineData {
     const vertices: Vertex[] = [];
     const lineIndices: number[] = [];
 
     // Get front-facing edges for backface culling
-    const { rasterizer } = ctx;
-    let frontFacingEdges: Set<string> | null = null;
-
-    // Only do backface culling in solid/textured mode (not wireframe)
-    if (rasterizer && !rasterizer.wireframe) {
-      frontFacingEdges = this.getFrontFacingEdges(mesh, modelMatrix, ctx);
-    }
+    const frontFacingEdges = this.getFrontFacingEdges(mesh);
 
     // Get all edges, skipping quad diagonals
     const edges = getMeshEdges(mesh, true);
@@ -524,15 +479,11 @@ export class VisualizationManager {
       const edgeKey = makeEdgeKey(edge.v0, edge.v1);
       if (selectedEdges.has(edgeKey)) continue;
 
-      // Skip backface edges in solid mode
-      if (frontFacingEdges && !frontFacingEdges.has(edgeKey)) continue;
+      // Skip backface edges
+      if (!frontFacingEdges.has(edgeKey)) continue;
 
       const p0 = modelMatrix.transformPoint(mesh.vertices[edge.v0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[edge.v1].position);
-
-      // Depth-based occlusion: both vertices must be visible
-      if (!this.isPointVisible(p0, ctx) || !this.isPointVisible(p1, ctx))
-        continue;
 
       const idx = vertices.length;
       vertices.push(new Vertex(p0, this.unselectedColor, Vector3.zero()));
@@ -542,17 +493,13 @@ export class VisualizationManager {
 
     // Second pass: selected edges (rendered on top)
     for (const edgeKey of selectedEdges) {
-      // Skip backface edges in solid mode
-      if (frontFacingEdges && !frontFacingEdges.has(edgeKey)) continue;
+      // Skip backface edges
+      if (!frontFacingEdges.has(edgeKey)) continue;
 
       const [v0, v1] = parseEdgeKey(edgeKey);
 
       const p0 = modelMatrix.transformPoint(mesh.vertices[v0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[v1].position);
-
-      // Depth-based occlusion: both vertices must be visible
-      if (!this.isPointVisible(p0, ctx) || !this.isPointVisible(p1, ctx))
-        continue;
 
       const idx = vertices.length;
       vertices.push(new Vertex(p0, this.selectedEdgeColor, Vector3.zero()));
@@ -589,14 +536,6 @@ export class VisualizationManager {
       const p0 = modelMatrix.transformPoint(mesh.vertices[i0].position);
       const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
       const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
-
-      // Check face centroid visibility for occlusion
-      const centroid = new Vector3(
-        (p0.x + p1.x + p2.x) / 3,
-        (p0.y + p1.y + p2.y) / 3,
-        (p0.z + p1.z + p2.z) / 3
-      );
-      if (!this.isPointVisible(centroid, ctx)) return false;
 
       const idx = vertices.length;
       vertices.push(new Vertex(p0, color, Vector3.zero()));
@@ -693,14 +632,6 @@ export class VisualizationManager {
       ];
       const positions = quadCorners.map((p) => modelMatrix.transformPoint(p));
 
-      // Check centroid visibility
-      const centroid = new Vector3(
-        (positions[0].x + positions[1].x + positions[2].x + positions[3].x) / 4,
-        (positions[0].y + positions[1].y + positions[2].y + positions[3].y) / 4,
-        (positions[0].z + positions[1].z + positions[2].z + positions[3].z) / 4
-      );
-      if (!this.isPointVisible(centroid, ctx)) return false;
-
       const idx = vertices.length;
       vertices.push(new Vertex(positions[0], color, Vector3.zero()));
       vertices.push(new Vertex(positions[1], color, Vector3.zero()));
@@ -722,18 +653,14 @@ export class VisualizationManager {
     };
 
     // First pass: unselected logical faces
-    for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
       if (selectedFaces.has(faceIdx)) continue;
 
-      const face = mesh.faces[faceIdx];
-      if (face.isQuad && face.triangles.length === 2) {
-        addQuadOutline(
-          face.triangles[0],
-          face.triangles[1],
-          this.unselectedColor
-        );
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      if (mesh.isQuad(faceIdx) && triangles.length === 2) {
+        addQuadOutline(triangles[0], triangles[1], this.unselectedColor);
       } else {
-        for (const triIdx of face.triangles) {
+        for (const triIdx of triangles) {
           addTriangleOutline(triIdx, this.unselectedColor);
         }
       }
@@ -741,17 +668,13 @@ export class VisualizationManager {
 
     // Second pass: selected logical faces (rendered on top)
     for (const faceIdx of selectedFaces) {
-      if (faceIdx >= mesh.faces.length) continue;
+      if (faceIdx >= mesh.faceData.length) continue;
 
-      const face = mesh.faces[faceIdx];
-      if (face.isQuad && face.triangles.length === 2) {
-        addQuadOutline(
-          face.triangles[0],
-          face.triangles[1],
-          this.selectedEdgeColor
-        );
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      if (mesh.isQuad(faceIdx) && triangles.length === 2) {
+        addQuadOutline(triangles[0], triangles[1], this.selectedEdgeColor);
       } else {
-        for (const triIdx of face.triangles) {
+        for (const triIdx of triangles) {
           addTriangleOutline(triIdx, this.selectedEdgeColor);
         }
       }
@@ -788,14 +711,6 @@ export class VisualizationManager {
       const p1 = modelMatrix.transformPoint(mesh.vertices[i1].position);
       const p2 = modelMatrix.transformPoint(mesh.vertices[i2].position);
 
-      // Check face centroid visibility for occlusion
-      const centroid = new Vector3(
-        (p0.x + p1.x + p2.x) / 3,
-        (p0.y + p1.y + p2.y) / 3,
-        (p0.z + p1.z + p2.z) / 3
-      );
-      if (!this.isPointVisible(centroid, ctx)) return;
-
       const idx = vertices.length;
       vertices.push(new Vertex(p0, this.selectedFaceFillColor, Vector3.zero()));
       vertices.push(new Vertex(p1, this.selectedFaceFillColor, Vector3.zero()));
@@ -805,10 +720,9 @@ export class VisualizationManager {
 
     // Add triangles for all selected faces
     for (const faceIdx of selectedFaces) {
-      if (faceIdx >= mesh.faces.length) continue;
+      if (faceIdx >= mesh.faceData.length) continue;
 
-      const face = mesh.faces[faceIdx];
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         addTriangleFill(triIdx);
       }
     }

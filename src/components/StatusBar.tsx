@@ -1,4 +1,3 @@
-import React from "react";
 import {
   EditorMode,
   TransformMode,
@@ -17,6 +16,8 @@ interface StatusBarProps {
   faceCount: number;
   fps: number;
   frameTime: number;
+  renderWidth: number;
+  renderHeight: number;
 }
 
 export function StatusBar({
@@ -30,6 +31,8 @@ export function StatusBar({
   faceCount,
   fps,
   frameTime,
+  renderWidth,
+  renderHeight,
 }: StatusBarProps) {
   const getModeText = () => {
     const modeStr = mode === "object" ? "Object Mode" : "Edit Mode";
@@ -88,6 +91,10 @@ export function StatusBar({
         <span className="status-selection">{getSelectionText()}</span>
       </div>
       <div className="status-right">
+        <span className="status-resolution">
+          {renderWidth}×{renderHeight}
+        </span>
+        <span className="status-divider">|</span>
         <span className="status-fps">
           {fps} FPS ({frameTime.toFixed(1)} ms)
         </span>

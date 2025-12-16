@@ -8,8 +8,6 @@
  * - Continuous key state for camera movement
  */
 
-import { ViewMode } from "../editor";
-
 /**
  * Mouse state
  */

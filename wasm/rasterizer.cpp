@@ -662,7 +662,8 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE
     void clear(uint8_t r, uint8_t g, uint8_t b)
     {
-        uint32_t color = 0xFF000000 | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
+        // Use alpha=0 for background so shader can distinguish from geometry
+        uint32_t color = 0x00000000 | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
 
         // SIMD clear (16 pixels at a time) - use runtime pixel count
         v128_t simd_color = wasm_i32x4_splat(color);
@@ -693,11 +694,39 @@ extern "C"
         }
     }
 
+    // Vertex cache for processed vertices (avoids redundant MVP transforms)
+    alignas(16) static ProcessedVertex g_vertex_cache[MAX_VERTICES];
+    alignas(16) static uint8_t g_vertex_processed[MAX_VERTICES]; // 0 = not processed, 1 = processed
+
+    // Get or compute processed vertex (with caching)
+    static inline ProcessedVertex &get_processed_vertex(uint32_t idx)
+    {
+        if (!g_vertex_processed[idx])
+        {
+            g_vertex_cache[idx] = process_vertex(idx);
+            g_vertex_processed[idx] = 1;
+        }
+        return g_vertex_cache[idx];
+    }
+
     // Render all triangles
     EMSCRIPTEN_KEEPALIVE
     void render_triangles()
     {
         int32_t numTriangles = g_index_count / 3;
+
+        // Clear vertex cache flags (SIMD accelerated)
+        int32_t vertCount = g_vertex_count;
+        int32_t i = 0;
+        v128_t zero = wasm_i8x16_splat(0);
+        for (; i + 15 < vertCount; i += 16)
+        {
+            wasm_v128_store(&g_vertex_processed[i], zero);
+        }
+        for (; i < vertCount; i++)
+        {
+            g_vertex_processed[i] = 0;
+        }
 
         for (int32_t t = 0; t < numTriangles; t++)
         {
@@ -705,10 +734,10 @@ extern "C"
             uint32_t i1 = g_indices[t * 3 + 1];
             uint32_t i2 = g_indices[t * 3 + 2];
 
-            // Process vertices
-            ProcessedVertex v0 = process_vertex(i0);
-            ProcessedVertex v1 = process_vertex(i1);
-            ProcessedVertex v2 = process_vertex(i2);
+            // Get cached or compute vertices
+            ProcessedVertex v0 = get_processed_vertex(i0);
+            ProcessedVertex v1 = get_processed_vertex(i1);
+            ProcessedVertex v2 = get_processed_vertex(i2);
 
             // Near-plane clipping (PS1 style - reject if any vertex behind camera)
             if (v0.depth < -1.0f || v1.depth < -1.0f || v2.depth < -1.0f)

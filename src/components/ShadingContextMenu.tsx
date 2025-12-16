@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 type MenuAction = "shade-smooth" | "shade-flat" | "origin-to-center";
 

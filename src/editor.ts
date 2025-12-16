@@ -1,12 +1,9 @@
-import { Vector3, Matrix4, Ray, Color } from "./math";
-import { Scene, SceneObject, Camera } from "./scene";
-import { Vertex, Mesh } from "./primitives";
-import { Rasterizer } from "./rasterizer";
+import { Vector3, Matrix4, Ray } from "./math";
+import { Scene, SceneObject } from "./scene";
+import { Mesh } from "./primitives";
 import {
   History,
   HistoryAction,
-  ObjectTransformState,
-  VertexMoveState,
   SelectionHistoryState,
   ModeChangeState,
   serializeMesh,
@@ -25,13 +22,14 @@ import {
 } from "./systems/transform";
 import { MeshEditManager } from "./systems/mesh-edit";
 import { getPositionKey } from "./utils/geometry";
-import { PickingManager, PickContext } from "./systems/picking";
+import { PickingManager } from "./systems/picking";
 import {
   VisualizationManager,
   VisualizationContext,
   GizmoData,
   VertexPointData,
   LineData,
+  TriangleData,
 } from "./systems/visualization";
 
 /**
@@ -1960,16 +1958,21 @@ export class Editor {
       }
     }
 
-    // Start transforms
-    if (lowerKey === "g") {
+    // Start transforms (only without modifier keys to allow browser shortcuts like Cmd+R)
+    if (lowerKey === "g" && !ctrlKey && !altKey) {
       this.startGrab();
       return true;
     }
-    if (lowerKey === "r") {
+    if (lowerKey === "r" && !ctrlKey && !altKey) {
       this.startRotate();
       return true;
     }
-    if (lowerKey === "s" && this.transformMode === "none") {
+    if (
+      lowerKey === "s" &&
+      this.transformMode === "none" &&
+      !ctrlKey &&
+      !altKey
+    ) {
       // Only if not already transforming (S could conflict with movement)
       this.startScale();
       return true;
@@ -2152,146 +2155,132 @@ export class Editor {
     );
   }
 
+  // ==========================================================================
+  // Worker-compatible methods (no rasterizer dependency)
+  // ==========================================================================
+
   /**
-   * Create vertex point data for rendering in Edit mode
-   * Uses depth-based occlusion - vertices behind other geometry are hidden
+   * Context for worker-based visualization (no rasterizer)
    */
-  createVertexPointData(
-    rasterizer?: Rasterizer,
-    viewMatrix?: Matrix4,
-    projectionMatrix?: Matrix4
-  ): VertexPointData | null {
-    // Only show vertex points in vertex selection mode
+  private workerContext(ctx: {
+    renderWidth: number;
+    renderHeight: number;
+    viewMatrix: Matrix4;
+    projectionMatrix: Matrix4;
+  }): VisualizationContext {
+    return {
+      renderWidth: ctx.renderWidth,
+      renderHeight: ctx.renderHeight,
+      viewMatrix: ctx.viewMatrix,
+      projectionMatrix: ctx.projectionMatrix,
+    };
+  }
+
+  /**
+   * Create vertex point data for worker rendering
+   */
+  createVertexPointDataForWorker(ctx: {
+    renderWidth: number;
+    renderHeight: number;
+    viewMatrix: Matrix4;
+    projectionMatrix: Matrix4;
+  }): VertexPointData | null {
     if (this.mode !== "edit" || this.selectionMode !== "vertex") return null;
 
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return null;
 
     const obj = selected[0];
-    const ctx: VisualizationContext = {
-      rasterizer,
-      viewMatrix,
-      projectionMatrix,
-    };
-
     return this.visualization.createVertexPointData(
       obj.mesh,
       obj.getModelMatrix(),
       this.selectedVertices,
-      ctx
+      this.workerContext(ctx)
     );
   }
 
   /**
-   * Create wireframe data for vertex edit mode (shows edges with depth-based occlusion)
+   * Create wireframe data for worker rendering
    */
-  createVertexWireframeData(
-    rasterizer?: Rasterizer,
-    viewMatrix?: Matrix4,
-    projectionMatrix?: Matrix4
-  ): LineData | null {
+  createVertexWireframeDataForWorker(ctx: {
+    renderWidth: number;
+    renderHeight: number;
+    viewMatrix: Matrix4;
+    projectionMatrix: Matrix4;
+  }): LineData | null {
     if (this.mode !== "edit" || this.selectionMode !== "vertex") return null;
 
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return null;
 
     const obj = selected[0];
-    const ctx: VisualizationContext = {
-      rasterizer,
-      viewMatrix,
-      projectionMatrix,
-    };
-
     return this.visualization.createVertexWireframeData(
       obj.mesh,
       obj.getModelMatrix(),
-      ctx
+      this.workerContext(ctx)
     );
   }
 
   /**
-   * Create edge line data for rendering in Edit mode (edge selection mode)
-   * Uses depth-based occlusion - edges behind other geometry are hidden
+   * Create edge line data for worker rendering
    */
-  createEdgeLineData(
-    rasterizer?: Rasterizer,
-    viewMatrix?: Matrix4,
-    projectionMatrix?: Matrix4
-  ): LineData | null {
+  createEdgeLineDataForWorker(): LineData | null {
     if (this.mode !== "edit" || this.selectionMode !== "edge") return null;
 
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return null;
 
     const obj = selected[0];
-    const ctx: VisualizationContext = {
-      rasterizer,
-      viewMatrix,
-      projectionMatrix,
-    };
-
     return this.visualization.createEdgeLineData(
       obj.mesh,
       obj.getModelMatrix(),
-      this.selectedEdges,
-      ctx
+      this.selectedEdges
     );
   }
 
   /**
-   * Create face highlight data for rendering in Edit mode (face selection mode)
-   * Returns line data for face outlines with depth-based occlusion
+   * Create face highlight data for worker rendering
    */
-  createFaceHighlightData(
-    rasterizer?: Rasterizer,
-    viewMatrix?: Matrix4,
-    projectionMatrix?: Matrix4
-  ): LineData | null {
+  createFaceHighlightDataForWorker(ctx: {
+    renderWidth: number;
+    renderHeight: number;
+    viewMatrix: Matrix4;
+    projectionMatrix: Matrix4;
+  }): LineData | null {
     if (this.mode !== "edit" || this.selectionMode !== "face") return null;
 
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return null;
 
     const obj = selected[0];
-    const ctx: VisualizationContext = {
-      rasterizer,
-      viewMatrix,
-      projectionMatrix,
-    };
-
     return this.visualization.createFaceHighlightData(
       obj.mesh,
       obj.getModelMatrix(),
       this.selectedFaces,
-      ctx
+      this.workerContext(ctx)
     );
   }
 
   /**
-   * Create filled triangle data for selected faces (transparent highlight)
+   * Create face fill data for worker rendering
    */
-  createSelectedFaceFillData(
-    rasterizer?: Rasterizer,
-    viewMatrix?: Matrix4,
-    projectionMatrix?: Matrix4
-  ): { vertices: Vertex[]; triangleIndices: number[] } | null {
+  createSelectedFaceFillDataForWorker(ctx: {
+    renderWidth: number;
+    renderHeight: number;
+    viewMatrix: Matrix4;
+    projectionMatrix: Matrix4;
+  }): TriangleData | null {
     if (this.mode !== "edit" || this.selectionMode !== "face") return null;
 
     const selected = this.scene.getSelectedObjects();
     if (selected.length === 0) return null;
 
     const obj = selected[0];
-    const ctx: VisualizationContext = {
-      rasterizer,
-      viewMatrix,
-      projectionMatrix,
-    };
-
     return this.visualization.createSelectedFaceFillData(
       obj.mesh,
       obj.getModelMatrix(),
       this.selectedFaces,
-      ctx
+      this.workerContext(ctx)
     );
   }
 

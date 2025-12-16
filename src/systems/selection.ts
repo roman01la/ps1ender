@@ -15,7 +15,6 @@ import {
   parseEdgeKey as parseEdgeKeyUtil,
   getPositionKey,
   getMeshEdges as getMeshEdgesUtil,
-  POSITION_EPSILON,
   Edge,
 } from "../utils/geometry";
 
@@ -171,10 +170,9 @@ export class SelectionManager {
     const newEdges = new Set<string>();
 
     for (const faceIdx of this._selectedFaces) {
-      if (faceIdx >= mesh.faces.length) continue;
+      if (faceIdx >= mesh.faceData.length) continue;
 
-      const face = mesh.faces[faceIdx];
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const base = triIdx * 3;
         if (base + 2 >= mesh.indices.length) continue;
 
@@ -238,10 +236,9 @@ export class SelectionManager {
     const selectedPositions = new Set<string>();
 
     for (const faceIdx of this._selectedFaces) {
-      if (faceIdx >= mesh.faces.length) continue;
+      if (faceIdx >= mesh.faceData.length) continue;
 
-      const face = mesh.faces[faceIdx];
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const base = triIdx * 3;
         if (base + 2 >= mesh.indices.length) continue;
 
@@ -405,11 +402,10 @@ export class SelectionManager {
     // Find faces where all vertices are selected
     const newFaces = new Set<number>();
 
-    for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
-      const face = mesh.faces[faceIdx];
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
       let allSelected = true;
 
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const base = triIdx * 3;
         if (base + 2 >= mesh.indices.length) {
           allSelected = false;
@@ -474,12 +470,10 @@ export class SelectionManager {
     // Find faces where all boundary edges are selected
     const newFaces = new Set<number>();
 
-    for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
-      const face = mesh.faces[faceIdx];
-
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
       // Collect all edges of this face
       const faceEdges = new Set<string>();
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const base = triIdx * 3;
         if (base + 2 >= mesh.indices.length) continue;
 
@@ -735,7 +729,7 @@ export class SelectionManager {
       }
     } else if (this._mode === "face") {
       // Select all logical faces (not individual triangles)
-      for (let i = 0; i < mesh.faces.length; i++) {
+      for (let i = 0; i < mesh.faceData.length; i++) {
         this._selectedFaces.add(i);
       }
     }
@@ -786,9 +780,9 @@ export class SelectionManager {
       // Collect face vertices from logical faces
       const faceVertices = new Set<number>();
       for (const faceIdx of this._selectedFaces) {
-        if (faceIdx < mesh.faces.length) {
+        if (faceIdx < mesh.faceData.length) {
           // Get all triangles in this logical face
-          for (const triIdx of mesh.faces[faceIdx].triangles) {
+          for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
             const baseIdx = triIdx * 3;
             if (baseIdx + 2 < mesh.indices.length) {
               faceVertices.add(mesh.indices[baseIdx]);
@@ -1219,8 +1213,8 @@ export class SelectionManager {
     } else if (this._mode === "face") {
       // Get vertices from logical faces
       for (const faceIdx of this._selectedFaces) {
-        if (faceIdx < mesh.faces.length) {
-          for (const triIdx of mesh.faces[faceIdx].triangles) {
+        if (faceIdx < mesh.faceData.length) {
+          for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
             const baseIdx = triIdx * 3;
             if (baseIdx + 2 < mesh.indices.length) {
               startVertices.add(mesh.indices[baseIdx]);
@@ -1265,11 +1259,10 @@ export class SelectionManager {
       }
     } else if (this._mode === "face") {
       // Select all logical faces whose triangles use connected vertices
-      for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
-        const face = mesh.faces[faceIdx];
+      for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
         let allConnected = true;
 
-        for (const triIdx of face.triangles) {
+        for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
           const baseIdx = triIdx * 3;
           if (baseIdx + 2 >= mesh.indices.length) {
             allConnected = false;
@@ -1442,11 +1435,10 @@ export class SelectionManager {
     const posToEdges: Map<string, Set<string>> = new Map();
     const edgeToFaces: Map<string, Set<number>> = new Map();
 
-    for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
-      const face = mesh.faces[faceIdx];
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
       const facePositions: string[] = [];
 
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const baseIdx = triIdx * 3;
         for (let j = 0; j < 3; j++) {
           const vIdx = mesh.indices[baseIdx + j];
@@ -1604,11 +1596,10 @@ export class SelectionManager {
     const edgeToFaces: Map<string, number[]> = new Map();
     const faceEdges: Map<number, string[]> = new Map();
 
-    for (let faceIdx = 0; faceIdx < mesh.faces.length; faceIdx++) {
-      const face = mesh.faces[faceIdx];
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
       const facePositions: string[] = [];
 
-      for (const triIdx of face.triangles) {
+      for (const triIdx of mesh.getTrianglesForFace(faceIdx)) {
         const baseIdx = triIdx * 3;
         for (let j = 0; j < 3; j++) {
           const vIdx = mesh.indices[baseIdx + j];
@@ -1644,8 +1635,7 @@ export class SelectionManager {
       faceIdx: number,
       enterEdgeKey: string
     ): string | null => {
-      const face = mesh.faces[faceIdx];
-      if (!face.isQuad) return null;
+      if (!mesh.isQuad(faceIdx)) return null;
 
       const edges = faceEdges.get(faceIdx);
       if (!edges || edges.length !== 4) return null;

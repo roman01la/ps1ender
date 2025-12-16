@@ -1,30 +1,24 @@
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Vector3, Color } from "./math";
 import {
-  Vertex,
   createPlaneMesh,
   createCubeMesh,
   createCircleMesh,
 } from "./primitives";
-import { Rasterizer } from "./rasterizer";
 import { OBJLoader } from "./obj-loader";
 import { Scene, SceneObject } from "./scene";
-import {
-  Editor,
-  EditorMode,
-  TransformMode,
-  AxisConstraint,
-  ViewMode,
-} from "./editor";
+import { Editor, ViewMode } from "./editor";
 import { InputManager } from "./systems/input";
+import { useEditorUIState } from "./systems/ui-state";
+import { RenderWorkerClient } from "./render-worker-client";
 import {
-  useEditorUIState,
-  RendererSettings,
-  SceneObjectInfo,
-  DEFAULT_SETTINGS,
-} from "./systems/ui-state";
-import { RenderLoop, RenderContext, GridData } from "./systems/render-loop";
+  buildRenderFrame,
+  buildRenderSettings,
+  WorkerRenderContext,
+  GridData,
+} from "./systems/worker-render-loop";
+import { Texture } from "./texture";
 import { Toolbar } from "./components/Toolbar";
 import { SceneTree } from "./components/SceneTree";
 import { PropertiesPanel } from "./components/PropertiesPanel";
@@ -37,11 +31,19 @@ import { ViewportGizmo } from "./components/ViewportGizmo";
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const rasterizerRef = useRef<Rasterizer | null>(null);
+  const workerClientRef = useRef<RenderWorkerClient | null>(null);
   const sceneRef = useRef<Scene>(new Scene());
   const editorRef = useRef<Editor | null>(null);
   const gridDataRef = useRef<GridData | null>(null);
-  const renderLoopRef = useRef<RenderLoop | null>(null);
+  const renderLoopIdRef = useRef<number>(0);
+  const renderDimensionsRef = useRef({
+    displayWidth: 640,
+    displayHeight: 480,
+    renderWidth: 640,
+    renderHeight: 480,
+  });
+  const textureRef = useRef<Texture | null>(null);
+  const textureChangedRef = useRef(false);
 
   // UI state from custom hook
   const {
@@ -52,6 +54,8 @@ function App() {
   const {
     fps,
     frameTime,
+    renderWidth,
+    renderHeight,
     editorMode,
     selectionMode,
     transformMode,
@@ -67,7 +71,7 @@ function App() {
     selectedFaceCount,
     settings,
   } = uiState;
-  const { setFps, setFrameTime, setSettings } = setters;
+  const { setFps, setFrameTime, setRenderResolution, setSettings } = setters;
   const {
     updateUIState,
     handleModeChange,
@@ -96,7 +100,7 @@ function App() {
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
-    const rasterizer = rasterizerRef.current;
+    const workerClient = workerClientRef.current;
     if (!canvas || !viewport) return;
 
     // Get viewport dimensions
@@ -106,27 +110,30 @@ function App() {
 
     if (width <= 0 || height <= 0) return;
 
-    canvas.width = width;
-    canvas.height = height;
+    // Store dimensions for frame building
+    renderDimensionsRef.current.displayWidth = width;
+    renderDimensionsRef.current.displayHeight = height;
 
-    if (rasterizer) {
-      // Resize display canvas
-      rasterizer.resize(width, height);
+    // Update render resolution to match aspect ratio (PS1-style low res)
+    // Use fixed base width, calculate height from aspect ratio
+    const baseWidth = 640;
+    const aspectRatio = width / height;
+    const baseHeight = Math.max(400, Math.floor(baseWidth / aspectRatio));
 
-      // Update render resolution to match aspect ratio (PS1-style low res)
-      // Use fixed base width, calculate height from aspect ratio
-      const baseWidth = 640;
-      const aspectRatio = width / height;
-      const baseHeight = Math.max(400, Math.floor(baseWidth / aspectRatio));
-      rasterizer.setRenderResolution(baseWidth, baseHeight);
+    renderDimensionsRef.current.renderWidth = baseWidth;
+    renderDimensionsRef.current.renderHeight = baseHeight;
+    setRenderResolution(baseWidth, baseHeight);
+
+    if (workerClient) {
+      // Resize display canvas and render resolution in worker
+      workerClient.resize(width, height);
+      workerClient.setRenderResolution(baseWidth, baseHeight);
     }
   }, []);
 
   // Load OBJ file and add to scene
   const loadOBJ = useCallback(async (url: string, name: string) => {
-    const rasterizer = rasterizerRef.current;
     const scene = sceneRef.current;
-    if (!rasterizer) return;
 
     try {
       console.log(`Loading OBJ: ${url}`);
@@ -145,8 +152,8 @@ function App() {
       // Set up texture if available
       if (result.defaultTexture) {
         console.log("Loaded texture, enabling texturing");
-        rasterizer.setTexture(result.defaultTexture);
-        rasterizer.enableTexturing = true;
+        textureRef.current = result.defaultTexture;
+        textureChangedRef.current = true;
       }
 
       // Position camera to view the object
@@ -300,26 +307,19 @@ function App() {
     setIsOrtho(scene.camera.orthographic);
   }, []);
 
-  // Update settings on rasterizer
+  // Update settings on worker when they change
   useEffect(() => {
-    const rasterizer = rasterizerRef.current;
-    if (!rasterizer) return;
+    const workerClient = workerClientRef.current;
+    const editor = editorRef.current;
+    if (!workerClient || !editor) return;
 
-    rasterizer.wireframe = settings.wireframe;
-    rasterizer.enableLighting = settings.lighting;
-    rasterizer.enableBackfaceCulling = true;
-    rasterizer.enableDithering = true;
-    rasterizer.enableVertexSnapping = true;
-    rasterizer.enableTexturing = settings.texturing;
+    workerClient.setSettings(buildRenderSettings(settings, editor.viewMode));
   }, [settings]);
 
   // Main render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    // Initialize rasterizer first
-    rasterizerRef.current = new Rasterizer(canvas);
 
     // Store references for cleanup
     let handleKeyDown: (e: KeyboardEvent) => void;
@@ -332,14 +332,32 @@ function App() {
     let handleViewportEnter: () => void;
     let handleViewportLeave: () => void;
 
-    // Initialize WASM before any rendering
-    rasterizerRef.current.initWasm().then(() => {
+    // Initialize render worker
+    const workerClient = new RenderWorkerClient("render-worker.js");
+    workerClientRef.current = workerClient;
+
+    // Set up FPS callback
+    workerClient.onFrameStats = (fps, frameTimeMs) => {
+      setFps(fps);
+      setFrameTime(frameTimeMs);
+    };
+
+    // Initialize worker with canvas
+    workerClient.init(canvas, "rasterizer.wasm").then(() => {
       const scene = sceneRef.current;
       editorRef.current = new Editor(scene);
       gridDataRef.current = scene.createGridLines();
 
       // Now resize canvas and set correct render resolution
       resizeCanvas();
+
+      // Set initial settings
+      workerClient.setSettings(
+        buildRenderSettings(settings, editorRef.current!.viewMode)
+      );
+
+      // Start the worker's render loop
+      workerClient.start();
 
       // Load the demo object
       loadOBJ("object.obj", "Monkey");
@@ -393,6 +411,10 @@ function App() {
             const currentIndex = modes.indexOf(editor.viewMode);
             const nextIndex = (currentIndex + 1) % modes.length;
             editor.setViewMode(modes[nextIndex]);
+            // Update settings on worker for new view mode
+            workerClient.setSettings(
+              buildRenderSettings(settings, modes[nextIndex])
+            );
             updateUIState(true); // Force immediate update for user action
             e.preventDefault();
             return;
@@ -462,6 +484,7 @@ function App() {
       handleMouseDown = (e: MouseEvent) => {
         const editor = editorRef.current;
         const canvas = canvasRef.current;
+        const dims = renderDimensionsRef.current;
 
         inputManager.setMouseDragging(true, e.button);
         inputManager.updateMousePosition(e.clientX, e.clientY);
@@ -473,14 +496,14 @@ function App() {
           const y = e.clientY - rect.top;
 
           // Scale to render resolution
-          const scaleX = rasterizerRef.current!.renderWidth / rect.width;
-          const scaleY = rasterizerRef.current!.renderHeight / rect.height;
+          const scaleX = dims.renderWidth / rect.width;
+          const scaleY = dims.renderHeight / rect.height;
 
           editor.handleClick(
             x * scaleX,
             y * scaleY,
-            rasterizerRef.current!.renderWidth,
-            rasterizerRef.current!.renderHeight,
+            dims.renderWidth,
+            dims.renderHeight,
             e.shiftKey,
             e.altKey,
             e.ctrlKey || e.metaKey
@@ -493,6 +516,7 @@ function App() {
       handleMouseMove = (e: MouseEvent) => {
         const editor = editorRef.current;
         const canvas = canvasRef.current;
+        const dims = renderDimensionsRef.current;
         const mouseState = inputManager.getMouseState();
 
         const deltaX = e.clientX - mouseState.x;
@@ -506,16 +530,16 @@ function App() {
           const rect = canvas.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
-          const scaleX = rasterizerRef.current!.renderWidth / rect.width;
-          const scaleY = rasterizerRef.current!.renderHeight / rect.height;
+          const scaleX = dims.renderWidth / rect.width;
+          const scaleY = dims.renderHeight / rect.height;
 
           editor.updateTransform(
             deltaX,
             deltaY,
             x * scaleX,
             y * scaleY,
-            rasterizerRef.current!.renderWidth,
-            rasterizerRef.current!.renderHeight,
+            dims.renderWidth,
+            dims.renderHeight,
             e.ctrlKey || e.metaKey // For vertex snapping
           );
         }
@@ -547,21 +571,22 @@ function App() {
         // Only show context menu if right-clicking directly on an object
         const editor = editorRef.current;
         const canvas = canvasRef.current;
+        const dims = renderDimensionsRef.current;
         if (editor && canvas) {
           const rect = canvas.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
 
           // Scale to render resolution
-          const scaleX = rasterizerRef.current!.renderWidth / rect.width;
-          const scaleY = rasterizerRef.current!.renderHeight / rect.height;
+          const scaleX = dims.renderWidth / rect.width;
+          const scaleY = dims.renderHeight / rect.height;
 
           // Check if we clicked on an object
           const clickedObj = editor.pickObject(
             x * scaleX,
             y * scaleY,
-            rasterizerRef.current!.renderWidth,
-            rasterizerRef.current!.renderHeight
+            dims.renderWidth,
+            dims.renderHeight
           );
 
           if (clickedObj) {
@@ -588,30 +613,67 @@ function App() {
       canvas.addEventListener("mouseenter", handleViewportEnter);
       canvas.addEventListener("mouseleave", handleViewportLeave);
 
-      // Create and start render loop
-      renderLoopRef.current = new RenderLoop(24); // 24 FPS PS1-style
+      // Main render loop - runs on main thread, builds frames and sends to worker
+      const targetFPS = 24;
+      const frameInterval = 1000 / targetFPS;
+      let lastRenderTime = 0;
+      let frameCount = 0;
+      let fpsTime = 0;
+      let lastTime = performance.now();
 
-      const renderCtx: RenderContext = {
-        rasterizer: rasterizerRef.current!,
-        scene: sceneRef.current,
-        editor: editorRef.current!,
-        inputManager: inputManagerRef.current,
-        gridData: gridDataRef.current,
-        settings: settings,
+      const tick = (currentTime: number) => {
+        renderLoopIdRef.current = requestAnimationFrame(tick);
+
+        // FPS limiting
+        const elapsed = currentTime - lastRenderTime;
+        if (elapsed < frameInterval) {
+          return;
+        }
+        lastRenderTime = currentTime - (elapsed % frameInterval);
+
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        // Update UI state
+        updateUIState();
+
+        // Build render frame from current scene state
+        const dims = renderDimensionsRef.current;
+        const ctx: WorkerRenderContext = {
+          scene: sceneRef.current,
+          editor: editorRef.current!,
+          gridData: gridDataRef.current,
+          settings: settings,
+          renderWidth: dims.renderWidth,
+          renderHeight: dims.renderHeight,
+          currentTexture: textureRef.current,
+        };
+
+        const frame = buildRenderFrame(ctx, textureChangedRef.current);
+        textureChangedRef.current = false;
+
+        // Send frame to worker
+        workerClient.render(frame);
+
+        // FPS tracking (for local debug - worker also sends its own stats)
+        frameCount++;
+        fpsTime += deltaTime;
+        if (fpsTime >= 1000) {
+          frameCount = 0;
+          fpsTime = 0;
+        }
       };
 
-      renderLoopRef.current.start(renderCtx, {
-        onFpsUpdate: (fps, frameTimeMs) => {
-          setFps(fps);
-          setFrameTime(frameTimeMs);
-        },
-        onUIUpdate: () => updateUIState(),
-      });
+      renderLoopIdRef.current = requestAnimationFrame(tick);
     });
 
     // Cleanup
     return () => {
-      renderLoopRef.current?.stop();
+      if (renderLoopIdRef.current) {
+        cancelAnimationFrame(renderLoopIdRef.current);
+        renderLoopIdRef.current = 0;
+      }
+      workerClient.terminate();
       window.removeEventListener("resize", resizeCanvas);
       if (handleKeyDown) window.removeEventListener("keydown", handleKeyDown);
       if (handleKeyUp) window.removeEventListener("keyup", handleKeyUp);
@@ -675,6 +737,8 @@ function App() {
         faceCount={selectedFaceCount}
         fps={fps}
         frameTime={frameTime}
+        renderWidth={renderWidth}
+        renderHeight={renderHeight}
       />
       {addMenuPos && (
         <AddMenu
