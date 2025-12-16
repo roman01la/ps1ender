@@ -139,15 +139,51 @@ function App() {
       console.log(`Loading OBJ: ${url}`);
       const result = await OBJLoader.load(url, new Color(200, 200, 200));
 
-      // Create a scene object from the loaded mesh
-      const obj = new SceneObject(name, result.defaultMesh);
+      // Create scene objects from all loaded meshes
+      const meshEntries = Array.from(result.meshes.entries());
+      let firstObj: SceneObject | null = null;
+      let overallCenter = Vector3.zero();
+      let meshCount = 0;
 
-      // Center the mesh at origin
-      const center = result.defaultMesh.getCenter();
-      obj.position = new Vector3(-center.x, -center.y, -center.z);
+      // Calculate overall center of all meshes
+      for (const [, mesh] of meshEntries) {
+        const center = mesh.getCenter();
+        overallCenter = overallCenter.add(center);
+        meshCount++;
+      }
+      if (meshCount > 0) {
+        overallCenter = overallCenter.mul(1 / meshCount);
+      }
 
-      scene.addObject(obj);
-      scene.selectObject(obj); // Select the newly added object
+      // Create a scene object for each mesh
+      for (const [meshName, mesh] of meshEntries) {
+        // Use mesh name from OBJ file, fallback to provided name for "default" group
+        const objectName = meshName !== "default" ? meshName : name;
+
+        const obj = new SceneObject(objectName, mesh);
+
+        // Center relative to overall center
+        obj.position = new Vector3(
+          -overallCenter.x,
+          -overallCenter.y,
+          -overallCenter.z
+        );
+
+        scene.addObject(obj);
+
+        if (!firstObj) {
+          firstObj = obj;
+        }
+
+        console.log(
+          `Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`
+        );
+      }
+
+      // Select the first object
+      if (firstObj) {
+        scene.selectObject(firstObj);
+      }
 
       // Set up texture if available
       if (result.defaultTexture) {
@@ -156,15 +192,17 @@ function App() {
         textureChangedRef.current = true;
       }
 
-      // Position camera to view the object
+      // Position camera to view all objects
       const size = result.defaultMesh.getSize();
       const maxDim = Math.max(size.x, size.y, size.z);
-      scene.camera.position = new Vector3(maxDim * 2, maxDim * 1.5, maxDim * 2);
+      scene.camera.position = new Vector3(
+        maxDim * -2,
+        maxDim * -1.5,
+        maxDim * 0.4
+      );
       scene.camera.target = Vector3.zero();
 
-      console.log(
-        `Loaded OBJ with ${result.defaultMesh.triangles.length} triangles`
-      );
+      console.log(`Loaded OBJ with ${meshEntries.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load OBJ file: ${error}`);
     }
@@ -360,7 +398,7 @@ function App() {
       workerClient.start();
 
       // Load the demo object
-      loadOBJ("object.obj", "Monkey");
+      loadOBJ("roman_head.obj", "Monkey");
 
       // Handle resize
       window.addEventListener("resize", resizeCanvas);

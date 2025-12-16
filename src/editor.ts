@@ -81,7 +81,7 @@ export type {
  */
 export class Editor {
   public mode: EditorMode = "object";
-  public viewMode: ViewMode = "solid";
+  public viewMode: ViewMode = "material";
 
   // Selection manager (handles vertex/edge/face selection)
   private selection: SelectionManager = new SelectionManager();

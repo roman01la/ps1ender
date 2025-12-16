@@ -147,7 +147,7 @@ export function useEditorUIState(
   const [selectionMode, setSelectionMode] = useState<SelectionMode>("vertex");
   const [transformMode, setTransformMode] = useState<TransformMode>("none");
   const [axisConstraint, setAxisConstraint] = useState<AxisConstraint>("none");
-  const [viewMode, setViewMode] = useState<ViewMode>("solid");
+  const [viewMode, setViewMode] = useState<ViewMode>("material");
   const [sceneObjects, setSceneObjects] = useState<SceneObjectInfo[]>([]);
   const [selectedObjectName, setSelectedObjectName] = useState<string | null>(
     null

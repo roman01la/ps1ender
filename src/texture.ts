@@ -334,9 +334,11 @@ export class MTLLoader {
       const materials = MTLLoader.parse(content);
 
       // Determine base URL for textures
-      const urlParts = url.split("/");
-      urlParts.pop();
-      const textureBaseUrl = baseUrl || urlParts.join("/") + "/";
+      let textureBaseUrl = baseUrl;
+      if (!textureBaseUrl) {
+        const lastSlash = url.lastIndexOf("/");
+        textureBaseUrl = lastSlash >= 0 ? url.substring(0, lastSlash + 1) : "";
+      }
 
       // Load textures
       for (const [name, material] of materials) {

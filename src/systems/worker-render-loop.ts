@@ -279,6 +279,51 @@ function buildEdgeOnlyLines(
 }
 
 /**
+ * Build wireframe lines for a mesh (renders all edges)
+ */
+function buildWireframeLines(
+  obj: SceneObject,
+  modelMatrix: Matrix4
+): RenderLines {
+  const wireVertices: Vertex[] = [];
+  const wireIndices: number[] = [];
+  const wireColor = new Color(200, 200, 200); // Light gray for wireframe
+
+  // Use unique edges to avoid drawing shared edges twice
+  const edgeSet = new Set<string>();
+
+  for (let i = 0; i < obj.mesh.indices.length; i += 3) {
+    const i0 = obj.mesh.indices[i];
+    const i1 = obj.mesh.indices[i + 1];
+    const i2 = obj.mesh.indices[i + 2];
+
+    // Three edges per triangle
+    const edges = [
+      [i0, i1],
+      [i1, i2],
+      [i2, i0],
+    ];
+
+    for (const [a, b] of edges) {
+      // Create canonical edge key (smaller index first)
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (edgeSet.has(key)) continue;
+      edgeSet.add(key);
+
+      const p0 = obj.mesh.vertices[a].position;
+      const p1 = obj.mesh.vertices[b].position;
+
+      const baseIdx = wireVertices.length;
+      wireVertices.push(new Vertex(p0, wireColor), new Vertex(p1, wireColor));
+      wireIndices.push(baseIdx, baseIdx + 1);
+    }
+  }
+
+  // Use -1 depth mode to use actual vertex depth (proper occlusion)
+  return serializeLines(wireVertices, wireIndices, modelMatrix, -1);
+}
+
+/**
  * Build a complete RenderFrame from the current scene state
  */
 export function buildRenderFrame(
@@ -299,6 +344,7 @@ export function buildRenderFrame(
     viewMatrix: serializeMatrix(viewMatrix),
     projectionMatrix: serializeMatrix(projectionMatrix),
     objects: [],
+    sceneLines: [],
     grid: null,
     overlays: {
       unselectedVertices: null,
@@ -311,6 +357,7 @@ export function buildRenderFrame(
       originPoint: null,
     },
     texture: null,
+    enableTexturing: false,
   };
 
   // Grid
@@ -323,16 +370,20 @@ export function buildRenderFrame(
     );
   }
 
-  // Scene objects
-  const edgeOnlyLines: RenderLines[] = [];
+  // Check if wireframe mode is active
+  const isWireframeMode = editor.viewMode === "wireframe";
 
+  // Scene objects
   for (const obj of scene.objects) {
     if (!obj.visible) continue;
 
     const modelMatrix = obj.getModelMatrix();
 
     if (isEdgeOnlyMesh(obj.mesh)) {
-      edgeOnlyLines.push(buildEdgeOnlyLines(obj, modelMatrix));
+      frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
+    } else if (isWireframeMode) {
+      // In wireframe mode, render as lines instead of solid triangles
+      frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
       frame.objects.push({
         mesh: serializeMesh(obj.mesh),
@@ -439,8 +490,10 @@ export function buildRenderFrame(
     };
   }
 
-  // Texture (only if changed)
-  if (textureChanged && ctx.currentTexture) {
+  // Texture (send if changed, or if we have a texture and texturing is enabled)
+  // This ensures texture is re-sent when switching to material mode
+  const texturingEnabled = editor.viewMode === "material";
+  if (ctx.currentTexture && (textureChanged || texturingEnabled)) {
     const tex = ctx.currentTexture;
     frame.texture = {
       slot: 0,
@@ -449,6 +502,9 @@ export function buildRenderFrame(
       data: new Uint8Array(tex.getData()),
     };
   }
+
+  // Set per-frame texturing flag based on view mode
+  frame.enableTexturing = texturingEnabled;
 
   return frame;
 }

@@ -126,6 +126,9 @@ export interface RenderFrame {
   // Scene objects (solid meshes)
   objects: RenderObject[];
 
+  // Scene lines (wireframe mode, edge-only meshes)
+  sceneLines: RenderLines[];
+
   // Grid lines
   grid: RenderLines | null;
 
@@ -157,6 +160,9 @@ export interface RenderFrame {
     height: number;
     data: Uint8Array;
   } | null;
+
+  // Per-frame flags (to avoid settings race conditions)
+  enableTexturing: boolean;
 }
 
 // ============================================================================
@@ -854,6 +860,11 @@ function renderFullFrame(frame: RenderFrame): void {
     renderLinesWasm(frame.grid, frame.viewMatrix, frame.projectionMatrix);
   }
 
+  // Render scene lines (wireframe mode, edge-only meshes)
+  for (const lines of frame.sceneLines) {
+    renderLinesWasm(lines, frame.viewMatrix, frame.projectionMatrix);
+  }
+
   // Render scene objects
   for (const obj of frame.objects) {
     if (obj.isEdgeOnly) {
@@ -864,9 +875,11 @@ function renderFullFrame(frame: RenderFrame): void {
     // Apply settings for this render pass
     applySettings();
 
-    // Set per-mesh smooth shading
+    // Set per-mesh smooth shading and per-frame texturing flag
     if (wasmInstance) {
       wasmInstance.setEnableSmoothShading(obj.smoothShading);
+      // Use per-frame texturing flag to avoid settings race condition
+      wasmInstance.setEnableTexturing(frame.enableTexturing);
     }
 
     renderMeshWasm(

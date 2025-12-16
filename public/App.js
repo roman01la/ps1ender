@@ -18108,9 +18108,11 @@ class MTLLoader {
       }
       const content = await response.text();
       const materials = MTLLoader.parse(content);
-      const urlParts = url.split("/");
-      urlParts.pop();
-      const textureBaseUrl = baseUrl || urlParts.join("/") + "/";
+      let textureBaseUrl = baseUrl;
+      if (!textureBaseUrl) {
+        const lastSlash = url.lastIndexOf("/");
+        textureBaseUrl = lastSlash >= 0 ? url.substring(0, lastSlash + 1) : "";
+      }
       for (const [name, material] of materials) {
         const texturePath = material.diffuseTexturePath;
         if (texturePath) {
@@ -18137,12 +18139,14 @@ class OBJLoader {
     let currentGroupName = "default";
     let mtlFile = null;
     let currentMaterial = null;
+    let currentSmoothGroup = 0;
     const groups = new Map;
     groups.set(currentGroupName, {
       vertices: [],
       indices: [],
       faceData: [],
-      material: null
+      material: null,
+      hasSmoothShading: false
     });
     const vertexCache = new Map;
     for (let lineNum = 0;lineNum < lines.length; lineNum++) {
@@ -18173,10 +18177,11 @@ class OBJLoader {
               vertices: [],
               indices: [],
               faceData: [],
-              material: currentMaterial
+              material: currentMaterial,
+              hasSmoothShading: false
             });
-            vertexCache.clear();
           }
+          vertexCache.clear();
           break;
         case "mtllib":
           mtlFile = parts.slice(1).join(" ");
@@ -18193,7 +18198,7 @@ class OBJLoader {
           const faceVertices = [];
           for (let i = 1;i < parts.length; i++) {
             const vertexData = parts[i];
-            const cacheKey = `${currentGroupName}:${vertexData}`;
+            const cacheKey = vertexData;
             if (vertexCache.has(cacheKey)) {
               faceVertices.push(vertexCache.get(cacheKey));
             } else {
@@ -18215,6 +18220,9 @@ class OBJLoader {
             }
           }
           group.faceData.push({ vertices: [...faceVertices] });
+          if (currentSmoothGroup > 0) {
+            group.hasSmoothShading = true;
+          }
           for (let i = 1;i < faceVertices.length - 1; i++) {
             group.indices.push(faceVertices[0]);
             group.indices.push(faceVertices[i]);
@@ -18222,6 +18230,12 @@ class OBJLoader {
           }
           break;
         case "s":
+          const smoothVal = parts[1]?.toLowerCase();
+          if (smoothVal === "off" || smoothVal === "0") {
+            currentSmoothGroup = 0;
+          } else {
+            currentSmoothGroup = parseInt(parts[1]) || 1;
+          }
           break;
         default:
           break;
@@ -18233,6 +18247,7 @@ class OBJLoader {
       if (data.vertices.length > 0 && data.indices.length > 0) {
         const mesh = new Mesh(data.vertices, data.indices);
         mesh.faceData = data.faceData;
+        mesh.smoothShading = data.hasSmoothShading;
         OBJLoader.calculateNormalsIfMissing(mesh);
         meshes.set(name, mesh);
         if (!defaultMesh) {
@@ -21815,7 +21830,7 @@ class VisualizationManager {
 class Editor {
   scene;
   mode = "object";
-  viewMode = "solid";
+  viewMode = "material";
   selection = new SelectionManager;
   transform = new TransformManager;
   meshEdit = new MeshEditManager;
@@ -23279,7 +23294,7 @@ function useEditorUIState(editorRef, sceneRef) {
   const [selectionMode, setSelectionMode] = import_react.useState("vertex");
   const [transformMode, setTransformMode] = import_react.useState("none");
   const [axisConstraint, setAxisConstraint] = import_react.useState("none");
-  const [viewMode, setViewMode] = import_react.useState("solid");
+  const [viewMode, setViewMode] = import_react.useState("material");
   const [sceneObjects, setSceneObjects] = import_react.useState([]);
   const [selectedObjectName, setSelectedObjectName] = import_react.useState(null);
   const [selectedPosition, setSelectedPosition] = import_react.useState(Vector3.zero());
@@ -23795,6 +23810,34 @@ function buildEdgeOnlyLines(obj, modelMatrix) {
   }
   return serializeLines(edgeVertices, edgeIndices, Matrix4.identity(), 65535);
 }
+function buildWireframeLines(obj, modelMatrix) {
+  const wireVertices = [];
+  const wireIndices = [];
+  const wireColor = new Color(200, 200, 200);
+  const edgeSet = new Set;
+  for (let i = 0;i < obj.mesh.indices.length; i += 3) {
+    const i0 = obj.mesh.indices[i];
+    const i1 = obj.mesh.indices[i + 1];
+    const i2 = obj.mesh.indices[i + 2];
+    const edges = [
+      [i0, i1],
+      [i1, i2],
+      [i2, i0]
+    ];
+    for (const [a, b] of edges) {
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (edgeSet.has(key))
+        continue;
+      edgeSet.add(key);
+      const p0 = obj.mesh.vertices[a].position;
+      const p1 = obj.mesh.vertices[b].position;
+      const baseIdx = wireVertices.length;
+      wireVertices.push(new Vertex(p0, wireColor), new Vertex(p1, wireColor));
+      wireIndices.push(baseIdx, baseIdx + 1);
+    }
+  }
+  return serializeLines(wireVertices, wireIndices, modelMatrix, -1);
+}
 function buildRenderFrame(ctx, textureChanged = false) {
   const { scene, editor, gridData, settings, renderWidth, renderHeight } = ctx;
   const viewMatrix = scene.camera.getViewMatrix();
@@ -23804,6 +23847,7 @@ function buildRenderFrame(ctx, textureChanged = false) {
     viewMatrix: serializeMatrix(viewMatrix),
     projectionMatrix: serializeMatrix(projectionMatrix),
     objects: [],
+    sceneLines: [],
     grid: null,
     overlays: {
       unselectedVertices: null,
@@ -23815,18 +23859,21 @@ function buildRenderFrame(ctx, textureChanged = false) {
       gizmo: null,
       originPoint: null
     },
-    texture: null
+    texture: null,
+    enableTexturing: false
   };
   if (settings.showGrid && gridData) {
     frame.grid = serializeLines(gridData.vertices, gridData.lineIndices, Matrix4.identity(), 65535);
   }
-  const edgeOnlyLines = [];
+  const isWireframeMode = editor.viewMode === "wireframe";
   for (const obj of scene.objects) {
     if (!obj.visible)
       continue;
     const modelMatrix = obj.getModelMatrix();
     if (isEdgeOnlyMesh(obj.mesh)) {
-      edgeOnlyLines.push(buildEdgeOnlyLines(obj, modelMatrix));
+      frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
+    } else if (isWireframeMode) {
+      frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
       frame.objects.push({
         mesh: serializeMesh2(obj.mesh),
@@ -23880,7 +23927,8 @@ function buildRenderFrame(ctx, textureChanged = false) {
       pointSize: 4
     };
   }
-  if (textureChanged && ctx.currentTexture) {
+  const texturingEnabled = editor.viewMode === "material";
+  if (ctx.currentTexture && (textureChanged || texturingEnabled)) {
     const tex = ctx.currentTexture;
     frame.texture = {
       slot: 0,
@@ -23889,6 +23937,7 @@ function buildRenderFrame(ctx, textureChanged = false) {
       data: new Uint8Array(tex.getData())
     };
   }
+  frame.enableTexturing = texturingEnabled;
   return frame;
 }
 
@@ -24925,11 +24974,31 @@ function App() {
     try {
       console.log(`Loading OBJ: ${url}`);
       const result = await OBJLoader.load(url, new Color(200, 200, 200));
-      const obj = new SceneObject(name, result.defaultMesh);
-      const center = result.defaultMesh.getCenter();
-      obj.position = new Vector3(-center.x, -center.y, -center.z);
-      scene.addObject(obj);
-      scene.selectObject(obj);
+      const meshEntries = Array.from(result.meshes.entries());
+      let firstObj = null;
+      let overallCenter = Vector3.zero();
+      let meshCount = 0;
+      for (const [, mesh] of meshEntries) {
+        const center = mesh.getCenter();
+        overallCenter = overallCenter.add(center);
+        meshCount++;
+      }
+      if (meshCount > 0) {
+        overallCenter = overallCenter.mul(1 / meshCount);
+      }
+      for (const [meshName, mesh] of meshEntries) {
+        const objectName = meshName !== "default" ? meshName : name;
+        const obj = new SceneObject(objectName, mesh);
+        obj.position = new Vector3(-overallCenter.x, -overallCenter.y, -overallCenter.z);
+        scene.addObject(obj);
+        if (!firstObj) {
+          firstObj = obj;
+        }
+        console.log(`Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`);
+      }
+      if (firstObj) {
+        scene.selectObject(firstObj);
+      }
       if (result.defaultTexture) {
         console.log("Loaded texture, enabling texturing");
         textureRef.current = result.defaultTexture;
@@ -24937,9 +25006,9 @@ function App() {
       }
       const size = result.defaultMesh.getSize();
       const maxDim = Math.max(size.x, size.y, size.z);
-      scene.camera.position = new Vector3(maxDim * 2, maxDim * 1.5, maxDim * 2);
+      scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
       scene.camera.target = Vector3.zero();
-      console.log(`Loaded OBJ with ${result.defaultMesh.triangles.length} triangles`);
+      console.log(`Loaded OBJ with ${meshEntries.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load OBJ file: ${error}`);
     }
@@ -25059,7 +25128,7 @@ function App() {
       resizeCanvas();
       workerClient.setSettings(buildRenderSettings(settings, editorRef.current.viewMode));
       workerClient.start();
-      loadOBJ("object.obj", "Monkey");
+      loadOBJ("roman_head.obj", "Monkey");
       window.addEventListener("resize", resizeCanvas);
       const inputManager = inputManagerRef.current;
       handleKeyDown = (e) => {

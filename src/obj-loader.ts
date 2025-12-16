@@ -42,6 +42,7 @@ export class OBJLoader {
     let currentGroupName = "default";
     let mtlFile: string | null = null;
     let currentMaterial: string | null = null;
+    let currentSmoothGroup = 0; // 0 = flat shading, >0 = smooth shading
     const groups: Map<
       string,
       {
@@ -49,6 +50,7 @@ export class OBJLoader {
         indices: number[];
         faceData: Face[];
         material: string | null;
+        hasSmoothShading: boolean;
       }
     > = new Map();
     groups.set(currentGroupName, {
@@ -56,6 +58,7 @@ export class OBJLoader {
       indices: [],
       faceData: [],
       material: null,
+      hasSmoothShading: false,
     });
 
     // Vertex cache for deduplication (OBJ uses indices into separate arrays)
@@ -109,9 +112,13 @@ export class OBJLoader {
               indices: [],
               faceData: [],
               material: currentMaterial,
+              hasSmoothShading: false,
             });
-            vertexCache.clear(); // Reset cache for new group
+            // Each group has its own vertex cache (local indices)
+            // but references global positions/normals/texCoords
           }
+          // Clear vertex cache for new group - each group has independent vertex indices
+          vertexCache.clear();
           break;
 
         case "mtllib": // Material library
@@ -134,7 +141,9 @@ export class OBJLoader {
           // Parse each vertex of the face
           for (let i = 1; i < parts.length; i++) {
             const vertexData = parts[i];
-            const cacheKey = `${currentGroupName}:${vertexData}`;
+            // Cache key is just the vertex data string (v/vt/vn indices)
+            // since we clear cache when switching groups
+            const cacheKey = vertexData;
 
             if (vertexCache.has(cacheKey)) {
               faceVertices.push(vertexCache.get(cacheKey)!);
@@ -182,6 +191,11 @@ export class OBJLoader {
           // Store face data (BMesh-style - preserves quads/n-gons)
           group.faceData.push({ vertices: [...faceVertices] });
 
+          // Track if this group uses smooth shading
+          if (currentSmoothGroup > 0) {
+            group.hasSmoothShading = true;
+          }
+
           // Triangulate face (fan triangulation for convex polygons)
           for (let i = 1; i < faceVertices.length - 1; i++) {
             group.indices.push(faceVertices[0]);
@@ -190,8 +204,13 @@ export class OBJLoader {
           }
           break;
 
-        case "s": // Smoothing group (not implemented)
-          // Silently ignore
+        case "s": // Smoothing group
+          const smoothVal = parts[1]?.toLowerCase();
+          if (smoothVal === "off" || smoothVal === "0") {
+            currentSmoothGroup = 0;
+          } else {
+            currentSmoothGroup = parseInt(parts[1]) || 1;
+          }
           break;
 
         default:
@@ -210,6 +229,9 @@ export class OBJLoader {
 
         // Set faceData from OBJ (preserves quads/n-gons)
         mesh.faceData = data.faceData;
+
+        // Set smooth shading based on OBJ smoothing groups
+        mesh.smoothShading = data.hasSmoothShading;
 
         // Calculate normals if not provided
         OBJLoader.calculateNormalsIfMissing(mesh);
