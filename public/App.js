@@ -18597,11 +18597,60 @@ function materialUsesTexture(material) {
   const outputNode = material.nodes.find((n) => n.type === "output");
   if (!outputNode)
     return false;
+  const visited = new Set;
+  function hasTextureInChain(nodeId, socketId) {
+    const key = `${nodeId}:${socketId}`;
+    if (visited.has(key))
+      return false;
+    visited.add(key);
+    const connection = material.connections.find((c) => c.toNodeId === nodeId && c.toSocketId === socketId);
+    if (!connection)
+      return false;
+    const sourceNode = material.nodes.find((n) => n.id === connection.fromNodeId);
+    if (!sourceNode)
+      return false;
+    if (sourceNode.type === "texture")
+      return true;
+    if (sourceNode.type === "mix") {
+      return hasTextureInChain(sourceNode.id, "color1") || hasTextureInChain(sourceNode.id, "color2");
+    }
+    return false;
+  }
+  return hasTextureInChain(outputNode.id, "color");
+}
+function bakeMaterialToTexture(material, width, height, textures) {
+  const result2 = new Texture(width, height);
+  const data = result2.getData();
+  for (let y = 0;y < height; y++) {
+    const v = 1 - (y + 0.5) / height;
+    for (let x = 0;x < width; x++) {
+      const u = (x + 0.5) / width;
+      const color = evaluateMaterial(material, { u, v, textures });
+      const idx = (y * width + x) * 4;
+      data[idx] = color.r;
+      data[idx + 1] = color.g;
+      data[idx + 2] = color.b;
+      data[idx + 3] = color.a;
+    }
+  }
+  result2.loaded = true;
+  return result2;
+}
+function materialNeedsBaking(material) {
+  const outputNode = material.nodes.find((n) => n.type === "output");
+  if (!outputNode)
+    return false;
   const connection = material.connections.find((c) => c.toNodeId === outputNode.id && c.toSocketId === "color");
   if (!connection)
     return false;
   const sourceNode = material.nodes.find((n) => n.id === connection.fromNodeId);
-  return sourceNode?.type === "texture";
+  if (!sourceNode)
+    return false;
+  if (sourceNode.type === "flat-color")
+    return false;
+  if (sourceNode.type === "texture")
+    return false;
+  return true;
 }
 function evaluateSocket(material, nodeId, socketId, ctx) {
   const connection = material.connections.find((c) => c.toNodeId === nodeId && c.toSocketId === socketId);
@@ -18621,8 +18670,23 @@ function evaluateNode(material, node, outputSocketId, ctx) {
       return hexToRGBA(colorHex);
     }
     case "texture": {
+      const textureId = node.data.textureId;
+      const imagePath = node.data.imagePath;
+      let texture;
+      if (ctx.textures) {
+        if (textureId) {
+          texture = ctx.textures.get(textureId);
+        }
+        if (!texture && imagePath) {
+          texture = ctx.textures.get(imagePath);
+        }
+      }
+      if (texture && texture.loaded) {
+        const color = texture.sample(ctx.u, ctx.v);
+        return { r: color.r, g: color.g, b: color.b, a: color.a };
+      }
       const checker = (Math.floor(ctx.u * 8) + Math.floor(ctx.v * 8)) % 2 === 0;
-      return checker ? { r: 200, g: 200, b: 200, a: 255 } : { r: 100, g: 100, b: 100, a: 255 };
+      return checker ? { r: 255, g: 0, b: 255, a: 255 } : { r: 0, g: 0, b: 0, a: 255 };
     }
     case "mix": {
       const blendMode = node.data.blendMode || "multiply";
@@ -18631,44 +18695,102 @@ function evaluateNode(material, node, outputSocketId, ctx) {
       const color2 = evaluateSocket(material, node.id, "color2", ctx);
       return blendColors(color1, color2, blendMode, factor);
     }
+    case "color-ramp": {
+      const stops = node.data.stops || [
+        { position: 0, color: "#000000" },
+        { position: 1, color: "#ffffff" }
+      ];
+      const factorColor = evaluateSocket(material, node.id, "fac", ctx);
+      const factor = Math.max(0, Math.min(1, factorColor.r / 255));
+      return evaluateColorRamp(stops, factor);
+    }
     case "output":
       return { r: 255, g: 0, b: 255, a: 255 };
     default:
       return { r: 255, g: 0, b: 255, a: 255 };
   }
 }
+var hexToRGBACache = new Map;
 function hexToRGBA(hex) {
+  const cached = hexToRGBACache.get(hex);
+  if (cached)
+    return cached;
   const h = hex.replace("#", "");
   const r = parseInt(h.substring(0, 2), 16) || 0;
   const g = parseInt(h.substring(2, 4), 16) || 0;
   const b = parseInt(h.substring(4, 6), 16) || 0;
   const a = h.length >= 8 ? parseInt(h.substring(6, 8), 16) : 255;
-  return { r, g, b, a };
+  const result2 = { r, g, b, a };
+  hexToRGBACache.set(hex, result2);
+  return result2;
 }
+var colorRampCache = new Map;
+function getProcessedColorRamp(stops) {
+  const key = stops.map((s) => `${s.position}:${s.color}`).join("|");
+  const cached = colorRampCache.get(key);
+  if (cached)
+    return cached;
+  const sortedStops = [...stops].sort((a, b) => a.position - b.position).map((s) => ({ position: s.position, color: hexToRGBA(s.color) }));
+  const result2 = { sortedStops };
+  colorRampCache.set(key, result2);
+  return result2;
+}
+function evaluateColorRamp(stops, position) {
+  const { sortedStops } = getProcessedColorRamp(stops);
+  if (sortedStops.length === 0) {
+    return { r: 0, g: 0, b: 0, a: 255 };
+  }
+  position = Math.max(0, Math.min(1, position));
+  let lowStop = sortedStops[0];
+  let highStop = sortedStops[sortedStops.length - 1];
+  for (let i = 0;i < sortedStops.length - 1; i++) {
+    if (position >= sortedStops[i].position && position <= sortedStops[i + 1].position) {
+      lowStop = sortedStops[i];
+      highStop = sortedStops[i + 1];
+      break;
+    }
+  }
+  if (position <= lowStop.position) {
+    return lowStop.color;
+  }
+  if (position >= highStop.position) {
+    return highStop.color;
+  }
+  const range = highStop.position - lowStop.position;
+  const t = range > 0 ? (position - lowStop.position) / range : 0;
+  const lowColor = lowStop.color;
+  const highColor = highStop.color;
+  return {
+    r: Math.round(lowColor.r + (highColor.r - lowColor.r) * t),
+    g: Math.round(lowColor.g + (highColor.g - lowColor.g) * t),
+    b: Math.round(lowColor.b + (highColor.b - lowColor.b) * t),
+    a: Math.round(lowColor.a + (highColor.a - lowColor.a) * t)
+  };
+}
+var clamp255 = (v) => Math.min(255, Math.max(0, Math.round(v)));
 function blendColors(color1, color2, mode, factor) {
-  const clamp = (v) => Math.min(255, Math.max(0, Math.round(v)));
   switch (mode) {
     case "multiply":
       return {
-        r: clamp(color1.r * color2.r / 255),
-        g: clamp(color1.g * color2.g / 255),
-        b: clamp(color1.b * color2.b / 255),
-        a: clamp(color1.a * color2.a / 255)
+        r: clamp255(color1.r * color2.r / 255),
+        g: clamp255(color1.g * color2.g / 255),
+        b: clamp255(color1.b * color2.b / 255),
+        a: clamp255(color1.a * color2.a / 255)
       };
     case "add":
       return {
-        r: clamp(color1.r + color2.r * factor),
-        g: clamp(color1.g + color2.g * factor),
-        b: clamp(color1.b + color2.b * factor),
-        a: clamp(color1.a)
+        r: clamp255(color1.r + color2.r * factor),
+        g: clamp255(color1.g + color2.g * factor),
+        b: clamp255(color1.b + color2.b * factor),
+        a: clamp255(color1.a)
       };
     case "mix":
     default:
       return {
-        r: clamp(color1.r * (1 - factor) + color2.r * factor),
-        g: clamp(color1.g * (1 - factor) + color2.g * factor),
-        b: clamp(color1.b * (1 - factor) + color2.b * factor),
-        a: clamp(color1.a * (1 - factor) + color2.a * factor)
+        r: clamp255(color1.r * (1 - factor) + color2.r * factor),
+        g: clamp255(color1.g * (1 - factor) + color2.g * factor),
+        b: clamp255(color1.b * (1 - factor) + color2.b * factor),
+        a: clamp255(color1.a * (1 - factor) + color2.a * factor)
       };
   }
 }
@@ -18735,7 +18857,7 @@ class MaterialRegistry {
     nodes.push({
       id: "output-1",
       type: "output",
-      x: 500,
+      x: 600,
       y: 150,
       width: 140,
       height: 80,
@@ -18743,21 +18865,91 @@ class MaterialRegistry {
       outputs: [],
       data: {}
     });
-    if (mtlMaterial.diffuseTexturePath) {
+    if (mtlMaterial.diffuseTexturePath && mtlMaterial.diffuseColor) {
+      const colorHex = rgbToHex(mtlMaterial.diffuseColor);
       nodes.push({
         id: "texture-1",
         type: "texture",
-        x: 150,
-        y: 100,
-        width: 160,
-        height: 80,
+        x: 100,
+        y: 80,
+        width: 180,
+        height: 100,
         inputs: [],
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false }
         ],
         data: {
           imagePath: mtlMaterial.diffuseTexturePath,
-          textureId: textureRegistry?.get(mtlMaterial.diffuseTexturePath)
+          textureId: textureRegistry?.get(mtlMaterial.diffuseTexturePath),
+          textureWidth: mtlMaterial.textureWidth || 0,
+          textureHeight: mtlMaterial.textureHeight || 0
+        }
+      });
+      nodes.push({
+        id: "flat-color-1",
+        type: "flat-color",
+        x: 100,
+        y: 200,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: colorHex }
+      });
+      nodes.push({
+        id: "mix-1",
+        type: "mix",
+        x: 350,
+        y: 130,
+        width: 160,
+        height: 120,
+        inputs: [
+          { id: "color1", name: "Color1", type: "color", isInput: true },
+          { id: "color2", name: "Color2", type: "color", isInput: true }
+        ],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { blendMode: "multiply", factor: 1 }
+      });
+      connections.push({
+        id: "conn-1",
+        fromNodeId: "texture-1",
+        fromSocketId: "color",
+        toNodeId: "mix-1",
+        toSocketId: "color1"
+      }, {
+        id: "conn-2",
+        fromNodeId: "flat-color-1",
+        fromSocketId: "color",
+        toNodeId: "mix-1",
+        toSocketId: "color2"
+      }, {
+        id: "conn-3",
+        fromNodeId: "mix-1",
+        fromSocketId: "color",
+        toNodeId: "output-1",
+        toSocketId: "color"
+      });
+    } else if (mtlMaterial.diffuseTexturePath) {
+      nodes.push({
+        id: "texture-1",
+        type: "texture",
+        x: 150,
+        y: 100,
+        width: 180,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: {
+          imagePath: mtlMaterial.diffuseTexturePath,
+          textureId: textureRegistry?.get(mtlMaterial.diffuseTexturePath),
+          textureWidth: mtlMaterial.textureWidth || 0,
+          textureHeight: mtlMaterial.textureHeight || 0
         }
       });
       connections.push({
@@ -18767,22 +18959,6 @@ class MaterialRegistry {
         toNodeId: "output-1",
         toSocketId: "color"
       });
-      if (mtlMaterial.diffuseColor) {
-        const colorHex = rgbToHex(mtlMaterial.diffuseColor);
-        nodes.push({
-          id: "flat-color-1",
-          type: "flat-color",
-          x: 150,
-          y: 220,
-          width: 160,
-          height: 100,
-          inputs: [],
-          outputs: [
-            { id: "color", name: "Color", type: "color", isInput: false }
-          ],
-          data: { color: colorHex }
-        });
-      }
     } else if (mtlMaterial.diffuseColor) {
       const colorHex = rgbToHex(mtlMaterial.diffuseColor);
       nodes.push({
@@ -19131,6 +19307,136 @@ class Scene {
 }
 
 // src/systems/history.ts
+class GenericHistoryStack {
+  undoStack = [];
+  redoStack = [];
+  maxLevels;
+  onChange = null;
+  constructor(maxLevels = 50) {
+    this.maxLevels = maxLevels;
+  }
+  setOnChange(callback) {
+    this.onChange = callback;
+  }
+  push(state) {
+    this.undoStack.push(state);
+    this.redoStack = [];
+    if (this.undoStack.length > this.maxLevels) {
+      this.undoStack.shift();
+    }
+    this.onChange?.();
+  }
+  popUndo(currentState) {
+    const state = this.undoStack.pop();
+    if (state !== undefined) {
+      this.redoStack.push(currentState);
+      this.onChange?.();
+      return state;
+    }
+    return null;
+  }
+  popRedo(currentState) {
+    const state = this.redoStack.pop();
+    if (state !== undefined) {
+      this.undoStack.push(currentState);
+      this.onChange?.();
+      return state;
+    }
+    return null;
+  }
+  canUndo() {
+    return this.undoStack.length > 0;
+  }
+  canRedo() {
+    return this.redoStack.length > 0;
+  }
+  clear() {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.onChange?.();
+  }
+  getStackSizes() {
+    return {
+      undo: this.undoStack.length,
+      redo: this.redoStack.length
+    };
+  }
+}
+
+class MultiStackHistoryManager {
+  genericStacks = new Map;
+  registeredStacks = new Map;
+  maxLevels;
+  constructor(maxLevels = 50) {
+    this.maxLevels = maxLevels;
+  }
+  getStack(stackId) {
+    let stack = this.genericStacks.get(stackId);
+    if (!stack) {
+      stack = new GenericHistoryStack(this.maxLevels);
+      this.genericStacks.set(stackId, stack);
+    }
+    return stack;
+  }
+  registerStack(stackId, stack) {
+    this.registeredStacks.set(stackId, stack);
+  }
+  getRegisteredStack(stackId) {
+    return this.registeredStacks.get(stackId);
+  }
+  clearStack(stackId) {
+    const genericStack = this.genericStacks.get(stackId);
+    if (genericStack) {
+      genericStack.clear();
+      return;
+    }
+    const registeredStack = this.registeredStacks.get(stackId);
+    if (registeredStack) {
+      registeredStack.clear();
+    }
+  }
+  clearAll() {
+    for (const stack of this.genericStacks.values()) {
+      stack.clear();
+    }
+    for (const stack of this.registeredStacks.values()) {
+      stack.clear();
+    }
+  }
+  deleteStack(stackId) {
+    this.genericStacks.delete(stackId);
+  }
+  unregisterStack(stackId) {
+    this.registeredStacks.delete(stackId);
+  }
+  getAllStackIds() {
+    return [
+      ...Array.from(this.genericStacks.keys()),
+      ...Array.from(this.registeredStacks.keys())
+    ];
+  }
+  getStatus() {
+    const status = new Map;
+    for (const [id, stack] of this.genericStacks) {
+      status.set(id, {
+        canUndo: stack.canUndo(),
+        canRedo: stack.canRedo(),
+        sizes: stack.getStackSizes()
+      });
+    }
+    for (const [id, stack] of this.registeredStacks) {
+      status.set(id, {
+        canUndo: stack.canUndo(),
+        canRedo: stack.canRedo(),
+        sizes: stack.getStackSizes()
+      });
+    }
+    return status;
+  }
+}
+var historyManager = new MultiStackHistoryManager(50);
+var HISTORY_STACK_3D_EDITOR = "3d-editor";
+
 class History {
   undoStack = [];
   redoStack = [];
@@ -20743,15 +21049,16 @@ class TransformManager {
     }
   }
   updateGrab(deltaX, deltaY, right, up, sensitivity, getAxisMovement, obj, isEditMode, ctrlKey = false, screenX = 0, screenY = 0, canvasWidth = 0, canvasHeight = 0, camera, selectedVertices) {
-    if (ctrlKey && isEditMode && this.vertexStartPositions.size > 0 && camera && selectedVertices && canvasWidth > 0 && canvasHeight > 0) {
-      const snapTarget = this.findSnapTarget(obj, screenX, screenY, canvasWidth, canvasHeight, camera, selectedVertices);
+    if (ctrlKey && isEditMode && this.vertexStartPositions.size > 0 && camera && canvasWidth > 0 && canvasHeight > 0) {
+      const transformingVertices = new Set(this.vertexStartPositions.keys());
+      const snapTarget = this.findSnapTarget(obj, screenX, screenY, canvasWidth, canvasHeight, camera, transformingVertices);
       if (snapTarget) {
         const mesh = obj.mesh;
         let center = Vector3.zero();
-        for (const idx of selectedVertices) {
+        for (const idx of transformingVertices) {
           center = center.add(mesh.vertices[idx].position);
         }
-        center = center.div(selectedVertices.size);
+        center = center.div(transformingVertices.size);
         let offset = snapTarget.sub(center);
         if (this._axisConstraint === "x") {
           offset = new Vector3(offset.x, 0, 0);
@@ -20766,7 +21073,7 @@ class TransformManager {
         } else if (this._axisConstraint === "xy") {
           offset = new Vector3(offset.x, offset.y, 0);
         }
-        for (const idx of selectedVertices) {
+        for (const idx of transformingVertices) {
           const pos = mesh.vertices[idx].position;
           mesh.vertices[idx].position = pos.add(offset);
         }
@@ -22054,6 +22361,73 @@ class PickingManager {
     }
     return result2;
   }
+  boxSelectVertices(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx) {
+    const result2 = [];
+    for (let i = 0;i < mesh.vertices.length; i++) {
+      const localPos = mesh.vertices[i].position;
+      const worldPos = modelMatrix.transformPoint(localPos);
+      const screen = this.projectToScreen(worldPos, ctx);
+      if (!screen)
+        continue;
+      if (screen.x >= boxMinX && screen.x <= boxMaxX && screen.y >= boxMinY && screen.y <= boxMaxY) {
+        result2.push(i);
+      }
+    }
+    return result2;
+  }
+  boxSelectEdges(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx) {
+    const result2 = [];
+    const edges = getMeshEdges2(mesh, true);
+    for (const edge of edges) {
+      const pos0 = mesh.vertices[edge.v0].position;
+      const pos1 = mesh.vertices[edge.v1].position;
+      const world0 = modelMatrix.transformPoint(pos0);
+      const world1 = modelMatrix.transformPoint(pos1);
+      const screen0 = this.projectToScreen(world0, ctx);
+      const screen1 = this.projectToScreen(world1, ctx);
+      if (!screen0 || !screen1)
+        continue;
+      const v0InBox = screen0.x >= boxMinX && screen0.x <= boxMaxX && screen0.y >= boxMinY && screen0.y <= boxMaxY;
+      const v1InBox = screen1.x >= boxMinX && screen1.x <= boxMaxX && screen1.y >= boxMinY && screen1.y <= boxMaxY;
+      if (v0InBox && v1InBox) {
+        result2.push(makeEdgeKey(edge.v0, edge.v1));
+      }
+    }
+    return result2;
+  }
+  boxSelectFaces(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx) {
+    const result2 = [];
+    for (let faceIdx = 0;faceIdx < mesh.faceData.length; faceIdx++) {
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      if (triangles.length === 0)
+        continue;
+      const vertexSet = new Set;
+      for (const triIdx of triangles) {
+        const base = triIdx * 3;
+        vertexSet.add(mesh.indices[base]);
+        vertexSet.add(mesh.indices[base + 1]);
+        vertexSet.add(mesh.indices[base + 2]);
+      }
+      let allInBox = true;
+      for (const vIdx of vertexSet) {
+        const localPos = mesh.vertices[vIdx].position;
+        const worldPos = modelMatrix.transformPoint(localPos);
+        const screen = this.projectToScreen(worldPos, ctx);
+        if (!screen) {
+          allInBox = false;
+          break;
+        }
+        if (screen.x < boxMinX || screen.x > boxMaxX || screen.y < boxMinY || screen.y > boxMaxY) {
+          allInBox = false;
+          break;
+        }
+      }
+      if (allInBox) {
+        result2.push(faceIdx);
+      }
+    }
+    return result2;
+  }
 }
 
 // src/systems/visualization.ts
@@ -22462,6 +22836,7 @@ class Editor {
   vertexPickRadius = 10;
   constructor(scene) {
     this.scene = scene;
+    historyManager.registerStack(HISTORY_STACK_3D_EDITOR, this.history);
   }
   makeEdgeKey(v0, v1) {
     return this.selection.makeEdgeKey(v0, v1);
@@ -22707,6 +23082,50 @@ class Editor {
       canvasWidth,
       canvasHeight
     });
+  }
+  boxSelectElements(boxMinX, boxMinY, boxMaxX, boxMaxY, canvasWidth, canvasHeight, shiftKey = false) {
+    if (this.mode !== "edit")
+      return false;
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0)
+      return false;
+    const obj = selected[0];
+    const mesh = obj.mesh;
+    const modelMatrix = obj.getModelMatrix();
+    const ctx = {
+      camera: this.scene.camera,
+      canvasWidth,
+      canvasHeight
+    };
+    const before = this.getSelectionState();
+    if (!shiftKey) {
+      this.clearEditSelections();
+    }
+    let changed = false;
+    if (this.selectionMode === "vertex") {
+      const vertices = this.picking.boxSelectVertices(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx);
+      for (const idx of vertices) {
+        this.selection.addVertex(idx);
+        changed = true;
+      }
+    } else if (this.selectionMode === "edge") {
+      const edges = this.picking.boxSelectEdges(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx);
+      for (const key of edges) {
+        this.selection.addEdgeByKey(key);
+        changed = true;
+      }
+    } else if (this.selectionMode === "face") {
+      const faces = this.picking.boxSelectFaces(boxMinX, boxMinY, boxMaxX, boxMaxY, mesh, modelMatrix, ctx);
+      for (const idx of faces) {
+        this.selection.addFace(idx);
+        changed = true;
+      }
+    }
+    if (changed) {
+      const after = this.getSelectionState();
+      this.recordSelectionChange(before, after, "Box Select");
+    }
+    return changed;
   }
   toggleMode() {
     const before = this.getModeState();
@@ -23414,6 +23833,51 @@ class Editor {
         } else if (state.startPos) {
           const obj = selected[0];
           obj.position = state.startPos.clone();
+          this.transform.resetTransformOrigin(obj.getWorldCenter());
+        }
+      }
+    }
+    if (this.transform.mode === "rotate") {
+      const selected = this.scene.getSelectedObjects();
+      if (selected.length > 0) {
+        const state = this.transform.getState();
+        if (this.mode === "edit" && state.vertexStartPositions.size > 0) {
+          const obj = selected[0];
+          const mesh = obj.mesh;
+          for (const [idx, startPos] of state.vertexStartPositions) {
+            mesh.vertices[idx].position = startPos.clone();
+          }
+          mesh.rebuildTriangles();
+          mesh.recalculateNormals();
+          let center = Vector3.zero();
+          for (const [, pos] of state.vertexStartPositions) {
+            center = center.add(pos);
+          }
+          center = center.div(state.vertexStartPositions.size);
+          const modelMatrix = obj.getModelMatrix();
+          this.transform.resetTransformOrigin(modelMatrix.transformPoint(center));
+        } else if (this.transform.isMultiObjectTransform) {
+          const startRotations = this.transform.getMultiObjectStartRotations();
+          const startPositions = this.transform.getMultiObjectStartPositions();
+          for (const obj of selected) {
+            const startRot = startRotations.get(obj.name);
+            const startPos = startPositions.get(obj.name);
+            if (startRot) {
+              obj.rotation = startRot.clone();
+            }
+            if (startPos) {
+              obj.position = startPos.clone();
+            }
+          }
+          let center = Vector3.zero();
+          for (const pos of startPositions.values()) {
+            center = center.add(pos);
+          }
+          center = center.div(startPositions.size);
+          this.transform.resetTransformOrigin(center);
+        } else if (state.startRotation) {
+          const obj = selected[0];
+          obj.rotation = state.startRotation.clone();
           this.transform.resetTransformOrigin(obj.getWorldCenter());
         }
       }
@@ -24272,18 +24736,52 @@ class RenderWorkerClient {
 }
 
 // src/systems/worker-render-loop.ts
+var bakedMaterialCache = new Map;
+function getBakeCacheKey(materialId, texture) {
+  return `${materialId}:${hashTexture(texture)}`;
+}
+function hashMaterial(material) {
+  const nodeData = material.nodes.map((n) => ({
+    id: n.id,
+    type: n.type,
+    data: n.data
+  }));
+  const connections = material.connections.map((c) => ({
+    from: `${c.fromNodeId}:${c.fromSocketId}`,
+    to: `${c.toNodeId}:${c.toSocketId}`
+  }));
+  return JSON.stringify({ nodes: nodeData, connections });
+}
+function hashTexture(texture) {
+  if (!texture)
+    return "none";
+  const data = texture.getData();
+  const sample = [
+    data[0],
+    data[1],
+    data[2],
+    data[data.length - 3],
+    data[data.length - 2],
+    data[data.length - 1]
+  ];
+  return `${texture.width}x${texture.height}:${sample.join(",")}`;
+}
 function serializeMatrix(m) {
   return new Float32Array(m.data);
 }
-function serializeMesh2(mesh, material) {
+function serializeMesh2(mesh, material, textureSampler, useWhiteColors = false) {
   const vertexCount = mesh.vertices.length;
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Uint8Array(vertexCount * 4);
   let materialColor = null;
-  if (material) {
-    materialColor = evaluateMaterial(material, { u: 0, v: 0 });
+  if (material && !useWhiteColors) {
+    materialColor = evaluateMaterial(material, {
+      u: 0,
+      v: 0,
+      textures: textureSampler
+    });
   }
   for (let i = 0;i < vertexCount; i++) {
     const v = mesh.vertices[i];
@@ -24298,7 +24796,12 @@ function serializeMesh2(mesh, material) {
     normals[p + 2] = v.normal.z;
     uvs[uv] = v.u;
     uvs[uv + 1] = v.v;
-    if (materialColor) {
+    if (useWhiteColors) {
+      colors[c] = 255;
+      colors[c + 1] = 255;
+      colors[c + 2] = 255;
+      colors[c + 3] = 255;
+    } else if (materialColor) {
       colors[c] = materialColor.r;
       colors[c + 1] = materialColor.g;
       colors[c + 2] = materialColor.b;
@@ -24505,19 +25008,58 @@ function buildRenderFrame(ctx, textureChanged = false) {
     frame.grid = serializeLines(gridData.vertices, gridData.lineIndices, Matrix4.identity(), 65535);
   }
   const isWireframeMode = editor.viewMode === "wireframe";
+  const textureSampler = new Map;
+  if (ctx.currentTexture) {
+    textureSampler.set("default", ctx.currentTexture);
+  }
+  let bakedTexture = null;
+  let objectTexture = null;
   for (const obj of scene.objects) {
     if (!obj.visible)
       continue;
     const modelMatrix = obj.getModelMatrix();
     const material = obj.materialId ? scene.materials.get(obj.materialId) : undefined;
+    if (obj.texture) {
+      textureSampler.set("default", obj.texture);
+      objectTexture = obj.texture;
+      if (material) {
+        for (const node of material.nodes) {
+          if (node.type === "texture" && node.data.imagePath) {
+            textureSampler.set(node.data.imagePath, obj.texture);
+          }
+        }
+      }
+    }
     if (isEdgeOnlyMesh(obj.mesh)) {
       frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
     } else if (isWireframeMode) {
       frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
-      const useTexture = material ? materialUsesTexture(material) && !!obj.texture : false;
+      const needsBaking = material ? materialNeedsBaking(material) : false;
+      let useTexture = material ? materialUsesTexture(material) && !!obj.texture : false;
+      if (needsBaking && material) {
+        const bakeWidth = obj.texture?.width || 256;
+        const bakeHeight = obj.texture?.height || 256;
+        const materialHash = hashMaterial(material);
+        const cacheKey = getBakeCacheKey(material.id, obj.texture);
+        const cached = bakedMaterialCache.get(cacheKey);
+        if (cached && cached.materialHash === materialHash) {
+          bakedTexture = cached.texture;
+        } else {
+          const bakeStart = performance.now();
+          bakedTexture = bakeMaterialToTexture(material, bakeWidth, bakeHeight, textureSampler);
+          const bakeTime = performance.now() - bakeStart;
+          console.log(`Material bake: ${bakeWidth}x${bakeHeight} in ${bakeTime.toFixed(2)}ms`);
+          bakedMaterialCache.set(cacheKey, {
+            texture: bakedTexture,
+            materialHash,
+            textureHash: hashTexture(obj.texture)
+          });
+        }
+        useTexture = true;
+      }
       frame.objects.push({
-        mesh: serializeMesh2(obj.mesh, material),
+        mesh: serializeMesh2(obj.mesh, material, textureSampler, useTexture),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,
         smoothShading: obj.mesh.smoothShading,
@@ -24570,16 +25112,16 @@ function buildRenderFrame(ctx, textureChanged = false) {
     };
   }
   const texturingEnabled = editor.viewMode === "material";
-  if (ctx.currentTexture && (textureChanged || texturingEnabled)) {
-    const tex = ctx.currentTexture;
+  const textureToSend = bakedTexture || objectTexture || ctx.currentTexture;
+  if (textureToSend && (textureChanged || texturingEnabled || bakedTexture)) {
     frame.texture = {
       slot: 0,
-      width: tex.width,
-      height: tex.height,
-      data: new Uint8Array(tex.getData())
+      width: textureToSend.width,
+      height: textureToSend.height,
+      data: new Uint8Array(textureToSend.getData())
     };
   }
-  frame.enableTexturing = texturingEnabled;
+  frame.enableTexturing = texturingEnabled || bakedTexture !== null;
   return frame;
 }
 
@@ -24815,7 +25357,8 @@ var NODE_COLORS = {
   output: "#6b3a3a",
   texture: "#6b5a3a",
   "flat-color": "#5a3a6b",
-  mix: "#3a5a6b"
+  mix: "#3a5a6b",
+  "color-ramp": "#3a6b5a"
 };
 var SOCKET_COLORS = {
   color: "#c7c729",
@@ -24842,13 +25385,13 @@ function createNode(type, x, y) {
         type,
         x,
         y,
-        width: 160,
-        height: 80,
+        width: 180,
+        height: 100,
         inputs: [],
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false }
         ],
-        data: { imagePath: "" }
+        data: { imagePath: "", textureWidth: 0, textureHeight: 0 }
       };
     case "flat-color":
       return {
@@ -24881,6 +25424,25 @@ function createNode(type, x, y) {
         ],
         data: { blendMode: "multiply", factor: 1 }
       };
+    case "color-ramp":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 200,
+        height: 140,
+        inputs: [{ id: "fac", name: "Fac", type: "float", isInput: true }],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: {
+          stops: [
+            { position: 0, color: "#000000" },
+            { position: 1, color: "#ffffff" }
+          ]
+        }
+      };
     default:
       throw new Error(`Unknown node type: ${type}`);
   }
@@ -24895,6 +25457,8 @@ function getNodeTitle(type) {
       return "Flat Color";
     case "mix":
       return "Mix";
+    case "color-ramp":
+      return "Color Ramp";
     default:
       return type;
   }
@@ -24914,6 +25478,48 @@ function NodeEditor({
   const [selectedNodeId, setSelectedNodeId] = import_react2.useState(null);
   const [pan, setPan] = import_react2.useState({ x: 0, y: 0 });
   const [zoom, setZoom] = import_react2.useState(1);
+  const historyStackId = selectedMaterialId ? `shader-editor:${selectedMaterialId}` : "shader-editor:default";
+  const historyStackRef = import_react2.useRef(null);
+  const isUndoingRef = import_react2.useRef(false);
+  const [, forceUpdate] = import_react2.useState(0);
+  import_react2.useEffect(() => {
+    historyStackRef.current = historyManager.getStack(historyStackId);
+    historyStackRef.current.setOnChange(() => forceUpdate((n) => n + 1));
+    return () => {
+      historyStackRef.current?.setOnChange(null);
+    };
+  }, [historyStackId]);
+  const pushUndo = import_react2.useCallback(() => {
+    if (isUndoingRef.current || !historyStackRef.current)
+      return;
+    historyStackRef.current.push({ nodes, connections });
+  }, [nodes, connections]);
+  const undo = import_react2.useCallback(() => {
+    if (!historyStackRef.current?.canUndo())
+      return;
+    isUndoingRef.current = true;
+    const prevState = historyStackRef.current.popUndo({ nodes, connections });
+    if (prevState) {
+      setNodes(prevState.nodes);
+      setConnections(prevState.connections);
+    }
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+  }, [nodes, connections]);
+  const redo = import_react2.useCallback(() => {
+    if (!historyStackRef.current?.canRedo())
+      return;
+    isUndoingRef.current = true;
+    const nextState = historyStackRef.current.popRedo({ nodes, connections });
+    if (nextState) {
+      setNodes(nextState.nodes);
+      setConnections(nextState.connections);
+    }
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+  }, [nodes, connections]);
   import_react2.useEffect(() => {
     if (material) {
       setNodes(material.nodes);
@@ -24939,6 +25545,7 @@ function NodeEditor({
   const [dragging, setDragging] = import_react2.useState(null);
   const [pendingConnection, setPendingConnection] = import_react2.useState(null);
   const [contextMenu, setContextMenu] = import_react2.useState(null);
+  const [draggingStop, setDraggingStop] = import_react2.useState(null);
   const mousePositionRef = import_react2.useRef({ x: 0, y: 0 });
   const isMouseOverRef = import_react2.useRef(false);
   const getSocketPosition = import_react2.useCallback((node, socket) => {
@@ -24957,6 +25564,25 @@ function NodeEditor({
     const y = node.y + headerHeight + 16 + socketIndex * socketSpacing;
     return { x, y };
   }, []);
+  const findConnectionAt = import_react2.useCallback((canvasX, canvasY, threshold = 15) => {
+    for (const conn of connections) {
+      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
+      const toNode = nodes.find((n) => n.id === conn.toNodeId);
+      if (!fromNode || !toNode)
+        continue;
+      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
+      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
+      if (!fromSocket || !toSocket)
+        continue;
+      const fromPos = getSocketPosition(fromNode, fromSocket);
+      const toPos = getSocketPosition(toNode, toSocket);
+      const dist = distanceToBezier(canvasX, canvasY, fromPos, toPos);
+      if (dist < threshold) {
+        return conn;
+      }
+    }
+    return null;
+  }, [connections, nodes, getSocketPosition]);
   const screenToCanvas = import_react2.useCallback((screenX, screenY) => {
     const container = containerRef.current;
     if (!container)
@@ -25080,17 +25706,65 @@ function NodeEditor({
     }
   }, [dragging, zoom, pendingConnection, screenToCanvas]);
   const handleMouseUp = import_react2.useCallback((e) => {
+    if (dragging?.type === "node" && dragging.nodeId) {
+      const droppedNode = nodes.find((n) => n.id === dragging.nodeId);
+      if (droppedNode) {
+        const nodeCenterX = droppedNode.x + droppedNode.width / 2;
+        const nodeCenterY = droppedNode.y + droppedNode.height / 2;
+        const hitConnection = findConnectionAt(nodeCenterX, nodeCenterY);
+        if (hitConnection && droppedNode.id !== hitConnection.fromNodeId && droppedNode.id !== hitConnection.toNodeId) {
+          const hasInput = droppedNode.inputs.length > 0;
+          const hasOutput = droppedNode.outputs.length > 0;
+          if (hasInput && hasOutput) {
+            const fromNode = nodes.find((n) => n.id === hitConnection.fromNodeId);
+            const toNode = nodes.find((n) => n.id === hitConnection.toNodeId);
+            const fromSocket = fromNode?.outputs.find((s) => s.id === hitConnection.fromSocketId);
+            const toSocket = toNode?.inputs.find((s) => s.id === hitConnection.toSocketId);
+            if (fromSocket && toSocket) {
+              const compatibleInput = droppedNode.inputs.find((s) => s.type === fromSocket.type || fromSocket.type === "color" && s.type === "float");
+              const compatibleOutput = droppedNode.outputs.find((s) => s.type === toSocket.type || s.type === "color" && toSocket.type === "float");
+              if (compatibleInput && compatibleOutput) {
+                pushUndo();
+                setConnections((prev) => {
+                  const filtered = prev.filter((c) => c.id !== hitConnection.id);
+                  return [
+                    ...filtered,
+                    {
+                      id: `conn-${Date.now()}-1`,
+                      fromNodeId: hitConnection.fromNodeId,
+                      fromSocketId: hitConnection.fromSocketId,
+                      toNodeId: droppedNode.id,
+                      toSocketId: compatibleInput.id
+                    },
+                    {
+                      id: `conn-${Date.now()}-2`,
+                      fromNodeId: droppedNode.id,
+                      fromSocketId: compatibleOutput.id,
+                      toNodeId: hitConnection.toNodeId,
+                      toSocketId: hitConnection.toSocketId
+                    }
+                  ];
+                });
+              }
+            }
+          }
+        }
+      }
+    }
     if (dragging?.type === "socket" && pendingConnection) {
       const canvasPos = screenToCanvas(e.clientX, e.clientY);
       const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
       if (socketHit) {
         const { node: targetNode, socket: targetSocket } = socketHit;
-        const canConnect = targetNode.id !== pendingConnection.fromNodeId && targetSocket.isInput !== pendingConnection.isInput && targetSocket.type === "color";
+        const sourceNode = nodes.find((n) => n.id === pendingConnection.fromNodeId);
+        const sourceSocket = sourceNode ? [...sourceNode.inputs, ...sourceNode.outputs].find((s) => s.id === pendingConnection.fromSocketId) : null;
+        const canConnect = targetNode.id !== pendingConnection.fromNodeId && targetSocket.isInput !== pendingConnection.isInput && (sourceSocket?.type === targetSocket.type || sourceSocket?.type === "color" && targetSocket.type === "float");
         if (canConnect) {
           const fromNode = pendingConnection.isInput ? targetNode.id : pendingConnection.fromNodeId;
           const fromSocket = pendingConnection.isInput ? targetSocket.id : pendingConnection.fromSocketId;
           const toNode = pendingConnection.isInput ? pendingConnection.fromNodeId : targetNode.id;
           const toSocket = pendingConnection.isInput ? pendingConnection.fromSocketId : targetSocket.id;
+          pushUndo();
           setConnections((prev) => {
             const filtered = prev.filter((c) => !(c.toNodeId === toNode && c.toSocketId === toSocket));
             return [
@@ -25109,7 +25783,15 @@ function NodeEditor({
     }
     setDragging(null);
     setPendingConnection(null);
-  }, [dragging, pendingConnection, screenToCanvas, findSocketAt]);
+  }, [
+    dragging,
+    pendingConnection,
+    screenToCanvas,
+    findSocketAt,
+    nodes,
+    findConnectionAt,
+    pushUndo
+  ]);
   const getSocketType = (nodeId, socketId) => {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node)
@@ -25124,8 +25806,16 @@ function NodeEditor({
     const handleWheel = (e) => {
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) {
-        const delta = e.deltaY > 0 ? 0.99 : 1.01;
-        setZoom((prev) => Math.max(0.25, Math.min(2, prev * delta)));
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomFactor = e.deltaY > 0 ? 0.99 : 1.01;
+        const newZoom = Math.max(0.25, Math.min(2, zoom * zoomFactor));
+        const actualFactor = newZoom / zoom;
+        const newPanX = mouseX - (mouseX - pan.x) * actualFactor;
+        const newPanY = mouseY - (mouseY - pan.y) * actualFactor;
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
       } else {
         setPan((prev) => ({
           x: prev.x - e.deltaX,
@@ -25135,26 +25825,28 @@ function NodeEditor({
     };
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, []);
+  }, [zoom, pan]);
   const handleAddNode = import_react2.useCallback((type) => {
     if (!contextMenu)
       return;
+    pushUndo();
     const canvasPos = screenToCanvas(contextMenu.x, contextMenu.y);
     const newNode = createNode(type, canvasPos.x, canvasPos.y);
     setNodes((prev) => [...prev, newNode]);
     setContextMenu(null);
     setSelectedNodeId(newNode.id);
-  }, [contextMenu, screenToCanvas]);
+  }, [contextMenu, screenToCanvas, pushUndo]);
   const handleDeleteNode = import_react2.useCallback(() => {
     if (!selectedNodeId)
       return;
     const node = nodes.find((n) => n.id === selectedNodeId);
     if (node?.type === "output")
       return;
+    pushUndo();
     setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
     setConnections((prev) => prev.filter((c) => c.fromNodeId !== selectedNodeId && c.toNodeId !== selectedNodeId));
     setSelectedNodeId(null);
-  }, [selectedNodeId, nodes]);
+  }, [selectedNodeId, nodes, pushUndo]);
   import_react2.useEffect(() => {
     const handleKeyDown2 = (e) => {
       if (e.key === "Escape") {
@@ -25163,6 +25855,18 @@ function NodeEditor({
       }
       if (!isMouseOverRef.current)
         return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        undo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key.toLowerCase() === "z" || !e.shiftKey && e.key.toLowerCase() === "y")) {
+        e.preventDefault();
+        e.stopPropagation();
+        redo();
+        return;
+      }
       if (e.shiftKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         e.stopPropagation();
@@ -25180,7 +25884,7 @@ function NodeEditor({
     };
     window.addEventListener("keydown", handleKeyDown2);
     return () => window.removeEventListener("keydown", handleKeyDown2);
-  }, [handleDeleteNode, contextMenu]);
+  }, [handleDeleteNode, contextMenu, undo, redo]);
   import_react2.useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -25261,9 +25965,13 @@ function NodeEditor({
   return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
     ref: containerRef,
     className: "node-editor",
+    style: { position: "relative" },
     onMouseDown: (e) => {
+      const target = e.target;
+      if (target.tagName === "INPUT" || target.tagName === "BUTTON") {
+        return;
+      }
       if (contextMenu) {
-        const target = e.target;
         if (!target.closest(".node-context-menu")) {
           setContextMenu(null);
         }
@@ -25272,9 +25980,37 @@ function NodeEditor({
     },
     onMouseMove: (e) => {
       mousePositionRef.current = { x: e.clientX, y: e.clientY };
+      if (draggingStop) {
+        const container = containerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const relativeX = mouseX - draggingStop.rampX;
+          const newPosition = Math.max(0, Math.min(1, relativeX / draggingStop.rampW));
+          setNodes((prev) => prev.map((n) => {
+            if (n.id === draggingStop.nodeId) {
+              const stops = [...n.data.stops];
+              stops[draggingStop.stopIndex] = {
+                ...stops[draggingStop.stopIndex],
+                position: newPosition
+              };
+              stops.sort((a, b) => a.position - b.position);
+              return { ...n, data: { ...n.data, stops } };
+            }
+            return n;
+          }));
+        }
+        return;
+      }
       handleMouseMove(e);
     },
-    onMouseUp: handleMouseUp,
+    onMouseUp: (e) => {
+      if (draggingStop) {
+        setDraggingStop(null);
+        return;
+      }
+      handleMouseUp(e);
+    },
     onMouseEnter: () => {
       isMouseOverRef.current = true;
     },
@@ -25331,6 +26067,14 @@ function NodeEditor({
           /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
             onClick: () => handleAddNode("texture"),
             children: "Texture"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+            onClick: () => handleAddNode("mix"),
+            children: "Mix"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+            onClick: () => handleAddNode("color-ramp"),
+            children: "Color Ramp"
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
@@ -25338,25 +26082,156 @@ function NodeEditor({
         const container = containerRef.current;
         if (!container)
           return null;
-        const rect = container.getBoundingClientRect();
-        const screenX = node.x * zoom + pan.x + 12;
-        const screenY = node.y * zoom + pan.y + 24 + 36;
+        const screenX = node.x * zoom + pan.x + 12 * zoom;
+        const screenY = node.y * zoom + pan.y + 24 * zoom + 36 * zoom;
         const swatchW = (node.width - 24) * zoom;
         const swatchH = 24 * zoom;
         return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
           type: "color",
           className: "node-color-picker",
           value: node.data.color || "#808080",
+          onFocus: () => pushUndo(),
           onChange: (e) => {
             setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, color: e.target.value } } : n));
           },
           style: {
+            position: "absolute",
             left: screenX,
             top: screenY,
             width: swatchW,
-            height: swatchH
+            height: swatchH,
+            zIndex: 10
           }
         }, node.id, false, undefined, this);
+      }),
+      nodes.filter((n) => n.type === "color-ramp").map((node) => {
+        const stops = node.data.stops || [
+          { position: 0, color: "#000000" },
+          { position: 1, color: "#ffffff" }
+        ];
+        const rampX = node.x * zoom + pan.x + 8 * zoom;
+        const rampY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const rampW = (node.width - 16) * zoom;
+        const rampH = 24 * zoom;
+        return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(import_react2.default.Fragment, {
+          children: [
+            stops.map((stop, idx) => {
+              const markerX = rampX + stop.position * rampW - 8 * zoom;
+              const markerY = rampY + rampH + 4 * zoom;
+              return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+                className: "color-ramp-stop",
+                style: {
+                  position: "absolute",
+                  left: markerX,
+                  top: markerY,
+                  width: 16 * zoom,
+                  height: 16 * zoom,
+                  backgroundColor: stop.color,
+                  border: "2px solid #fff",
+                  borderRadius: 2,
+                  cursor: "ew-resize",
+                  zIndex: 10,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.5)"
+                },
+                title: `Stop ${idx + 1} (${(stop.position * 100).toFixed(0)}%) - Drag to move, click to change color`,
+                onMouseDown: (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  pushUndo();
+                  setDraggingStop({
+                    nodeId: node.id,
+                    stopIndex: idx,
+                    rampX,
+                    rampW
+                  });
+                },
+                onDoubleClick: (e) => {
+                  e.stopPropagation();
+                  pushUndo();
+                  const colorInput = document.getElementById(`color-input-${node.id}-${idx}`);
+                  colorInput?.click();
+                },
+                children: /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
+                  id: `color-input-${node.id}-${idx}`,
+                  type: "color",
+                  value: stop.color,
+                  onChange: (e) => {
+                    const newStops = [...stops];
+                    newStops[idx] = { ...stop, color: e.target.value };
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                  },
+                  style: {
+                    position: "absolute",
+                    opacity: 0,
+                    width: "100%",
+                    height: "100%",
+                    cursor: "ew-resize"
+                  },
+                  onClick: (e) => e.stopPropagation()
+                }, undefined, false, undefined, this)
+              }, `${node.id}-stop-${idx}`, false, undefined, this);
+            }),
+            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+              className: "color-ramp-buttons",
+              style: {
+                position: "absolute",
+                left: rampX,
+                top: rampY + rampH + 24 * zoom,
+                display: "flex",
+                gap: 4,
+                zIndex: 10
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+                  style: {
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    background: "#444",
+                    border: "1px solid #666",
+                    color: "#fff",
+                    borderRadius: 2
+                  },
+                  onClick: () => {
+                    pushUndo();
+                    const newPos = stops.length === 0 ? 0.5 : stops[Math.floor(stops.length / 2)]?.position || 0.5;
+                    const newStops = [
+                      ...stops,
+                      {
+                        position: Math.min(0.99, newPos + 0.1),
+                        color: "#888888"
+                      }
+                    ].sort((a, b) => a.position - b.position);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                  },
+                  title: "Add stop",
+                  children: "+"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+                  style: {
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    cursor: stops.length <= 2 ? "not-allowed" : "pointer",
+                    background: stops.length <= 2 ? "#333" : "#444",
+                    border: "1px solid #666",
+                    color: stops.length <= 2 ? "#666" : "#fff",
+                    borderRadius: 2
+                  },
+                  onClick: () => {
+                    if (stops.length > 2) {
+                      pushUndo();
+                      const newStops = stops.filter((_, i) => i !== Math.floor(stops.length / 2));
+                      setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                    }
+                  },
+                  disabled: stops.length <= 2,
+                  title: "Remove stop",
+                  children: "−"
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, node.id, true, undefined, this);
       })
     ]
   }, undefined, true, undefined, this);
@@ -25444,6 +26319,57 @@ function drawNode(ctx, node, selected, zoom) {
     ctx.lineWidth = 1 / zoom;
     ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
   }
+  if (type === "texture") {
+    const infoY = y + headerHeight + 36;
+    ctx.font = "10px 'Pixelify Sans', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#888888";
+    const imagePath = node.data.imagePath || "";
+    const filename = imagePath ? imagePath.split("/").pop() || imagePath : "No texture";
+    const maxChars = 20;
+    const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
+    ctx.fillText(displayName, x + 8, infoY);
+    const texW = node.data.textureWidth || 0;
+    const texH = node.data.textureHeight || 0;
+    if (texW > 0 && texH > 0) {
+      ctx.fillStyle = "#666666";
+      ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+    }
+  }
+  if (type === "color-ramp") {
+    const stops = node.data.stops || [
+      { position: 0, color: "#000000" },
+      { position: 1, color: "#ffffff" }
+    ];
+    const sortedStops = [...stops].sort((a, b) => a.position - b.position);
+    const rampX = x + 8;
+    const rampY = y + headerHeight + 32;
+    const rampW = width - 16;
+    const rampH = 24;
+    const gradient = ctx.createLinearGradient(rampX, 0, rampX + rampW, 0);
+    for (const stop of sortedStops) {
+      gradient.addColorStop(stop.position, stop.color);
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(rampX, rampY, rampW, rampH);
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(rampX, rampY, rampW, rampH);
+    for (const stop of sortedStops) {
+      const markerX = rampX + stop.position * rampW;
+      const markerY = rampY + rampH;
+      ctx.beginPath();
+      ctx.moveTo(markerX, markerY);
+      ctx.lineTo(markerX - 4, markerY + 8);
+      ctx.lineTo(markerX + 4, markerY + 8);
+      ctx.closePath();
+      ctx.fillStyle = stop.color;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1 / zoom;
+      ctx.stroke();
+    }
+  }
 }
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -25468,6 +26394,27 @@ function roundRectTop(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+function distanceToBezier(px, py, from, to) {
+  const dx = Math.abs(to.x - from.x);
+  const controlDist = Math.max(50, dx * 0.5);
+  let minDist = Infinity;
+  const samples = 20;
+  for (let i = 0;i <= samples; i++) {
+    const t = i / samples;
+    const t1 = 1 - t;
+    const cp1x = from.x + controlDist;
+    const cp1y = from.y;
+    const cp2x = to.x - controlDist;
+    const cp2y = to.y;
+    const x = t1 * t1 * t1 * from.x + 3 * t1 * t1 * t * cp1x + 3 * t1 * t * t * cp2x + t * t * t * to.x;
+    const y = t1 * t1 * t1 * from.y + 3 * t1 * t1 * t * cp1y + 3 * t1 * t * t * cp2y + t * t * t * to.y;
+    const dist = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+    if (dist < minDist) {
+      minDist = dist;
+    }
+  }
+  return minDist;
 }
 
 // src/components/SceneTree.tsx
@@ -27082,17 +28029,21 @@ function App() {
       workerClient.setRenderResolution(baseWidth, baseHeight);
     }
   }, []);
-  const loadOBJ = import_react9.useCallback(async (url, name) => {
+  const loadOBJ = import_react9.useCallback(async (url) => {
     const scene = sceneRef.current;
     try {
       console.log(`Loading OBJ: ${url}`);
       const result2 = await OBJLoader.load(url, new Color(200, 200, 200));
       const mtlToShaderMaterial = new Map;
       for (const [mtlName, mtlMat] of result2.materials) {
+        const texWidth = result2.defaultTexture?.width || 0;
+        const texHeight = result2.defaultTexture?.height || 0;
         const shaderMat = scene.materials.createFromMTL({
           name: mtlName,
           diffuseColor: mtlMat.diffuseColor,
-          diffuseTexturePath: mtlMat.diffuseTexturePath
+          diffuseTexturePath: mtlMat.diffuseTexturePath,
+          textureWidth: texWidth,
+          textureHeight: texHeight
         });
         mtlToShaderMaterial.set(mtlName, shaderMat.id);
         console.log(`Created shader material "${mtlName}" from MTL`);
@@ -27111,7 +28062,7 @@ function App() {
       }
       const createdObjects = [];
       for (const [meshName, mesh] of meshEntries) {
-        const objectName = meshName !== "default" ? meshName : name;
+        const objectName = meshName !== "default" ? meshName : "default";
         const obj = new SceneObject(objectName, mesh);
         obj.position = new Vector3(-overallCenter.x, -overallCenter.y, -overallCenter.z);
         const mtlMaterialName = result2.groupMaterials.get(meshName);
@@ -27399,7 +28350,7 @@ function App() {
       resizeCanvas();
       workerClient.setSettings(buildRenderSettings(settings, editorRef.current.viewMode));
       workerClient.start();
-      loadOBJ("roman_head.obj", "Monkey");
+      loadOBJ("roman_head.obj");
       setMaterialList(scene.materials.getAll());
       setSelectedMaterialId(scene.materials.getDefault().id);
       window.addEventListener("resize", resizeCanvas);
@@ -27500,11 +28451,11 @@ function App() {
             const deltaX = Math.abs(endX - startX);
             const deltaY = Math.abs(endY - startY);
             if (deltaX > BOX_SELECT_THRESHOLD || deltaY > BOX_SELECT_THRESHOLD) {
+              const boxMinX = Math.min(startX, endX) * scaleX;
+              const boxMinY = Math.min(startY, endY) * scaleY;
+              const boxMaxX = Math.max(startX, endX) * scaleX;
+              const boxMaxY = Math.max(startY, endY) * scaleY;
               if (editor.mode === "object") {
-                const boxMinX = Math.min(startX, endX) * scaleX;
-                const boxMinY = Math.min(startY, endY) * scaleY;
-                const boxMaxX = Math.max(startX, endX) * scaleX;
-                const boxMaxY = Math.max(startY, endY) * scaleY;
                 const selectedObjects = editor.boxSelectObjects(boxMinX, boxMinY, boxMaxX, boxMaxY, dims.renderWidth, dims.renderHeight);
                 if (!e.shiftKey) {
                   sceneRef.current.deselectAll();
@@ -27513,6 +28464,9 @@ function App() {
                   obj.selected = true;
                   sceneRef.current.activeObject = obj;
                 }
+                updateUIState(true);
+              } else if (editor.mode === "edit") {
+                editor.boxSelectElements(boxMinX, boxMinY, boxMaxX, boxMaxY, dims.renderWidth, dims.renderHeight, e.shiftKey);
                 updateUIState(true);
               }
             } else {
@@ -27539,7 +28493,8 @@ function App() {
           const scaleY = dims.renderHeight / rect.height;
           editor.updateTransform(deltaX, deltaY, x * scaleX, y * scaleY, dims.renderWidth, dims.renderHeight, e.ctrlKey || e.metaKey);
         }
-        if (boxSelectionStartRef.current && mouseState.isDragging && mouseState.button === 0 && editor && editor.mode === "object" && editor.transformMode === "none" && canvas2) {
+        const canBoxSelect = boxSelectionStartRef.current && mouseState.isDragging && mouseState.button === 0 && editor && editor.transformMode === "none" && canvas2;
+        if (canBoxSelect) {
           const rect = canvas2.getBoundingClientRect();
           const currentX = e.clientX - rect.left;
           const currentY = e.clientY - rect.top;

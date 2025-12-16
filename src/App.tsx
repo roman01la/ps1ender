@@ -202,7 +202,7 @@ function App() {
   }, []);
 
   // Load OBJ file and add to scene
-  const loadOBJ = useCallback(async (url: string, name: string) => {
+  const loadOBJ = useCallback(async (url: string) => {
     const scene = sceneRef.current;
 
     try {
@@ -212,10 +212,16 @@ function App() {
       // Create shader materials from MTL materials
       const mtlToShaderMaterial = new Map<string, string>(); // MTL name -> shader material ID
       for (const [mtlName, mtlMat] of result.materials) {
+        // Get texture dimensions if texture exists
+        const texWidth = result.defaultTexture?.width || 0;
+        const texHeight = result.defaultTexture?.height || 0;
+
         const shaderMat = scene.materials.createFromMTL({
           name: mtlName,
           diffuseColor: mtlMat.diffuseColor,
           diffuseTexturePath: (mtlMat as any).diffuseTexturePath,
+          textureWidth: texWidth,
+          textureHeight: texHeight,
         });
         mtlToShaderMaterial.set(mtlName, shaderMat.id);
         console.log(`Created shader material "${mtlName}" from MTL`);
@@ -241,7 +247,7 @@ function App() {
       const createdObjects: SceneObject[] = [];
       for (const [meshName, mesh] of meshEntries) {
         // Use mesh name from OBJ file, fallback to provided name for "default" group
-        const objectName = meshName !== "default" ? meshName : name;
+        const objectName = meshName !== "default" ? meshName : "default";
 
         const obj = new SceneObject(objectName, mesh);
 
@@ -714,7 +720,7 @@ function App() {
       workerClient.start();
 
       // Load the demo object
-      loadOBJ("roman_head.obj", "Monkey");
+      loadOBJ("roman_head.obj");
 
       // Initialize material list from registry
       setMaterialList(scene.materials.getAll());
@@ -883,14 +889,14 @@ function App() {
               deltaX > BOX_SELECT_THRESHOLD ||
               deltaY > BOX_SELECT_THRESHOLD
             ) {
-              // Box selection: select all objects within the box
-              // In object mode only
-              if (editor.mode === "object") {
-                const boxMinX = Math.min(startX, endX) * scaleX;
-                const boxMinY = Math.min(startY, endY) * scaleY;
-                const boxMaxX = Math.max(startX, endX) * scaleX;
-                const boxMaxY = Math.max(startY, endY) * scaleY;
+              // Box selection: select elements within the box
+              const boxMinX = Math.min(startX, endX) * scaleX;
+              const boxMinY = Math.min(startY, endY) * scaleY;
+              const boxMaxX = Math.max(startX, endX) * scaleX;
+              const boxMaxY = Math.max(startY, endY) * scaleY;
 
+              if (editor.mode === "object") {
+                // Object mode box selection
                 const selectedObjects = editor.boxSelectObjects(
                   boxMinX,
                   boxMinY,
@@ -909,6 +915,18 @@ function App() {
                   sceneRef.current.activeObject = obj;
                 }
 
+                updateUIState(true);
+              } else if (editor.mode === "edit") {
+                // Edit mode box selection
+                editor.boxSelectElements(
+                  boxMinX,
+                  boxMinY,
+                  boxMaxX,
+                  boxMaxY,
+                  dims.renderWidth,
+                  dims.renderHeight,
+                  e.shiftKey
+                );
                 updateUIState(true);
               }
             } else {
@@ -961,21 +979,21 @@ function App() {
           );
         }
 
-        // Handle box selection dragging (only in object mode, left button)
-        if (
+        // Handle box selection dragging (click+drag in both object and edit mode)
+        const canBoxSelect =
           boxSelectionStartRef.current &&
           mouseState.isDragging &&
           mouseState.button === 0 &&
           editor &&
-          editor.mode === "object" &&
           editor.transformMode === "none" &&
-          canvas
-        ) {
+          canvas;
+
+        if (canBoxSelect) {
           const rect = canvas.getBoundingClientRect();
           const currentX = e.clientX - rect.left;
           const currentY = e.clientY - rect.top;
-          const startX = boxSelectionStartRef.current.x;
-          const startY = boxSelectionStartRef.current.y;
+          const startX = boxSelectionStartRef.current!.x;
+          const startY = boxSelectionStartRef.current!.y;
 
           const deltaBoxX = Math.abs(currentX - startX);
           const deltaBoxY = Math.abs(currentY - startY);

@@ -20,9 +20,10 @@ src/
 ├── primitives.ts (~1300 lines)← Vertex/Triangle types + mesh factories + logical faces
 ├── obj-loader.ts (344 lines)← OBJ file parser
 ├── texture.ts (352 lines)   ← Texture loading
+├── material.ts (~800 lines) ← Material system + node evaluation + baking ✅
 ├── svg.d.ts                 ← TypeScript SVG module declaration
 ├── systems/
-│   ├── history.ts (~280 lines)      ← Undo/redo stack + selection/mode changes ✅
+│   ├── history.ts (~550 lines)      ← Unified undo/redo with multi-stack manager ✅
 │   ├── input.ts (~360 lines)        ← Keyboard/mouse + context-aware shortcuts ✅
 │   ├── selection.ts (~700 lines)    ← Selection state + queries ✅
 │   ├── transform.ts (~500 lines)    ← Grab/rotate/scale operations ✅
@@ -30,8 +31,10 @@ src/
 │   ├── picking.ts (~800 lines)      ← Raycasting + element picking + box select ✅
 │   ├── visualization.ts (~600 lines)← Edit mode visualization + quad handling ✅
 │   ├── ui-state.ts (~280 lines)     ← UI state sync hook ✅
-│   └── render-loop.ts (~330 lines)  ← Animation loop + rendering ✅
+│   ├── render-loop.ts (~330 lines)  ← Animation loop + rendering ✅
+│   └── worker-render-loop.ts        ← Frame building for WASM rasterizer ✅
 ├── components/
+│   ├── NodeEditor.tsx (~1500 lines) ← Shader node editor ✅
 │   ├── AddMenu.tsx          ← Shift+A primitive add menu (7 primitives)
 │   ├── PrimitiveSettings.tsx← Modal for configuring primitive parameters
 │   ├── ToolbarButton.tsx    ← Reusable toolbar button component
@@ -63,14 +66,24 @@ src/
 
 ### Refactoring Strategy (incremental)
 
-1. **Phase 1: Extract History System** ✅ COMPLETE
+1. **Phase 1: Extract History System** ✅ COMPLETE (+ Extended)
 
    - Moved undo/redo types and logic to `src/systems/history.ts`
    - Editor uses `History` class instance (`this.history`)
    - Exports: `History`, `HistoryAction`, `serializeMesh`, `deserializeMesh`
-   - ~260 lines in dedicated module
    - **Selection changes:** `selection-change` action type tracks vertex/edge/face selection state
    - **Mode changes:** `mode-change` action type tracks edit mode, selection mode, and selected object
+
+   **Extended with Unified History Manager:**
+
+   - `GenericHistoryStack<T>` - Generic state-snapshot based undo/redo
+   - `IHistoryStack` - Common interface for all history stacks
+   - `MultiStackHistoryManager` - Manages multiple named stacks
+   - `historyManager` - Global singleton instance
+   - `HISTORY_STACK_3D_EDITOR` - Constant for 3D editor stack ID
+   - 3D editor registers its `History` instance with the manager
+   - Shader editor uses `GenericHistoryStack<ShaderEditorState>` per material
+   - ~550 lines in dedicated module
 
 2. **Phase 2: Extract Input System** ✅ COMPLETE
 
@@ -1251,6 +1264,79 @@ The current layout uses CSS Grid with a right sidebar:
   /* Contains SceneTree + PropertiesPanel */
 }
 ```
+
+---
+
+## Material System
+
+### Overview
+
+Node-based material system inspired by Blender's shader nodes. Materials are evaluated (baked) into textures for the rasterizer.
+
+### Data Structures
+
+```typescript
+interface Material {
+  id: string;
+  name: string;
+  nodes: MaterialNode[];
+  connections: Connection[];
+}
+
+interface MaterialNode {
+  id: string;
+  type: "output" | "texture" | "flat-color" | "mix" | "color-ramp";
+  position: { x: number; y: number };
+  inputs: Socket[];
+  outputs: Socket[];
+  data?: Record<string, any>; // Node-specific data
+}
+
+interface Connection {
+  id: string;
+  fromNodeId: string;
+  fromSocketId: string;
+  toNodeId: string;
+  toSocketId: string;
+}
+```
+
+### Node Types
+
+| Node       | Inputs                 | Outputs | Description                   |
+| ---------- | ---------------------- | ------- | ----------------------------- |
+| Output     | Color                  | -       | Final material color          |
+| Texture    | -                      | Color   | UV-mapped texture             |
+| Flat Color | -                      | Color   | Solid color picker            |
+| Mix        | Color1, Color2, Factor | Color   | Blends two colors             |
+| Color Ramp | Factor                 | Color   | Gradient with draggable stops |
+
+### Material Baking
+
+Node graphs are evaluated ("baked") into textures per-object:
+
+1. Get material assigned to object
+2. Check bake cache (key: `${materialId}:${hashTexture(texture)}`)
+3. If miss, evaluate node graph pixel-by-pixel
+4. Store result in cache, return baked texture
+
+**Performance Optimizations:**
+
+- `hexToRGBACache`: Map caching parsed hex colors
+- `colorRampCache`: Pre-processed sorted stops per node
+- Hoisted `clamp255()` function outside hot loops
+
+### Shader Node Editor (`NodeEditor.tsx`)
+
+Canvas-based visual editor with:
+
+- Pan/zoom (scroll wheel, middle-mouse drag)
+- Zoom relative to mouse position
+- Node creation via context menu (Shift+A or right-click)
+- Drag node onto connection to auto-insert
+- Connection hit detection using `distanceToBezier()`
+- Per-material undo/redo via `GenericHistoryStack<ShaderEditorState>`
+- Stack ID: `shader-editor:${materialId}`
 
 ---
 

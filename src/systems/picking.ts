@@ -797,4 +797,149 @@ export class PickingManager {
 
     return result;
   }
+
+  /**
+   * Box select vertices - returns all vertex indices within the screen-space box
+   */
+  boxSelectVertices(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    ctx: PickContext
+  ): number[] {
+    const result: number[] = [];
+
+    for (let i = 0; i < mesh.vertices.length; i++) {
+      const localPos = mesh.vertices[i].position;
+      const worldPos = modelMatrix.transformPoint(localPos);
+      const screen = this.projectToScreen(worldPos, ctx);
+
+      if (!screen) continue;
+
+      // Check if vertex is within box
+      if (
+        screen.x >= boxMinX &&
+        screen.x <= boxMaxX &&
+        screen.y >= boxMinY &&
+        screen.y <= boxMaxY
+      ) {
+        result.push(i);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Box select edges - returns all edge keys for edges within the screen-space box
+   * An edge is selected if BOTH of its vertices are within the box
+   */
+  boxSelectEdges(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    ctx: PickContext
+  ): string[] {
+    const result: string[] = [];
+
+    // Get all edges
+    const edges = getMeshEdges(mesh, true); // Skip quad diagonals
+
+    for (const edge of edges) {
+      const pos0 = mesh.vertices[edge.v0].position;
+      const pos1 = mesh.vertices[edge.v1].position;
+
+      const world0 = modelMatrix.transformPoint(pos0);
+      const world1 = modelMatrix.transformPoint(pos1);
+
+      const screen0 = this.projectToScreen(world0, ctx);
+      const screen1 = this.projectToScreen(world1, ctx);
+
+      if (!screen0 || !screen1) continue;
+
+      // Check if both vertices are within box
+      const v0InBox =
+        screen0.x >= boxMinX &&
+        screen0.x <= boxMaxX &&
+        screen0.y >= boxMinY &&
+        screen0.y <= boxMaxY;
+      const v1InBox =
+        screen1.x >= boxMinX &&
+        screen1.x <= boxMaxX &&
+        screen1.y >= boxMinY &&
+        screen1.y <= boxMaxY;
+
+      if (v0InBox && v1InBox) {
+        result.push(makeEdgeKey(edge.v0, edge.v1));
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Box select faces - returns all face indices for faces within the screen-space box
+   * A face is selected if ALL of its vertices are within the box
+   */
+  boxSelectFaces(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    mesh: Mesh,
+    modelMatrix: Matrix4,
+    ctx: PickContext
+  ): number[] {
+    const result: number[] = [];
+
+    // Use logical faces (handles quads properly)
+    for (let faceIdx = 0; faceIdx < mesh.faceData.length; faceIdx++) {
+      const triangles = mesh.getTrianglesForFace(faceIdx);
+      if (triangles.length === 0) continue;
+
+      // Collect all unique vertices in this logical face
+      const vertexSet = new Set<number>();
+      for (const triIdx of triangles) {
+        const base = triIdx * 3;
+        vertexSet.add(mesh.indices[base]);
+        vertexSet.add(mesh.indices[base + 1]);
+        vertexSet.add(mesh.indices[base + 2]);
+      }
+
+      // Check if all vertices are within box
+      let allInBox = true;
+      for (const vIdx of vertexSet) {
+        const localPos = mesh.vertices[vIdx].position;
+        const worldPos = modelMatrix.transformPoint(localPos);
+        const screen = this.projectToScreen(worldPos, ctx);
+
+        if (!screen) {
+          allInBox = false;
+          break;
+        }
+
+        if (
+          screen.x < boxMinX ||
+          screen.x > boxMaxX ||
+          screen.y < boxMinY ||
+          screen.y > boxMaxY
+        ) {
+          allInBox = false;
+          break;
+        }
+      }
+
+      if (allInBox) {
+        result.push(faceIdx);
+      }
+    }
+
+    return result;
+  }
 }

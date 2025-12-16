@@ -25,8 +25,65 @@ import {
   Material,
   evaluateMaterial,
   materialUsesTexture,
+  materialNeedsBaking,
+  bakeMaterialToTexture,
+  TextureSampler,
   RGBA,
 } from "../material";
+
+/**
+ * Baked material cache entry
+ */
+interface BakedMaterialCache {
+  texture: Texture;
+  materialHash: string;
+  textureHash: string; // Hash of source texture (in case it changes)
+}
+
+// Cache for baked materials - keyed by material ID + texture hash
+const bakedMaterialCache = new Map<string, BakedMaterialCache>();
+
+/**
+ * Generate cache key from material ID and texture
+ */
+function getBakeCacheKey(materialId: string, texture: Texture | null): string {
+  return `${materialId}:${hashTexture(texture)}`;
+}
+
+/**
+ * Create a simple hash of material state for cache invalidation
+ */
+function hashMaterial(material: Material): string {
+  // Include node data and connections in hash
+  const nodeData = material.nodes.map((n) => ({
+    id: n.id,
+    type: n.type,
+    data: n.data,
+  }));
+  const connections = material.connections.map((c) => ({
+    from: `${c.fromNodeId}:${c.fromSocketId}`,
+    to: `${c.toNodeId}:${c.toSocketId}`,
+  }));
+  return JSON.stringify({ nodes: nodeData, connections });
+}
+
+/**
+ * Create a simple hash of texture for cache invalidation
+ */
+function hashTexture(texture: Texture | null): string {
+  if (!texture) return "none";
+  // Use size and a sample of pixels as hash (full data would be too slow)
+  const data = texture.getData();
+  const sample = [
+    data[0],
+    data[1],
+    data[2],
+    data[data.length - 3],
+    data[data.length - 2],
+    data[data.length - 1],
+  ];
+  return `${texture.width}x${texture.height}:${sample.join(",")}`;
+}
 
 /**
  * Grid data for rendering
@@ -57,7 +114,12 @@ function serializeMatrix(m: Matrix4): Float32Array {
   return new Float32Array(m.data);
 }
 
-function serializeMesh(mesh: Mesh, material?: Material): SerializedMesh {
+function serializeMesh(
+  mesh: Mesh,
+  material?: Material,
+  textureSampler?: TextureSampler,
+  useWhiteColors: boolean = false
+): SerializedMesh {
   const vertexCount = mesh.vertices.length;
 
   const positions = new Float32Array(vertexCount * 3);
@@ -66,10 +128,15 @@ function serializeMesh(mesh: Mesh, material?: Material): SerializedMesh {
   const colors = new Uint8Array(vertexCount * 4);
 
   // Pre-evaluate material if provided (for flat color, we only need one evaluation)
+  // Skip if using white colors (for baked/textured rendering)
   let materialColor: RGBA | null = null;
-  if (material) {
-    // For now, evaluate at UV 0,0 - flat color doesn't use UVs anyway
-    materialColor = evaluateMaterial(material, { u: 0, v: 0 });
+  if (material && !useWhiteColors) {
+    // Evaluate at UV 0,0 with texture sampler context
+    materialColor = evaluateMaterial(material, {
+      u: 0,
+      v: 0,
+      textures: textureSampler,
+    });
   }
 
   for (let i = 0; i < vertexCount; i++) {
@@ -90,7 +157,13 @@ function serializeMesh(mesh: Mesh, material?: Material): SerializedMesh {
     uvs[uv + 1] = v.v;
 
     // Apply material color if available, otherwise use vertex color
-    if (materialColor) {
+    // For textured/baked rendering, use white so texture color is preserved
+    if (useWhiteColors) {
+      colors[c] = 255;
+      colors[c + 1] = 255;
+      colors[c + 2] = 255;
+      colors[c + 3] = 255;
+    } else if (materialColor) {
       colors[c] = materialColor.r;
       colors[c + 1] = materialColor.g;
       colors[c + 2] = materialColor.b;
@@ -394,6 +467,18 @@ export function buildRenderFrame(
   // Check if wireframe mode is active
   const isWireframeMode = editor.viewMode === "wireframe";
 
+  // Build texture sampler map for material evaluation
+  const textureSampler: TextureSampler = new Map();
+  if (ctx.currentTexture) {
+    // Add texture by common paths/IDs that materials might reference
+    textureSampler.set("default", ctx.currentTexture);
+  }
+
+  // Track baked texture for the frame (replaces source texture when baking is needed)
+  let bakedTexture: Texture | null = null;
+  // Track object texture for non-baked textured objects
+  let objectTexture: Texture | null = null;
+
   // Scene objects
   for (const obj of scene.objects) {
     if (!obj.visible) continue;
@@ -405,19 +490,77 @@ export function buildRenderFrame(
       ? scene.materials.get(obj.materialId)
       : undefined;
 
+    // Add object's texture to sampler if available
+    if (obj.texture) {
+      textureSampler.set("default", obj.texture);
+      objectTexture = obj.texture; // Track for later use
+      // Also add by any texture node paths in the material
+      if (material) {
+        for (const node of material.nodes) {
+          if (node.type === "texture" && node.data.imagePath) {
+            textureSampler.set(node.data.imagePath as string, obj.texture);
+          }
+        }
+      }
+    }
+
     if (isEdgeOnlyMesh(obj.mesh)) {
       frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
     } else if (isWireframeMode) {
       // In wireframe mode, render as lines instead of solid triangles
       frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
+      // Check if material needs baking (has mix nodes, procedural nodes, etc.)
+      const needsBaking = material ? materialNeedsBaking(material) : false;
+
       // Check if material uses texture (texture node connected to output)
-      const useTexture = material
+      let useTexture = material
         ? materialUsesTexture(material) && !!obj.texture
         : false;
 
+      // If material needs baking, bake it to a texture (with caching)
+      if (needsBaking && material) {
+        // Bake at reasonable resolution (use source texture size or default)
+        const bakeWidth = obj.texture?.width || 256;
+        const bakeHeight = obj.texture?.height || 256;
+
+        // Check cache - key includes both material ID and texture
+        const materialHash = hashMaterial(material);
+        const cacheKey = getBakeCacheKey(material.id, obj.texture);
+        const cached = bakedMaterialCache.get(cacheKey);
+
+        if (cached && cached.materialHash === materialHash) {
+          // Use cached baked texture
+          bakedTexture = cached.texture;
+        } else {
+          // Bake and cache
+          const bakeStart = performance.now();
+          bakedTexture = bakeMaterialToTexture(
+            material,
+            bakeWidth,
+            bakeHeight,
+            textureSampler
+          );
+          const bakeTime = performance.now() - bakeStart;
+          console.log(
+            `Material bake: ${bakeWidth}x${bakeHeight} in ${bakeTime.toFixed(
+              2
+            )}ms`
+          );
+
+          // Store in cache
+          bakedMaterialCache.set(cacheKey, {
+            texture: bakedTexture,
+            materialHash,
+            textureHash: hashTexture(obj.texture),
+          });
+        }
+
+        useTexture = true; // Baked result is always a texture
+      }
+
       frame.objects.push({
-        mesh: serializeMesh(obj.mesh, material),
+        mesh: serializeMesh(obj.mesh, material, textureSampler, useTexture),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,
         smoothShading: obj.mesh.smoothShading,
@@ -523,20 +666,22 @@ export function buildRenderFrame(
   }
 
   // Texture (send if changed, or if we have a texture and texturing is enabled)
-  // This ensures texture is re-sent when switching to material mode
+  // Priority: baked texture > object texture > global texture
   const texturingEnabled = editor.viewMode === "material";
-  if (ctx.currentTexture && (textureChanged || texturingEnabled)) {
-    const tex = ctx.currentTexture;
+  const textureToSend = bakedTexture || objectTexture || ctx.currentTexture;
+
+  if (textureToSend && (textureChanged || texturingEnabled || bakedTexture)) {
     frame.texture = {
       slot: 0,
-      width: tex.width,
-      height: tex.height,
-      data: new Uint8Array(tex.getData()),
+      width: textureToSend.width,
+      height: textureToSend.height,
+      data: new Uint8Array(textureToSend.getData()),
     };
   }
 
   // Set per-frame texturing flag based on view mode
-  frame.enableTexturing = texturingEnabled;
+  // If we baked a material, force enable texturing
+  frame.enableTexturing = texturingEnabled || bakedTexture !== null;
 
   return frame;
 }

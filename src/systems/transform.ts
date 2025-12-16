@@ -761,15 +761,19 @@ export class TransformManager {
     selectedVertices?: ReadonlySet<number>
   ): void {
     // Vertex snapping: when Ctrl is held in edit mode, snap to nearest unselected vertex
+    // Use vertexStartPositions for determining which vertices to exclude and move
+    // (this properly handles edge/face modes where vertices come from selected edges/faces)
     if (
       ctrlKey &&
       isEditMode &&
       this.vertexStartPositions.size > 0 &&
       camera &&
-      selectedVertices &&
       canvasWidth > 0 &&
       canvasHeight > 0
     ) {
+      // Create a set of vertex indices being transformed (for snap exclusion)
+      const transformingVertices = new Set(this.vertexStartPositions.keys());
+
       const snapTarget = this.findSnapTarget(
         obj,
         screenX,
@@ -777,17 +781,17 @@ export class TransformManager {
         canvasWidth,
         canvasHeight,
         camera,
-        selectedVertices
+        transformingVertices
       );
 
       if (snapTarget) {
-        // Calculate the center of selected vertices
+        // Calculate the center of vertices being transformed
         const mesh = obj.mesh;
         let center = Vector3.zero();
-        for (const idx of selectedVertices) {
+        for (const idx of transformingVertices) {
           center = center.add(mesh.vertices[idx].position);
         }
-        center = center.div(selectedVertices.size);
+        center = center.div(transformingVertices.size);
 
         // Calculate offset to move center to snap target
         // Apply axis constraint if active
@@ -809,8 +813,8 @@ export class TransformManager {
           offset = new Vector3(offset.x, offset.y, 0);
         }
 
-        // Move all selected vertices by the offset
-        for (const idx of selectedVertices) {
+        // Move all vertices being transformed by the offset
+        for (const idx of transformingVertices) {
           const pos = mesh.vertices[idx].position;
           mesh.vertices[idx].position = pos.add(offset);
         }

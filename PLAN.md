@@ -143,7 +143,41 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 
 ---
 
-## Phase 3: Advanced Features (Future)
+## Phase 3: Shading Workspace ✅
+
+### 3.1 Material System ✅
+
+- [x] Material data structure (nodes, connections)
+- [x] Material registry (create, get, list, delete)
+- [x] Per-object material assignment
+- [x] Material baking to texture (evaluates node graph)
+- [x] Bake caching with hash-based invalidation
+
+### 3.2 Node Editor ✅
+
+- [x] Canvas-based node editor with pan/zoom
+- [x] Zoom relative to mouse pointer position
+- [x] Node types: Output, Texture, Flat Color, Mix, Color Ramp
+- [x] Socket types: Color, Float (with color→float implicit conversion)
+- [x] Bezier curve connections between nodes
+- [x] Drag-and-drop node onto connection (auto-insert)
+- [x] Color Ramp with draggable color stops
+- [x] Context menu (right-click or Shift+A)
+- [x] Node deletion (X or Delete)
+- [x] Undo/redo (Cmd+Z / Cmd+Shift+Z)
+
+### 3.3 Unified History System ✅
+
+- [x] Generic history stack (`GenericHistoryStack<T>`)
+- [x] Multi-stack history manager (`historyManager`)
+- [x] Stack registration for different editors
+- [x] 3D editor uses action-based history (efficient deltas)
+- [x] Shader editor uses state-snapshot history (per-material)
+- [x] History persists across workspace switches
+
+---
+
+## Phase 4: Advanced Features (Future)
 
 - [ ] Loop cut
 - [ ] Subdivide
@@ -151,7 +185,6 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 - [ ] Export OBJ
 - [ ] Hierarchy/parenting
 - [ ] Proportional editing
-- [ ] Shading workspace implementation
 
 ---
 

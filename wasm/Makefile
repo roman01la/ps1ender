@@ -8,6 +8,8 @@ CXX := emcc
 # Compiler flags
 CXXFLAGS := -O3 \
             -msimd128 \
+            -mrelaxed-simd \
+            -mbulk-memory \
             -fno-exceptions \
             -fno-rtti \
             -std=c++17 \

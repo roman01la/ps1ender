@@ -3,6 +3,8 @@
  *
  * Features:
  * - SIMD-accelerated triangle rasterization (4 pixels at a time)
+ * - Relaxed SIMD FMA for fast interpolation
+ * - Bulk memory operations for fast clears
  * - 16-bit depth buffer (PS1 style)
  * - Gouraud shading
  * - Affine texture mapping with PS1-style warping
@@ -11,12 +13,13 @@
  * - Backface culling
  *
  * Build with Emscripten:
- *   emcc -O3 -msimd128 -s WASM=1 -s STANDALONE_WASM=1 --no-entry \
+ *   emcc -O3 -msimd128 -mrelaxed-simd -mbulk-memory -s WASM=1 -s STANDALONE_WASM=1 --no-entry \
  *     -o rasterizer.wasm rasterizer.cpp
  */
 
 #include <cstdint>
 #include <cmath>
+#include <cstring>
 #include <wasm_simd128.h>
 #include <emscripten.h>
 
@@ -228,6 +231,26 @@ inline float simd_hmin(v128_t v)
     return wasm_f32x4_extract_lane(min2, 0);
 }
 
+// Relaxed FMA: a * b + c (single instruction on supported hardware)
+inline v128_t simd_fma(v128_t a, v128_t b, v128_t c)
+{
+    return wasm_f32x4_relaxed_madd(a, b, c);
+}
+
+// SIMD clamp to [0, 255]
+inline v128_t simd_clamp_255(v128_t v)
+{
+    v128_t zero = wasm_f32x4_splat(0.0f);
+    v128_t max = wasm_f32x4_splat(255.0f);
+    return wasm_f32x4_min(wasm_f32x4_max(v, zero), max);
+}
+
+// SIMD floor
+inline v128_t simd_floor(v128_t v)
+{
+    return wasm_f32x4_floor(v);
+}
+
 // ============================================================================
 // Core Rasterization
 // ============================================================================
@@ -294,7 +317,7 @@ static ProcessedVertex process_vertex(int vertex_idx)
     return pv;
 }
 
-// Rasterize a single triangle with SIMD acceleration
+// Rasterize a single triangle with full SIMD acceleration
 static void rasterize_triangle(
     const ProcessedVertex &v0,
     const ProcessedVertex &v1,
@@ -346,25 +369,46 @@ static void rasterize_triangle(
     int32_t texIdx = g_current_texture;
     const uint8_t *texData = nullptr;
     int32_t texW = 0, texH = 0;
+    float texWf = 0, texHf = 0;
     if (g_enable_texturing && texIdx >= 0 && texIdx < MAX_TEXTURES)
     {
         texData = g_textures[texIdx];
         texW = g_texture_sizes[texIdx * 2];
         texH = g_texture_sizes[texIdx * 2 + 1];
+        texWf = (float)texW;
+        texHf = (float)texH;
     }
 
-    // SIMD setup for processing 4 pixels at a time
-    v128_t simd_A12 = wasm_f32x4_splat(A12);
-    v128_t simd_A20 = wasm_f32x4_splat(A20);
-    v128_t simd_A01 = wasm_f32x4_splat(A01);
-    v128_t simd_offset = wasm_f32x4_make(0.0f, A12, A12 * 2.0f, A12 * 3.0f);
+    // Check if this is a non-textured triangle (can use fast SIMD path)
+    bool useTexture = texData && texW > 0 && texH > 0;
+
+    // SIMD constants
+    v128_t simd_zero = wasm_f32x4_splat(0.0f);
+    v128_t simd_one = wasm_f32x4_splat(1.0f);
+    v128_t simd_255 = wasm_f32x4_splat(255.0f);
+    v128_t simd_invArea = wasm_f32x4_splat(invArea);
+    v128_t simd_depth_scale = wasm_f32x4_splat(32767.5f);
+    v128_t simd_alpha = wasm_i32x4_splat(0xFF000000);
+
+    // Edge function step constants
+    v128_t simd_offset0 = wasm_f32x4_make(0.0f, A12, A12 * 2.0f, A12 * 3.0f);
     v128_t simd_offset1 = wasm_f32x4_make(0.0f, A20, A20 * 2.0f, A20 * 3.0f);
     v128_t simd_offset2 = wasm_f32x4_make(0.0f, A01, A01 * 2.0f, A01 * 3.0f);
-    v128_t simd_step = wasm_f32x4_splat(A12 * 4.0f);
-    v128_t simd_step1 = wasm_f32x4_splat(A20 * 4.0f);
-    v128_t simd_step2 = wasm_f32x4_splat(A01 * 4.0f);
-    v128_t simd_zero = wasm_f32x4_splat(0.0f);
-    v128_t simd_invArea = wasm_f32x4_splat(invArea);
+
+    // Vertex attributes for interpolation
+    v128_t simd_depth0 = wasm_f32x4_splat(v0.depth);
+    v128_t simd_depth1 = wasm_f32x4_splat(v1.depth);
+    v128_t simd_depth2 = wasm_f32x4_splat(v2.depth);
+
+    v128_t simd_r0 = wasm_f32x4_splat(r0);
+    v128_t simd_r1 = wasm_f32x4_splat(r1);
+    v128_t simd_r2 = wasm_f32x4_splat(r2);
+    v128_t simd_g0 = wasm_f32x4_splat(g0);
+    v128_t simd_g1 = wasm_f32x4_splat(g1);
+    v128_t simd_g2 = wasm_f32x4_splat(g2);
+    v128_t simd_b0 = wasm_f32x4_splat(b0);
+    v128_t simd_b1 = wasm_f32x4_splat(b1);
+    v128_t simd_b2 = wasm_f32x4_splat(b2);
 
     // Scan rows
     for (int32_t y = minY; y <= maxY; y++)
@@ -373,169 +417,177 @@ static void rasterize_triangle(
         float w1 = w1_row;
         float w2 = w2_row;
         int32_t yOffset = y * g_render_width;
+        uint32_t *rowPixels = &g_pixels[yOffset];
+        uint16_t *rowDepth = &g_depth[yOffset];
 
-        // Process 4 pixels at a time with SIMD
+        // Dither row lookup
+        int32_t ditherY = y & 7;
+        const int8_t *ditherRow = DITHER_MATRIX[ditherY];
+
         int32_t x = minX;
 
-        // SIMD loop (4 pixels at a time)
-        for (; x + 3 <= maxX; x += 4)
+        // =====================================================================
+        // FAST PATH: Non-textured triangles - full SIMD with batched writes
+        // =====================================================================
+        if (!useTexture)
         {
-            // Edge values for 4 pixels
-            v128_t sw0 = wasm_f32x4_add(wasm_f32x4_splat(w0), simd_offset);
-            v128_t sw1 = wasm_f32x4_add(wasm_f32x4_splat(w1), simd_offset1);
-            v128_t sw2 = wasm_f32x4_add(wasm_f32x4_splat(w2), simd_offset2);
-
-            // Check if all 4 pixels are inside (all positive or all negative)
-            v128_t ge0_w0 = wasm_f32x4_ge(sw0, simd_zero);
-            v128_t ge0_w1 = wasm_f32x4_ge(sw1, simd_zero);
-            v128_t ge0_w2 = wasm_f32x4_ge(sw2, simd_zero);
-            v128_t le0_w0 = wasm_f32x4_le(sw0, simd_zero);
-            v128_t le0_w1 = wasm_f32x4_le(sw1, simd_zero);
-            v128_t le0_w2 = wasm_f32x4_le(sw2, simd_zero);
-
-            v128_t inside_pos = wasm_v128_and(wasm_v128_and(ge0_w0, ge0_w1), ge0_w2);
-            v128_t inside_neg = wasm_v128_and(wasm_v128_and(le0_w0, le0_w1), le0_w2);
-            v128_t inside = wasm_v128_or(inside_pos, inside_neg);
-
-            // If any pixel is inside, process them using scalar code
-            // (SIMD is used for early-out check only)
-            if (wasm_v128_any_true(inside))
+            for (; x + 3 <= maxX; x += 4)
             {
-                // Process 4 pixels with unrolled scalar code
-                // (wasm_f32x4_extract_lane requires compile-time constant)
-                float pw0_arr[4], pw1_arr[4], pw2_arr[4];
-                wasm_v128_store(pw0_arr, sw0);
-                wasm_v128_store(pw1_arr, sw1);
-                wasm_v128_store(pw2_arr, sw2);
+                // Edge values for 4 consecutive pixels
+                v128_t sw0 = wasm_f32x4_add(wasm_f32x4_splat(w0), simd_offset0);
+                v128_t sw1 = wasm_f32x4_add(wasm_f32x4_splat(w1), simd_offset1);
+                v128_t sw2 = wasm_f32x4_add(wasm_f32x4_splat(w2), simd_offset2);
 
-                for (int i = 0; i < 4 && x + i <= maxX; i++)
+                // Inside test
+                v128_t inside_pos = wasm_v128_and(wasm_v128_and(
+                                                      wasm_f32x4_ge(sw0, simd_zero),
+                                                      wasm_f32x4_ge(sw1, simd_zero)),
+                                                  wasm_f32x4_ge(sw2, simd_zero));
+                v128_t inside_neg = wasm_v128_and(wasm_v128_and(
+                                                      wasm_f32x4_le(sw0, simd_zero),
+                                                      wasm_f32x4_le(sw1, simd_zero)),
+                                                  wasm_f32x4_le(sw2, simd_zero));
+                v128_t inside_mask = wasm_v128_or(inside_pos, inside_neg);
+
+                if (!wasm_v128_any_true(inside_mask))
                 {
-                    float pw0 = pw0_arr[i];
-                    float pw1 = pw1_arr[i];
-                    float pw2 = pw2_arr[i];
-
-                    // Inside test
-                    bool isInside = (pw0 >= 0 && pw1 >= 0 && pw2 >= 0) ||
-                                    (pw0 <= 0 && pw1 <= 0 && pw2 <= 0);
-                    if (!isInside)
-                        continue;
-
-                    float pbw0 = pw0 * invArea;
-                    float pbw1 = pw1 * invArea;
-                    float pbw2 = pw2 * invArea;
-
-                    // Interpolate depth
-                    float depthF = v0.depth * pbw0 + v1.depth * pbw1 + v2.depth * pbw2;
-                    uint16_t depth = (uint16_t)((depthF + 1.0f) * 32767.5f);
-
-                    int32_t idx = yOffset + x + i;
-
-                    // Depth test
-                    if (depth >= g_depth[idx])
-                        continue;
-
-                    // Interpolate color
-                    float cr, cg, cb;
-
-                    if (texData && texW > 0 && texH > 0)
-                    {
-                        // Texture sampling with affine correction
-                        float uAffine = v0.u * pbw0 + v1.u * pbw1 + v2.u * pbw2;
-                        float vAffine = v0.v * pbw0 + v1.v * pbw1 + v2.v * pbw2;
-                        float affine = v0.affine * pbw0 + v1.affine * pbw1 + v2.affine * pbw2;
-
-                        float tu = uAffine / affine;
-                        float tv = vAffine / affine;
-
-                        // Wrap
-                        tu = tu - floorf(tu);
-                        tv = tv - floorf(tv);
-
-                        int32_t tx = (int32_t)(tu * texW);
-                        int32_t ty = (int32_t)((1.0f - tv) * texH);
-                        tx = ((tx % texW) + texW) % texW;
-                        ty = ((ty % texH) + texH) % texH;
-
-                        int32_t texOffset = (ty * texW + tx) * 4;
-                        float texR = texData[texOffset];
-                        float texG = texData[texOffset + 1];
-                        float texB = texData[texOffset + 2];
-
-                        // Modulate with vertex colors
-                        float litR = r0 * pbw0 + r1 * pbw1 + r2 * pbw2;
-                        float litG = g0 * pbw0 + g1 * pbw1 + g2 * pbw2;
-                        float litB = b0 * pbw0 + b1 * pbw1 + b2 * pbw2;
-
-                        cr = texR * litR / 255.0f;
-                        cg = texG * litG / 255.0f;
-                        cb = texB * litB / 255.0f;
-                    }
-                    else
-                    {
-                        // Gouraud shading only
-                        cr = r0 * pbw0 + r1 * pbw1 + r2 * pbw2;
-                        cg = g0 * pbw0 + g1 * pbw1 + g2 * pbw2;
-                        cb = b0 * pbw0 + b1 * pbw1 + b2 * pbw2;
-                    }
-
-                    // Dithering
-                    if (g_enable_dithering)
-                    {
-                        int32_t ix = (x + i) & 7;
-                        int32_t iy = y & 7;
-                        int32_t threshold = DITHER_MATRIX[iy][ix];
-                        int32_t ditherAmt = (threshold - 32) >> 2;
-
-                        cr = (float)(((int32_t)(cr + ditherAmt) >> 3) << 3);
-                        cg = (float)(((int32_t)(cg + ditherAmt) >> 3) << 3);
-                        cb = (float)(((int32_t)(cb + ditherAmt) >> 3) << 3);
-
-                        cr = clamp(cr, 0.0f, 255.0f);
-                        cg = clamp(cg, 0.0f, 255.0f);
-                        cb = clamp(cb, 0.0f, 255.0f);
-                    }
-                    else
-                    {
-                        cr = fminf(255.0f, cr);
-                        cg = fminf(255.0f, cg);
-                        cb = fminf(255.0f, cb);
-                    }
-
-                    // Write pixel (ABGR format)
-                    g_depth[idx] = depth;
-                    g_pixels[idx] = 0xFF000000 |
-                                    ((uint32_t)cb << 16) |
-                                    ((uint32_t)cg << 8) |
-                                    (uint32_t)cr;
+                    w0 += A12 * 4.0f;
+                    w1 += A20 * 4.0f;
+                    w2 += A01 * 4.0f;
+                    continue;
                 }
+
+                // Barycentric weights
+                v128_t bw0 = wasm_f32x4_mul(sw0, simd_invArea);
+                v128_t bw1 = wasm_f32x4_mul(sw1, simd_invArea);
+                v128_t bw2 = wasm_f32x4_mul(sw2, simd_invArea);
+
+                // Interpolate depth: (depth + 1) * 32767.5
+                v128_t depth_f = simd_fma(simd_depth2, bw2,
+                                          simd_fma(simd_depth1, bw1, wasm_f32x4_mul(simd_depth0, bw0)));
+                v128_t depth_u16 = wasm_f32x4_mul(wasm_f32x4_add(depth_f, simd_one), simd_depth_scale);
+
+                // Load existing depth (4 x u16 -> need to expand)
+                // Load 8 u16s, we only use first 4
+                v128_t old_depth_i16 = wasm_v128_load64_zero(&rowDepth[x]);
+                v128_t old_depth_u32 = wasm_u32x4_extend_low_u16x8(old_depth_i16);
+                v128_t old_depth_f = wasm_f32x4_convert_i32x4(old_depth_u32);
+
+                // Depth test: new_depth < old_depth
+                v128_t depth_pass = wasm_f32x4_lt(depth_u16, old_depth_f);
+                v128_t write_mask = wasm_v128_and(inside_mask, depth_pass);
+
+                if (!wasm_v128_any_true(write_mask))
+                {
+                    w0 += A12 * 4.0f;
+                    w1 += A20 * 4.0f;
+                    w2 += A01 * 4.0f;
+                    continue;
+                }
+
+                // Interpolate colors
+                v128_t cr = simd_fma(simd_r2, bw2, simd_fma(simd_r1, bw1, wasm_f32x4_mul(simd_r0, bw0)));
+                v128_t cg = simd_fma(simd_g2, bw2, simd_fma(simd_g1, bw1, wasm_f32x4_mul(simd_g0, bw0)));
+                v128_t cb = simd_fma(simd_b2, bw2, simd_fma(simd_b1, bw1, wasm_f32x4_mul(simd_b0, bw0)));
+
+                // Clamp to [0, 255]
+                cr = wasm_f32x4_min(wasm_f32x4_max(cr, simd_zero), simd_255);
+                cg = wasm_f32x4_min(wasm_f32x4_max(cg, simd_zero), simd_255);
+                cb = wasm_f32x4_min(wasm_f32x4_max(cb, simd_zero), simd_255);
+
+                // Convert to integers
+                v128_t ir = wasm_i32x4_trunc_sat_f32x4(cr);
+                v128_t ig = wasm_i32x4_trunc_sat_f32x4(cg);
+                v128_t ib = wasm_i32x4_trunc_sat_f32x4(cb);
+
+                // Pack into ABGR: 0xFF000000 | (b << 16) | (g << 8) | r
+                v128_t pixels = wasm_v128_or(simd_alpha,
+                                             wasm_v128_or(wasm_i32x4_shl(ib, 16),
+                                                          wasm_v128_or(wasm_i32x4_shl(ig, 8), ir)));
+
+                // Convert depth to u16
+                v128_t new_depth_i32 = wasm_i32x4_trunc_sat_f32x4(depth_u16);
+
+                // Selective write based on mask
+                uint32_t mask_bits = wasm_i32x4_bitmask(write_mask);
+
+                // Manual unroll for pixel/depth writes (faster than extract)
+                if (mask_bits & 1)
+                {
+                    rowPixels[x] = wasm_i32x4_extract_lane(pixels, 0);
+                    rowDepth[x] = (uint16_t)wasm_i32x4_extract_lane(new_depth_i32, 0);
+                }
+                if (mask_bits & 2)
+                {
+                    rowPixels[x + 1] = wasm_i32x4_extract_lane(pixels, 1);
+                    rowDepth[x + 1] = (uint16_t)wasm_i32x4_extract_lane(new_depth_i32, 1);
+                }
+                if (mask_bits & 4)
+                {
+                    rowPixels[x + 2] = wasm_i32x4_extract_lane(pixels, 2);
+                    rowDepth[x + 2] = (uint16_t)wasm_i32x4_extract_lane(new_depth_i32, 2);
+                }
+                if (mask_bits & 8)
+                {
+                    rowPixels[x + 3] = wasm_i32x4_extract_lane(pixels, 3);
+                    rowDepth[x + 3] = (uint16_t)wasm_i32x4_extract_lane(new_depth_i32, 3);
+                }
+
+                w0 += A12 * 4.0f;
+                w1 += A20 * 4.0f;
+                w2 += A01 * 4.0f;
             }
 
-            w0 += A12 * 4.0f;
-            w1 += A20 * 4.0f;
-            w2 += A01 * 4.0f;
-        }
-
-        // Scalar tail for remaining pixels
-        for (; x <= maxX; x++)
-        {
-            // Inside test
-            if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0))
+            // Scalar tail
+            for (; x <= maxX; x++)
             {
-                float bw0 = w0 * invArea;
-                float bw1 = w1 * invArea;
-                float bw2 = w2 * invArea;
-
-                // Depth
-                float depthF = v0.depth * bw0 + v1.depth * bw1 + v2.depth * bw2;
-                uint16_t depth = (uint16_t)((depthF + 1.0f) * 32767.5f);
-
-                int32_t idx = yOffset + x;
-                if (depth < g_depth[idx])
+                if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0))
                 {
-                    float cr, cg, cb;
+                    float bw0 = w0 * invArea;
+                    float bw1 = w1 * invArea;
+                    float bw2 = w2 * invArea;
 
-                    if (texData && texW > 0 && texH > 0)
+                    float depthF = v0.depth * bw0 + v1.depth * bw1 + v2.depth * bw2;
+                    uint16_t depth = (uint16_t)((depthF + 1.0f) * 32767.5f);
+
+                    if (depth < rowDepth[x])
                     {
+                        float cr = r0 * bw0 + r1 * bw1 + r2 * bw2;
+                        float cg = g0 * bw0 + g1 * bw1 + g2 * bw2;
+                        float cb = b0 * bw0 + b1 * bw1 + b2 * bw2;
+
+                        cr = fminf(255.0f, fmaxf(0.0f, cr));
+                        cg = fminf(255.0f, fmaxf(0.0f, cg));
+                        cb = fminf(255.0f, fmaxf(0.0f, cb));
+
+                        rowDepth[x] = depth;
+                        rowPixels[x] = 0xFF000000 | ((uint32_t)cb << 16) | ((uint32_t)cg << 8) | (uint32_t)cr;
+                    }
+                }
+                w0 += A12;
+                w1 += A20;
+                w2 += A01;
+            }
+        }
+        // =====================================================================
+        // TEXTURED PATH: Scalar inner loop (texture sampling can't be SIMD)
+        // =====================================================================
+        else
+        {
+            for (; x <= maxX; x++)
+            {
+                if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0))
+                {
+                    float bw0 = w0 * invArea;
+                    float bw1 = w1 * invArea;
+                    float bw2 = w2 * invArea;
+
+                    float depthF = v0.depth * bw0 + v1.depth * bw1 + v2.depth * bw2;
+                    uint16_t depth = (uint16_t)((depthF + 1.0f) * 32767.5f);
+
+                    if (depth < rowDepth[x])
+                    {
+                        // Affine texture correction
                         float uAffine = v0.u * bw0 + v1.u * bw1 + v2.u * bw2;
                         float vAffine = v0.v * bw0 + v1.v * bw1 + v2.v * bw2;
                         float affine = v0.affine * bw0 + v1.affine * bw1 + v2.affine * bw2;
@@ -545,8 +597,8 @@ static void rasterize_triangle(
                         tu = tu - floorf(tu);
                         tv = tv - floorf(tv);
 
-                        int32_t tx = (int32_t)(tu * texW);
-                        int32_t ty = (int32_t)((1.0f - tv) * texH);
+                        int32_t tx = (int32_t)(tu * texWf);
+                        int32_t ty = (int32_t)((1.0f - tv) * texHf);
                         tx = ((tx % texW) + texW) % texW;
                         ty = ((ty % texH) + texH) % texH;
 
@@ -559,50 +611,22 @@ static void rasterize_triangle(
                         float litG = g0 * bw0 + g1 * bw1 + g2 * bw2;
                         float litB = b0 * bw0 + b1 * bw1 + b2 * bw2;
 
-                        cr = texR * litR / 255.0f;
-                        cg = texG * litG / 255.0f;
-                        cb = texB * litB / 255.0f;
-                    }
-                    else
-                    {
-                        cr = r0 * bw0 + r1 * bw1 + r2 * bw2;
-                        cg = g0 * bw0 + g1 * bw1 + g2 * bw2;
-                        cb = b0 * bw0 + b1 * bw1 + b2 * bw2;
-                    }
+                        float cr = texR * litR / 255.0f;
+                        float cg = texG * litG / 255.0f;
+                        float cb = texB * litB / 255.0f;
 
-                    if (g_enable_dithering)
-                    {
-                        int32_t ix = x & 7;
-                        int32_t iy = y & 7;
-                        int32_t threshold = DITHER_MATRIX[iy][ix];
-                        int32_t ditherAmt = (threshold - 32) >> 2;
+                        cr = fminf(255.0f, fmaxf(0.0f, cr));
+                        cg = fminf(255.0f, fmaxf(0.0f, cg));
+                        cb = fminf(255.0f, fmaxf(0.0f, cb));
 
-                        cr = (float)(((int32_t)(cr + ditherAmt) >> 3) << 3);
-                        cg = (float)(((int32_t)(cg + ditherAmt) >> 3) << 3);
-                        cb = (float)(((int32_t)(cb + ditherAmt) >> 3) << 3);
-
-                        cr = clamp(cr, 0.0f, 255.0f);
-                        cg = clamp(cg, 0.0f, 255.0f);
-                        cb = clamp(cb, 0.0f, 255.0f);
+                        rowDepth[x] = depth;
+                        rowPixels[x] = 0xFF000000 | ((uint32_t)cb << 16) | ((uint32_t)cg << 8) | (uint32_t)cr;
                     }
-                    else
-                    {
-                        cr = fminf(255.0f, cr);
-                        cg = fminf(255.0f, cg);
-                        cb = fminf(255.0f, cb);
-                    }
-
-                    g_depth[idx] = depth;
-                    g_pixels[idx] = 0xFF000000 |
-                                    ((uint32_t)cb << 16) |
-                                    ((uint32_t)cg << 8) |
-                                    (uint32_t)cr;
                 }
+                w0 += A12;
+                w1 += A20;
+                w2 += A01;
             }
-
-            w0 += A12;
-            w1 += A20;
-            w2 += A01;
         }
 
         w0_row += B12;
@@ -658,39 +682,37 @@ extern "C"
         return g_pixel_count;
     }
 
-    // Clear framebuffer and depth buffer
+    // Clear framebuffer and depth buffer using bulk memory operations
     EMSCRIPTEN_KEEPALIVE
     void clear(uint8_t r, uint8_t g, uint8_t b)
     {
         // Use alpha=0 for background so shader can distinguish from geometry
         uint32_t color = 0x00000000 | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
-
-        // SIMD clear (16 pixels at a time) - use runtime pixel count
-        v128_t simd_color = wasm_i32x4_splat(color);
-        v128_t simd_depth = wasm_i16x8_splat(0xFFFF);
-
-        uint32_t *pixels = g_pixels;
-        uint16_t *depth = g_depth;
-
-        // Clear only the active portion of buffers
         int32_t pixel_count = g_pixel_count;
 
-        // SIMD loop (16 pixels at a time)
+        // Fast depth buffer clear with bulk memory (all 0xFFFF)
+        // Using memset with 0xFF fills each byte, giving us 0xFFFF for 16-bit depth
+        __builtin_memset(g_depth, 0xFF, pixel_count * sizeof(uint16_t));
+
+        // For pixel buffer, we need to set each pixel to the same color
+        // SIMD is still faster than memset for 32-bit pattern fills
+        v128_t simd_color = wasm_i32x4_splat(color);
+        uint32_t *pixels = g_pixels;
+
+        // Unrolled SIMD loop (16 pixels = 64 bytes at a time)
         int32_t i = 0;
-        for (; i + 15 < pixel_count; i += 16)
+        int32_t simd_end = pixel_count - 15;
+        for (; i < simd_end; i += 16)
         {
             wasm_v128_store(pixels + i, simd_color);
             wasm_v128_store(pixels + i + 4, simd_color);
             wasm_v128_store(pixels + i + 8, simd_color);
             wasm_v128_store(pixels + i + 12, simd_color);
-            wasm_v128_store(depth + i, simd_depth);
-            wasm_v128_store(depth + i + 8, simd_depth);
         }
         // Handle remaining pixels
         for (; i < pixel_count; i++)
         {
             pixels[i] = color;
-            depth[i] = 0xFFFF;
         }
     }
 
@@ -715,18 +737,8 @@ extern "C"
     {
         int32_t numTriangles = g_index_count / 3;
 
-        // Clear vertex cache flags (SIMD accelerated)
-        int32_t vertCount = g_vertex_count;
-        int32_t i = 0;
-        v128_t zero = wasm_i8x16_splat(0);
-        for (; i + 15 < vertCount; i += 16)
-        {
-            wasm_v128_store(&g_vertex_processed[i], zero);
-        }
-        for (; i < vertCount; i++)
-        {
-            g_vertex_processed[i] = 0;
-        }
+        // Clear vertex cache flags with bulk memory operation
+        __builtin_memset(g_vertex_processed, 0, g_vertex_count);
 
         for (int32_t t = 0; t < numTriangles; t++)
         {

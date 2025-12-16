@@ -8,6 +8,8 @@ import {
   ModeChangeState,
   serializeMesh,
   deserializeMesh,
+  historyManager,
+  HISTORY_STACK_3D_EDITOR,
 } from "./systems/history";
 import {
   SelectionManager,
@@ -139,7 +141,10 @@ export class Editor {
   public vertexSize: number = 4; // Size in pixels
   public vertexPickRadius: number = 10; // Pick radius in pixels
 
-  constructor(public scene: Scene) {}
+  constructor(public scene: Scene) {
+    // Register 3D editor history with global history manager
+    historyManager.registerStack(HISTORY_STACK_3D_EDITOR, this.history);
+  }
 
   /**
    * Create a canonical edge key (sorted vertex indices)
@@ -552,6 +557,95 @@ export class Editor {
         canvasHeight,
       }
     );
+  }
+
+  /**
+   * Box select elements in edit mode (vertices, edges, or faces)
+   * @param shiftKey If true, adds to selection; otherwise replaces
+   * @returns true if any elements were selected
+   */
+  boxSelectElements(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    shiftKey: boolean = false
+  ): boolean {
+    if (this.mode !== "edit") return false;
+
+    const selected = this.scene.getSelectedObjects();
+    if (selected.length === 0) return false;
+
+    const obj = selected[0];
+    const mesh = obj.mesh;
+    const modelMatrix = obj.getModelMatrix();
+    const ctx = {
+      camera: this.scene.camera,
+      canvasWidth,
+      canvasHeight,
+    };
+
+    const before = this.getSelectionState();
+
+    // Clear selection if not extending
+    if (!shiftKey) {
+      this.clearEditSelections();
+    }
+
+    let changed = false;
+
+    if (this.selectionMode === "vertex") {
+      const vertices = this.picking.boxSelectVertices(
+        boxMinX,
+        boxMinY,
+        boxMaxX,
+        boxMaxY,
+        mesh,
+        modelMatrix,
+        ctx
+      );
+      for (const idx of vertices) {
+        this.selection.addVertex(idx);
+        changed = true;
+      }
+    } else if (this.selectionMode === "edge") {
+      const edges = this.picking.boxSelectEdges(
+        boxMinX,
+        boxMinY,
+        boxMaxX,
+        boxMaxY,
+        mesh,
+        modelMatrix,
+        ctx
+      );
+      for (const key of edges) {
+        this.selection.addEdgeByKey(key);
+        changed = true;
+      }
+    } else if (this.selectionMode === "face") {
+      const faces = this.picking.boxSelectFaces(
+        boxMinX,
+        boxMinY,
+        boxMaxX,
+        boxMaxY,
+        mesh,
+        modelMatrix,
+        ctx
+      );
+      for (const idx of faces) {
+        this.selection.addFace(idx);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const after = this.getSelectionState();
+      this.recordSelectionChange(before, after, "Box Select");
+    }
+
+    return changed;
   }
 
   /**
@@ -1779,6 +1873,62 @@ export class Editor {
           // Single object mode: reset object to original position
           const obj = selected[0];
           obj.position = state.startPos.clone();
+          this.transform.resetTransformOrigin(obj.getWorldCenter());
+        }
+      }
+    }
+
+    // If in rotate mode, reset to original rotations before switching axis
+    if (this.transform.mode === "rotate") {
+      const selected = this.scene.getSelectedObjects();
+      if (selected.length > 0) {
+        const state = this.transform.getState();
+
+        if (this.mode === "edit" && state.vertexStartPositions.size > 0) {
+          // Edit mode: reset vertices to original positions
+          const obj = selected[0];
+          const mesh = obj.mesh;
+          for (const [idx, startPos] of state.vertexStartPositions) {
+            mesh.vertices[idx].position = startPos.clone();
+          }
+          mesh.rebuildTriangles();
+          mesh.recalculateNormals();
+
+          // Reset gizmo origin to original center
+          let center = Vector3.zero();
+          for (const [, pos] of state.vertexStartPositions) {
+            center = center.add(pos);
+          }
+          center = center.div(state.vertexStartPositions.size);
+          const modelMatrix = obj.getModelMatrix();
+          this.transform.resetTransformOrigin(
+            modelMatrix.transformPoint(center)
+          );
+        } else if (this.transform.isMultiObjectTransform) {
+          // Multi-object mode: reset all objects to original rotations and positions
+          const startRotations = this.transform.getMultiObjectStartRotations();
+          const startPositions = this.transform.getMultiObjectStartPositions();
+          for (const obj of selected) {
+            const startRot = startRotations.get(obj.name);
+            const startPos = startPositions.get(obj.name);
+            if (startRot) {
+              obj.rotation = startRot.clone();
+            }
+            if (startPos) {
+              obj.position = startPos.clone();
+            }
+          }
+          // Reset gizmo origin to original combined center
+          let center = Vector3.zero();
+          for (const pos of startPositions.values()) {
+            center = center.add(pos);
+          }
+          center = center.div(startPositions.size);
+          this.transform.resetTransformOrigin(center);
+        } else if (state.startRotation) {
+          // Single object mode: reset object to original rotation
+          const obj = selected[0];
+          obj.rotation = state.startRotation.clone();
           this.transform.resetTransformOrigin(obj.getWorldCenter());
         }
       }
