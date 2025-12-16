@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import hideOnIcon from "../icons/hide_on.svg";
 import hideOffIcon from "../icons/hide_off.svg";
 import editModeIcon from "../icons/editmode_hlt.svg";
@@ -11,9 +11,14 @@ interface SceneObject {
   inEditMode: boolean;
 }
 
+interface SelectionModifiers {
+  shiftKey: boolean;
+  ctrlKey: boolean;
+}
+
 interface SceneTreeProps {
   objects: SceneObject[];
-  onSelectObject: (name: string) => void;
+  onSelectObject: (name: string, modifiers: SelectionModifiers) => void;
   onToggleVisibility: (name: string) => void;
 }
 
@@ -32,7 +37,7 @@ function TreeItem({
   obj: SceneObject;
   objects: SceneObject[];
   depth: number;
-  onSelectObject: (name: string) => void;
+  onSelectObject: (name: string, modifiers: SelectionModifiers) => void;
   onToggleVisibility: (name: string) => void;
   collapsedItems: Set<string>;
   toggleCollapsed: (name: string) => void;
@@ -46,7 +51,12 @@ function TreeItem({
     <>
       <div
         className={`tree-item object-item ${obj.selected ? "selected" : ""}`}
-        onClick={() => onSelectObject(obj.name)}
+        onClick={(e) =>
+          onSelectObject(obj.name, {
+            shiftKey: e.shiftKey,
+            ctrlKey: e.ctrlKey || e.metaKey,
+          })
+        }
       >
         {/* Indentation based on depth */}
         {Array.from({ length: depth }).map((_, i) => (

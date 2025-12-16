@@ -718,3 +718,509 @@ export function createCircleMesh(
 
   return new Mesh(vertices, indices);
 }
+
+/**
+ * Create a UV sphere mesh
+ */
+export function createUVSphereMesh(
+  radius: number = 1,
+  segments: number = 32,
+  rings: number = 16
+): Mesh {
+  const color = Color.white();
+  const vertices: Vertex[] = [];
+  const indices: number[] = [];
+
+  // Generate vertices
+  for (let ring = 0; ring <= rings; ring++) {
+    const phi = (ring / rings) * Math.PI; // 0 to PI (top to bottom)
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+
+    for (let seg = 0; seg <= segments; seg++) {
+      const theta = (seg / segments) * Math.PI * 2; // 0 to 2PI
+      const sinTheta = Math.sin(theta);
+      const cosTheta = Math.cos(theta);
+
+      // Position (Z-up: x = right, y = forward, z = up)
+      const x = radius * sinPhi * cosTheta;
+      const y = radius * sinPhi * sinTheta;
+      const z = radius * cosPhi;
+
+      // Normal (same as position for a sphere, normalized)
+      const normal = new Vector3(sinPhi * cosTheta, sinPhi * sinTheta, cosPhi);
+
+      // UV
+      const u = seg / segments;
+      const v = ring / rings;
+
+      vertices.push(new Vertex(new Vector3(x, y, z), color, normal, u, v));
+    }
+  }
+
+  // Generate indices (quads as two triangles)
+  for (let ring = 0; ring < rings; ring++) {
+    for (let seg = 0; seg < segments; seg++) {
+      const current = ring * (segments + 1) + seg;
+      const next = current + segments + 1;
+
+      // Two triangles per quad
+      indices.push(current, next, current + 1);
+      indices.push(current + 1, next, next + 1);
+    }
+  }
+
+  return new Mesh(vertices, indices);
+}
+
+/**
+ * Create an icosphere mesh (subdivided icosahedron)
+ */
+export function createIcoSphereMesh(
+  radius: number = 1,
+  subdivisions: number = 2
+): Mesh {
+  const color = Color.white();
+
+  // Golden ratio
+  const t = (1 + Math.sqrt(5)) / 2;
+
+  // Initial icosahedron vertices (normalized)
+  const initialPositions = [
+    [-1, t, 0],
+    [1, t, 0],
+    [-1, -t, 0],
+    [1, -t, 0],
+    [0, -1, t],
+    [0, 1, t],
+    [0, -1, -t],
+    [0, 1, -t],
+    [t, 0, -1],
+    [t, 0, 1],
+    [-t, 0, -1],
+    [-t, 0, 1],
+  ].map(([x, y, z]) => {
+    const len = Math.sqrt(x * x + y * y + z * z);
+    return new Vector3(x / len, y / len, z / len);
+  });
+
+  // Initial icosahedron faces (20 triangles)
+  let faces: [number, number, number][] = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1],
+  ];
+
+  let positions = [...initialPositions];
+
+  // Subdivision
+  const midpointCache = new Map<string, number>();
+
+  const getMidpoint = (i1: number, i2: number): number => {
+    const key = i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
+    if (midpointCache.has(key)) {
+      return midpointCache.get(key)!;
+    }
+
+    const p1 = positions[i1];
+    const p2 = positions[i2];
+    const mid = new Vector3(
+      (p1.x + p2.x) / 2,
+      (p1.y + p2.y) / 2,
+      (p1.z + p2.z) / 2
+    ).normalize();
+
+    const idx = positions.length;
+    positions.push(mid);
+    midpointCache.set(key, idx);
+    return idx;
+  };
+
+  for (let i = 0; i < subdivisions; i++) {
+    const newFaces: [number, number, number][] = [];
+
+    for (const [v0, v1, v2] of faces) {
+      const a = getMidpoint(v0, v1);
+      const b = getMidpoint(v1, v2);
+      const c = getMidpoint(v2, v0);
+
+      newFaces.push([v0, a, c], [v1, b, a], [v2, c, b], [a, b, c]);
+    }
+
+    faces = newFaces;
+    midpointCache.clear();
+  }
+
+  // Create mesh vertices with proper normals and UVs
+  const vertices: Vertex[] = [];
+  const indices: number[] = [];
+
+  for (const [i0, i1, i2] of faces) {
+    const baseIdx = vertices.length;
+
+    for (const idx of [i0, i1, i2]) {
+      const pos = positions[idx].mul(radius);
+      const normal = positions[idx]; // Normal points outward (same as normalized position)
+
+      // Spherical UV mapping
+      const u = 0.5 + Math.atan2(normal.y, normal.x) / (2 * Math.PI);
+      const v = 0.5 - Math.asin(normal.z) / Math.PI;
+
+      vertices.push(new Vertex(pos, color, normal, u, v));
+    }
+
+    indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
+  }
+
+  return new Mesh(vertices, indices);
+}
+
+/**
+ * Create a cylinder mesh
+ */
+export function createCylinderMesh(
+  radius: number = 1,
+  depth: number = 2,
+  vertices_count: number = 32
+): Mesh {
+  const color = Color.white();
+  const vertices: Vertex[] = [];
+  const indices: number[] = [];
+
+  const halfDepth = depth / 2;
+
+  // Create top and bottom cap centers
+  const topCenterIdx = 0;
+  const bottomCenterIdx = 1;
+
+  vertices.push(
+    new Vertex(
+      new Vector3(0, 0, halfDepth),
+      color,
+      new Vector3(0, 0, 1),
+      0.5,
+      0.5
+    ),
+    new Vertex(
+      new Vector3(0, 0, -halfDepth),
+      color,
+      new Vector3(0, 0, -1),
+      0.5,
+      0.5
+    )
+  );
+
+  // Create ring vertices for top, bottom, and side
+  for (let i = 0; i <= vertices_count; i++) {
+    const angle = (i / vertices_count) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const x = radius * cos;
+    const y = radius * sin;
+
+    // UV for caps
+    const capU = (cos + 1) / 2;
+    const capV = (sin + 1) / 2;
+
+    // UV for sides
+    const sideU = i / vertices_count;
+
+    // Top cap vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(x, y, halfDepth),
+        color,
+        new Vector3(0, 0, 1),
+        capU,
+        capV
+      )
+    );
+
+    // Bottom cap vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(x, y, -halfDepth),
+        color,
+        new Vector3(0, 0, -1),
+        capU,
+        capV
+      )
+    );
+
+    // Side top vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(x, y, halfDepth),
+        color,
+        new Vector3(cos, sin, 0),
+        sideU,
+        0
+      )
+    );
+
+    // Side bottom vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(x, y, -halfDepth),
+        color,
+        new Vector3(cos, sin, 0),
+        sideU,
+        1
+      )
+    );
+  }
+
+  // Create faces
+  for (let i = 0; i < vertices_count; i++) {
+    const base = 2 + i * 4;
+    const nextBase = 2 + ((i + 1) % (vertices_count + 1)) * 4;
+
+    // Top cap triangle
+    indices.push(topCenterIdx, base, nextBase);
+
+    // Bottom cap triangle (reversed winding)
+    indices.push(bottomCenterIdx, nextBase + 1, base + 1);
+
+    // Side quad (two triangles)
+    indices.push(base + 2, base + 3, nextBase + 2);
+    indices.push(nextBase + 2, base + 3, nextBase + 3);
+  }
+
+  return new Mesh(vertices, indices);
+}
+
+/**
+ * Create a cone mesh (can also be a truncated cone with radius2 > 0)
+ */
+export function createConeMesh(
+  radius1: number = 1,
+  radius2: number = 0,
+  depth: number = 2,
+  vertices_count: number = 32
+): Mesh {
+  const color = Color.white();
+  const vertices: Vertex[] = [];
+  const indices: number[] = [];
+
+  const halfDepth = depth / 2;
+  const hasTopCap = radius2 > 0.001;
+
+  // Calculate side normal angle
+  const sideAngle = Math.atan2(radius1 - radius2, depth);
+  const cosAngle = Math.cos(sideAngle);
+  const sinAngle = Math.sin(sideAngle);
+
+  // Create cap centers
+  let topCenterIdx = -1;
+  let bottomCenterIdx = -1;
+
+  // Bottom cap center
+  bottomCenterIdx = vertices.length;
+  vertices.push(
+    new Vertex(
+      new Vector3(0, 0, -halfDepth),
+      color,
+      new Vector3(0, 0, -1),
+      0.5,
+      0.5
+    )
+  );
+
+  // Top cap center (or apex)
+  topCenterIdx = vertices.length;
+  if (hasTopCap) {
+    vertices.push(
+      new Vertex(
+        new Vector3(0, 0, halfDepth),
+        color,
+        new Vector3(0, 0, 1),
+        0.5,
+        0.5
+      )
+    );
+  } else {
+    // Apex point
+    vertices.push(
+      new Vertex(
+        new Vector3(0, 0, halfDepth),
+        color,
+        new Vector3(0, 0, 1),
+        0.5,
+        0.5
+      )
+    );
+  }
+
+  // Create ring vertices
+  for (let i = 0; i <= vertices_count; i++) {
+    const angle = (i / vertices_count) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+
+    const bottomX = radius1 * cos;
+    const bottomY = radius1 * sin;
+    const topX = radius2 * cos;
+    const topY = radius2 * sin;
+
+    // UV for caps
+    const capU = (cos + 1) / 2;
+    const capV = (sin + 1) / 2;
+
+    // UV for sides
+    const sideU = i / vertices_count;
+
+    // Side normal (perpendicular to side surface)
+    const sideNormal = new Vector3(cos * cosAngle, sin * cosAngle, sinAngle);
+
+    // Bottom cap vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(bottomX, bottomY, -halfDepth),
+        color,
+        new Vector3(0, 0, -1),
+        capU,
+        capV
+      )
+    );
+
+    // Top cap/apex vertex
+    if (hasTopCap) {
+      vertices.push(
+        new Vertex(
+          new Vector3(topX, topY, halfDepth),
+          color,
+          new Vector3(0, 0, 1),
+          capU,
+          capV
+        )
+      );
+    }
+
+    // Side bottom vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(bottomX, bottomY, -halfDepth),
+        color,
+        sideNormal,
+        sideU,
+        1
+      )
+    );
+
+    // Side top vertex
+    vertices.push(
+      new Vertex(
+        new Vector3(topX, topY, halfDepth),
+        color,
+        sideNormal,
+        sideU,
+        0
+      )
+    );
+  }
+
+  // Create faces
+  const verticesPerRing = hasTopCap ? 4 : 3;
+
+  for (let i = 0; i < vertices_count; i++) {
+    const base = 2 + i * verticesPerRing;
+    const nextBase = 2 + ((i + 1) % (vertices_count + 1)) * verticesPerRing;
+
+    // Bottom cap triangle (reversed winding)
+    indices.push(bottomCenterIdx, nextBase, base);
+
+    if (hasTopCap) {
+      // Top cap triangle
+      indices.push(topCenterIdx, base + 1, nextBase + 1);
+
+      // Side quad
+      const sideBase = base + 2;
+      const sideNextBase = nextBase + 2;
+      indices.push(sideBase, sideBase + 1, sideNextBase);
+      indices.push(sideNextBase, sideBase + 1, sideNextBase + 1);
+    } else {
+      // Side triangle (cone point)
+      const sideBase = base + 1;
+      const sideNextBase = nextBase + 1;
+      indices.push(sideBase, sideBase + 1, sideNextBase);
+    }
+  }
+
+  return new Mesh(vertices, indices);
+}
+
+/**
+ * Create a torus mesh
+ */
+export function createTorusMesh(
+  majorRadius: number = 1,
+  minorRadius: number = 0.25,
+  majorSegments: number = 48,
+  minorSegments: number = 12
+): Mesh {
+  const color = Color.white();
+  const vertices: Vertex[] = [];
+  const indices: number[] = [];
+
+  // Generate vertices
+  for (let i = 0; i <= majorSegments; i++) {
+    const majorAngle = (i / majorSegments) * Math.PI * 2;
+    const cosMajor = Math.cos(majorAngle);
+    const sinMajor = Math.sin(majorAngle);
+
+    for (let j = 0; j <= minorSegments; j++) {
+      const minorAngle = (j / minorSegments) * Math.PI * 2;
+      const cosMinor = Math.cos(minorAngle);
+      const sinMinor = Math.sin(minorAngle);
+
+      // Position
+      const x = (majorRadius + minorRadius * cosMinor) * cosMajor;
+      const y = (majorRadius + minorRadius * cosMinor) * sinMajor;
+      const z = minorRadius * sinMinor;
+
+      // Normal (points from center of tube)
+      const normal = new Vector3(
+        cosMinor * cosMajor,
+        cosMinor * sinMajor,
+        sinMinor
+      );
+
+      // UV
+      const u = i / majorSegments;
+      const v = j / minorSegments;
+
+      vertices.push(new Vertex(new Vector3(x, y, z), color, normal, u, v));
+    }
+  }
+
+  // Generate indices
+  for (let i = 0; i < majorSegments; i++) {
+    for (let j = 0; j < minorSegments; j++) {
+      const current = i * (minorSegments + 1) + j;
+      const next = current + minorSegments + 1;
+
+      // Two triangles per quad
+      indices.push(current, next, current + 1);
+      indices.push(current + 1, next, next + 1);
+    }
+  }
+
+  return new Mesh(vertices, indices);
+}

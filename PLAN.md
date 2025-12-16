@@ -31,6 +31,8 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 - [x] Click to select objects
 - [x] Ray casting for accurate picking (Ray-AABB intersection)
 - [x] Visual selection highlight (color change)
+- [x] Box selection in object mode (click+drag with 5px threshold)
+- [x] Multi-select in scene tree (Shift+click for range, Ctrl/Cmd+click for toggle)
 
 ### 1.3 Transform Gizmos
 
@@ -59,8 +61,9 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 ### 1.6 UI Layout ✅
 
 - [x] Toolbar with mode switching and transform tools
-- [x] Scene tree panel (left) - object list with visibility toggle
-- [x] Properties panel (right) - position, rotation, scale editing
+- [x] Workspace tabs (Modeling/Shading) in toolbar
+- [x] Scene tree panel in right sidebar - object list with visibility toggle
+- [x] Properties panel in right sidebar - position, rotation, scale editing
 - [x] Status bar (bottom) - mode, selection info, FPS
 - [x] Resizable viewport with PS1-style rendering
 
@@ -95,21 +98,26 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 - [x] Edge loop selection (Alt+click) - selects connected edges through vertices
 - [x] Edge ring selection (Ctrl+Alt+click) - selects opposite edges across quads
 
-### 2.3 Primitive Creation
+### 2.3 Primitive Creation ✅
 
 - [x] Add Cube (Shift+A menu)
 - [x] Add Plane (Shift+A menu)
-- [ ] Add UV Sphere
-- [ ] Add Cylinder
+- [x] Add UV Sphere (with segments/rings settings)
+- [x] Add Ico Sphere (with subdivisions setting)
+- [x] Add Cylinder (with vertices/depth settings)
+- [x] Add Cone (with vertices/radius/depth settings)
+- [x] Add Torus (with major/minor segments/radius settings)
+- [x] PrimitiveSettings modal for configuring primitive parameters
 
-### 2.4 Basic Operations
+### 2.4 Basic Operations ✅
 
 - [x] Delete selected (X or Delete key - vertices/edges/faces in edit mode, objects in object mode)
 - [x] Extrude edges (E key in edge mode) - creates quad ribbon and starts grab
+- [x] Extrude faces (E key in face mode) - extrudes selected faces, selects only top faces
 - [x] Fill edges (F key in edge mode) - creates face from 2+ selected edges
 - [x] Join vertices (F key in vertex mode with 2 vertices) - creates edge
 - [x] Fill vertices (F key in vertex mode with 3+ vertices) - creates face
-- [ ] Duplicate
+- [x] Duplicate objects (Shift+D) - preserves texture assignment
 - [x] Undo/Redo system (Ctrl+Z / Ctrl+Shift+Z)
 - [x] Selection changes in undo stack (both object and edit modes)
 - [x] Mode changes in undo stack (Tab key)
@@ -126,37 +134,41 @@ A Blender-inspired 3D graphics editor with PS1-style rendering. Built with a cus
 - [x] Fill operations create faces via faceData (preserves topology)
 - [x] Extrude operations add quads to faceData with correct winding
 
+### 2.6 Texture System ✅
+
+- [x] Per-object texture assignment (SceneObject.texture property)
+- [x] RenderObject.hasTexture flag for selective texturing
+- [x] OBJ-imported textures don't bleed to primitives
+- [x] Texture preserved when duplicating objects
+
 ---
 
 ## Phase 3: Advanced Features (Future)
 
-- [ ] Extrude faces
 - [ ] Loop cut
 - [ ] Subdivide
-- [ ] Box select (B key)
+- [ ] Box select in edit mode (B key)
 - [ ] Export OBJ
-- [ ] Multiple objects in scene
-- [ ] Hierarchy/outliner panel
+- [ ] Hierarchy/parenting
 - [ ] Proportional editing
+- [ ] Shading workspace implementation
 
 ---
 
-## UI Layout (Target)
+## UI Layout (Current)
 
 ```
-+------------------------------------------+
-|  Toolbar: Mode | Add | Transform tools   |
-+--------+-----------------------------+---+
-|        |                             |   |
-| Scene  |      3D Viewport            | P |
-| Tree   |                             | r |
-|        |                             | o |
-+--------+                             | p |
-|        |                             | s |
-| Tools  |                             |   |
-|        +-----------------------------+---+
-|        |  Status bar / coordinates       |
-+------------------------------------------+
++----------------------------------------------------+
+| [Workspace Tabs] | Mode | Add | Transform tools    |
++---------------+---------------------------+--------+
+|               |                           | Scene  |
+|               |      3D Viewport          | Tree   |
+|               |                           +--------+
+|               |                           | Props  |
+|               |                           | Panel  |
++---------------+---------------------------+--------+
+|  Status bar / coordinates / FPS                    |
++----------------------------------------------------+
 ```
 
 ---

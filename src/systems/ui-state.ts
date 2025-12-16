@@ -61,6 +61,7 @@ export interface UIState {
   selectedVertexCount: number;
   selectedEdgeCount: number;
   selectedFaceCount: number;
+  selectedDimensions: Vector3;
   settings: RendererSettings;
 }
 
@@ -84,6 +85,7 @@ export interface UIStateSetters {
   setSelectedVertexCount: (count: number) => void;
   setSelectedEdgeCount: (count: number) => void;
   setSelectedFaceCount: (count: number) => void;
+  setSelectedDimensions: (dimensions: Vector3) => void;
   setSettings: (settings: RendererSettings) => void;
 }
 
@@ -164,6 +166,9 @@ export function useEditorUIState(
   const [selectedVertexCount, setSelectedVertexCount] = useState(0);
   const [selectedEdgeCount, setSelectedEdgeCount] = useState(0);
   const [selectedFaceCount, setSelectedFaceCount] = useState(0);
+  const [selectedDimensions, setSelectedDimensions] = useState<Vector3>(
+    Vector3.zero()
+  );
   const [settings, setSettings] = useState<RendererSettings>(DEFAULT_SETTINGS);
 
   // Throttling ref
@@ -209,8 +214,18 @@ export function useEditorUIState(
       setSelectedPosition(obj.position.clone());
       setSelectedRotation(obj.rotation.clone());
       setSelectedScale(obj.scale.clone());
+      // Get mesh dimensions (local space) and multiply by scale for world dimensions
+      const localSize = obj.mesh.getSize();
+      setSelectedDimensions(
+        new Vector3(
+          localSize.x * obj.scale.x,
+          localSize.y * obj.scale.y,
+          localSize.z * obj.scale.z
+        )
+      );
     } else {
       setSelectedObjectName(null);
+      setSelectedDimensions(Vector3.zero());
     }
   }, [editorRef, sceneRef]);
 
@@ -292,6 +307,7 @@ export function useEditorUIState(
       selectedVertexCount,
       selectedEdgeCount,
       selectedFaceCount,
+      selectedDimensions,
       settings,
     },
     setters: {
@@ -311,6 +327,7 @@ export function useEditorUIState(
       setSelectedVertexCount,
       setSelectedEdgeCount,
       setSelectedFaceCount,
+      setSelectedDimensions,
       setSettings,
     },
     actions: {

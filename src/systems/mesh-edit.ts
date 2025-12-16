@@ -958,7 +958,8 @@ export class MeshEditManager {
     // Map from original vertex index to new duplicated vertex index
     const vertexMapping = new Map<number, number>();
     const newVertexIndices = new Set<number>();
-    const newFaceIndices = new Set<number>();
+    const allNewFaceIndices = new Set<number>(); // All new faces (for index adjustment)
+    const topFaceIndices = new Set<number>(); // Only top faces (for selection)
 
     // Process each selected face
     for (const faceIdx of selectedFaces) {
@@ -1000,13 +1001,16 @@ export class MeshEditManager {
 
         // Side face winding: v1, v0, newV0, newV1 (reversed from face winding for outward normal)
         mesh.faceData.push({ vertices: [v1, v0, newV0, newV1] });
-        newFaceIndices.add(mesh.faceData.length - 1);
+        allNewFaceIndices.add(mesh.faceData.length - 1);
+        // Side faces are NOT added to topFaceIndices
       }
 
       // Create the new top face from duplicated vertices (same winding as original)
       const newTopVerts = faceVerts.map((v) => localMapping.get(v)!);
       mesh.faceData.push({ vertices: newTopVerts });
-      newFaceIndices.add(mesh.faceData.length - 1);
+      const topFaceIdx = mesh.faceData.length - 1;
+      allNewFaceIndices.add(topFaceIdx);
+      topFaceIndices.add(topFaceIdx); // Only top faces should be selected
     }
 
     // Remove the original selected faces (they're now inside the extrusion)
@@ -1014,18 +1018,18 @@ export class MeshEditManager {
     const sortedFaces = Array.from(selectedFaces).sort((a, b) => b - a);
     for (const faceIdx of sortedFaces) {
       mesh.faceData.splice(faceIdx, 1);
-      // Adjust newFaceIndices since we removed a face
+      // Adjust topFaceIndices since we removed a face
       const adjustedIndices = new Set<number>();
-      for (const idx of newFaceIndices) {
+      for (const idx of topFaceIndices) {
         if (idx > faceIdx) {
           adjustedIndices.add(idx - 1);
         } else {
           adjustedIndices.add(idx);
         }
       }
-      newFaceIndices.clear();
+      topFaceIndices.clear();
       for (const idx of adjustedIndices) {
-        newFaceIndices.add(idx);
+        topFaceIndices.add(idx);
       }
     }
 
@@ -1035,7 +1039,7 @@ export class MeshEditManager {
     return {
       success: true,
       newVertices: newVertexIndices,
-      newFaces: newFaceIndices,
+      newFaces: topFaceIndices, // Return only top faces for selection
     };
   }
 }

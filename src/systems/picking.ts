@@ -733,4 +733,68 @@ export class PickingManager {
       ? { edgeKey: closestEdge, distance: closestDist }
       : null;
   }
+
+  /**
+   * Box select objects - returns all objects whose screen-space bounds intersect the box
+   */
+  boxSelectObjects(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    objects: SceneObject[],
+    ctx: PickContext
+  ): SceneObject[] {
+    const result: SceneObject[] = [];
+
+    for (const obj of objects) {
+      if (!obj.visible) continue;
+
+      // Get world bounds corners
+      const bounds = obj.getWorldBounds();
+      const corners = [
+        new Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.max.z),
+      ];
+
+      // Project all corners to screen and find 2D bounding box
+      let screenMinX = Infinity;
+      let screenMinY = Infinity;
+      let screenMaxX = -Infinity;
+      let screenMaxY = -Infinity;
+      let hasVisibleCorner = false;
+
+      for (const corner of corners) {
+        const screen = this.projectToScreen(corner, ctx);
+        if (screen) {
+          hasVisibleCorner = true;
+          screenMinX = Math.min(screenMinX, screen.x);
+          screenMinY = Math.min(screenMinY, screen.y);
+          screenMaxX = Math.max(screenMaxX, screen.x);
+          screenMaxY = Math.max(screenMaxY, screen.y);
+        }
+      }
+
+      if (!hasVisibleCorner) continue;
+
+      // Check if the object's screen-space box intersects the selection box
+      const intersects =
+        screenMinX <= boxMaxX &&
+        screenMaxX >= boxMinX &&
+        screenMinY <= boxMaxY &&
+        screenMaxY >= boxMinY;
+
+      if (intersects) {
+        result.push(obj);
+      }
+    }
+
+    return result;
+  }
 }

@@ -246,6 +246,38 @@ export class Editor {
   }
 
   /**
+   * Push an object transform change to history (for Properties panel edits)
+   */
+  pushTransformToHistory(
+    objectName: string,
+    beforePos: Vector3,
+    beforeRot: Vector3,
+    beforeScale: Vector3,
+    afterPos: Vector3,
+    afterRot: Vector3,
+    afterScale: Vector3
+  ): void {
+    this.pushHistoryAction({
+      type: "object-transform",
+      description: `Edit ${objectName} transform`,
+      objectTransform: {
+        before: {
+          objectName,
+          position: beforePos,
+          rotation: beforeRot,
+          scale: beforeScale,
+        },
+        after: {
+          objectName,
+          position: afterPos,
+          rotation: afterRot,
+          scale: afterScale,
+        },
+      },
+    });
+  }
+
+  /**
    * Push an action to the history (undo stack)
    */
   private pushHistoryAction(action: HistoryAction): void {
@@ -495,6 +527,31 @@ export class Editor {
       canvasWidth,
       canvasHeight,
     });
+  }
+
+  /**
+   * Box select objects within screen bounds
+   */
+  boxSelectObjects(
+    boxMinX: number,
+    boxMinY: number,
+    boxMaxX: number,
+    boxMaxY: number,
+    canvasWidth: number,
+    canvasHeight: number
+  ): SceneObject[] {
+    return this.picking.boxSelectObjects(
+      boxMinX,
+      boxMinY,
+      boxMaxX,
+      boxMaxY,
+      this.scene.objects,
+      {
+        camera: this.scene.camera,
+        canvasWidth,
+        canvasHeight,
+      }
+    );
   }
 
   /**
@@ -1148,6 +1205,9 @@ export class Editor {
       newObj.position = obj.position.clone();
       newObj.rotation = obj.rotation.clone();
       newObj.scale = obj.scale.clone();
+      newObj.texture = obj.texture; // Copy texture reference
+      // Use same material as source object
+      newObj.materialId = obj.materialId;
 
       // Add to scene
       this.scene.addObject(newObj);

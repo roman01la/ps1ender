@@ -12,12 +12,12 @@ The codebase has been refactored to extract systems into separate modules:
 
 ```
 src/
-├── App.tsx (~550 lines)     ← UI + Event handlers (uses all systems)
-├── editor.ts (~1400 lines)  ← Editor orchestration (uses all systems)
+├── App.tsx (~1100 lines)    ← UI + Event handlers (uses all systems)
+├── editor.ts (~2100 lines)  ← Editor orchestration (uses all systems)
 ├── scene.ts (371 lines)     ← Scene graph + Camera
 ├── rasterizer.ts (860 lines)← Software renderer
 ├── math.ts (594 lines)      ← Vector/Matrix math
-├── primitives.ts (~330 lines)← Vertex/Triangle types + mesh factories + logical faces
+├── primitives.ts (~1300 lines)← Vertex/Triangle types + mesh factories + logical faces
 ├── obj-loader.ts (344 lines)← OBJ file parser
 ├── texture.ts (352 lines)   ← Texture loading
 ├── svg.d.ts                 ← TypeScript SVG module declaration
@@ -26,18 +26,23 @@ src/
 │   ├── input.ts (~360 lines)        ← Keyboard/mouse + context-aware shortcuts ✅
 │   ├── selection.ts (~700 lines)    ← Selection state + queries ✅
 │   ├── transform.ts (~500 lines)    ← Grab/rotate/scale operations ✅
-│   ├── mesh-edit.ts (~260 lines)    ← Delete vertices/edges/faces ✅
-│   ├── picking.ts (~800 lines)      ← Raycasting + element picking + smart picking ✅
+│   ├── mesh-edit.ts (~1100 lines)   ← Delete/extrude vertices/edges/faces ✅
+│   ├── picking.ts (~800 lines)      ← Raycasting + element picking + box select ✅
 │   ├── visualization.ts (~600 lines)← Edit mode visualization + quad handling ✅
 │   ├── ui-state.ts (~280 lines)     ← UI state sync hook ✅
 │   └── render-loop.ts (~330 lines)  ← Animation loop + rendering ✅
 ├── components/
-│   ├── AddMenu.tsx          ← Shift+A primitive add menu
+│   ├── AddMenu.tsx          ← Shift+A primitive add menu (7 primitives)
+│   ├── PrimitiveSettings.tsx← Modal for configuring primitive parameters
 │   ├── ToolbarButton.tsx    ← Reusable toolbar button component
-│   ├── Toolbar.tsx          ← Main toolbar with Blender SVG icons
+│   ├── Toolbar.tsx          ← Main toolbar with workspace tabs
+│   ├── WorkspaceTabs.tsx    ← Workspace switching (Modeling/Shading)
 │   ├── StatusBar.tsx        ← Mode, selection info, FPS display
-│   ├── SceneTree.tsx        ← Object list with visibility toggle (SVG icons)
+│   ├── SceneTree.tsx        ← Object list with multi-select support
 │   ├── PropertiesPanel.tsx  ← Transform property editing
+│   ├── ShadingContextMenu.tsx ← Right-click context menu for shading
+│   ├── ViewportGizmo.tsx    ← 3D axis gizmo in viewport corner
+│   ├── WelcomeModal.tsx     ← Initial welcome dialog
 │   └── Instructions.tsx     ← Keyboard shortcut overlay
 └── icons/                   ← Blender SVG icons (500+)
 ```
@@ -50,7 +55,7 @@ src/
 | Keyboard/Mouse Input    | `src/systems/input.ts`         | ✅ Extracted |
 | Selection (vertex/edge) | `src/systems/selection.ts`     | ✅ Extracted |
 | Transforms (G/R/S)      | `src/systems/transform.ts`     | ✅ Extracted |
-| Mesh editing (delete)   | `src/systems/mesh-edit.ts`     | ✅ Extracted |
+| Mesh editing            | `src/systems/mesh-edit.ts`     | ✅ Extracted |
 | Picking (ray cast)      | `src/systems/picking.ts`       | ✅ Extracted |
 | Edit mode visualization | `src/systems/visualization.ts` | ✅ Extracted |
 | UI state sync           | `src/systems/ui-state.ts`      | ✅ Extracted |
@@ -1051,13 +1056,201 @@ const edgeKey = p0 < p1 ? `${p0}|${p1}` : `${p1}|${p0}`;
 
 This ensures the algorithms work correctly with per-face vertex duplication.
 
-### Box Select
+---
 
-Will need to:
+## Box Selection (Object Mode)
 
-1. Project all vertices to screen space
-2. Test which fall within selection rectangle
-3. Handle backface culling during selection
+### Implementation
+
+Box selection allows selecting multiple objects by click+dragging a rectangle in the viewport.
+
+**Location:** `PickingManager.boxSelectObjects()` in `src/systems/picking.ts`
+
+**Algorithm:**
+
+1. When mouse down, record start position
+2. On mouse move, check if drag distance exceeds 5px threshold (prevents accidental box select)
+3. Draw selection box visually (canvas overlay)
+4. On mouse up, test each object's screen-space center against the box bounds
+5. Select all objects whose center falls within the box
+
+**Usage in App.tsx:**
+
+```typescript
+const selectedObjects = editor.boxSelectObjects(boxStart, boxEnd);
+if (selectedObjects.length > 0) {
+  // First object becomes active
+  scene.selectObject(selectedObjects[0]);
+  // Rest are added to selection
+  for (let i = 1; i < selectedObjects.length; i++) {
+    selectedObjects[i].selected = true;
+  }
+}
+```
+
+---
+
+## Scene Tree Multi-Select
+
+### Shift+Click (Range Selection)
+
+Selects all objects between the last clicked object and the current object.
+
+**Implementation:**
+
+1. Track `lastSelectedRef` to remember previous selection
+2. On shift+click, find indices of both objects in `scene.objects` array
+3. Select all objects in that index range
+
+### Ctrl/Cmd+Click (Toggle Selection)
+
+Toggles selection of individual objects without affecting others.
+
+**Implementation:**
+
+1. On Ctrl+click (or Cmd+click on macOS), toggle `obj.selected`
+2. If toggling on, make it the active object
+3. If toggling off and it was active, find another selected object to be active
+
+**Location:** `handleSelectObject()` in `App.tsx` with `SelectionModifiers` interface
+
+---
+
+## Per-Object Textures
+
+### Problem
+
+Previously, loading an OBJ with a texture would apply that texture to ALL objects, including primitives added later.
+
+### Solution
+
+Textures are now assigned per-object via `SceneObject.texture` property.
+
+**Key Files:**
+
+- `src/scene.ts`: `SceneObject.texture: ImageData | null`
+- `src/systems/worker-render-loop.ts`: Sets `hasTexture: !!obj.texture` in `RenderObject`
+- `src/render-worker.ts`: `RenderObject.hasTexture` flag controls texturing per-object
+
+**Texture Assignment:**
+
+- OBJ import: texture assigned to imported object only
+- Primitives: no texture by default
+- Duplicate (Shift+D): copies texture from source object
+
+```typescript
+// In editor.ts duplicateSelected()
+newObj.texture = obj.texture;
+```
+
+---
+
+## Primitive Mesh Creation
+
+### Available Primitives
+
+| Primitive  | Function                | Parameters                                 |
+| ---------- | ----------------------- | ------------------------------------------ |
+| Cube       | `createCubeMesh()`      | size                                       |
+| Plane      | `createPlaneMesh()`     | size                                       |
+| UV Sphere  | `createUVSphereMesh()`  | radius, segments, rings                    |
+| Ico Sphere | `createIcoSphereMesh()` | radius, subdivisions                       |
+| Cylinder   | `createCylinderMesh()`  | radius, depth, vertices                    |
+| Cone       | `createConeMesh()`      | radius1, radius2, depth, vertices          |
+| Torus      | `createTorusMesh()`     | majorRadius, minorRadius, majSegs, minSegs |
+
+### PrimitiveSettings Modal
+
+Located in `src/components/PrimitiveSettings.tsx`.
+
+**Features:**
+
+- Shows immediately after adding a primitive (bottom-left corner)
+- Allows modifying parameters before confirming
+- Re-creates mesh when parameters change
+- Keyboard events use `e.stopPropagation()` to prevent viewport shortcuts
+
+**State Management:**
+
+```typescript
+interface PrimitiveSettings {
+  type:
+    | "cube"
+    | "plane"
+    | "uv-sphere"
+    | "ico-sphere"
+    | "cylinder"
+    | "cone"
+    | "torus";
+  size?: number;
+  segments?: number;
+  rings?: number;
+  // ... other type-specific settings
+}
+```
+
+---
+
+## Face Extrusion
+
+### Implementation
+
+Located in `MeshEditManager.extrudeFaces()` in `src/systems/mesh-edit.ts`.
+
+**Algorithm:**
+
+1. For each selected face, duplicate all vertices offset by face normal
+2. Create side faces connecting original and extruded vertices
+3. Update original face to use new (extruded) vertices
+4. Track which faces are "top" faces (the extruded originals)
+5. Return only top face indices for selection
+
+**Key Insight:** After extrusion, only the top faces should be selected (not the side faces). This matches Blender behavior and allows immediate grab to move extruded region.
+
+```typescript
+// Return only top faces for selection
+return {
+  success: true,
+  topFaceIndices: newTopFaceIndices, // NOT all newFaceIndices
+  // ...
+};
+```
+
+---
+
+## Workspace System
+
+### Overview
+
+Workspaces allow switching between different editor layouts/contexts (like Blender).
+
+**Current Workspaces:**
+
+- **Modeling** (default): Full 3D editing environment
+- **Shading**: Placeholder for material/shader editing
+
+**Components:**
+
+- `WorkspaceTabs.tsx`: Tab buttons in toolbar
+- `WorkspaceType`: `"modeling" | "shading"`
+
+### UI Layout
+
+The current layout uses CSS Grid with a right sidebar:
+
+```css
+.editor-container {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  grid-template-rows: auto 1fr auto;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  /* Contains SceneTree + PropertiesPanel */
+}
+```
 
 ---
 

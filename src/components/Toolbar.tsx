@@ -8,15 +8,18 @@ import edgeSelectIcon from "../icons/edge_select.svg";
 import faceSelectIcon from "../icons/face_select.svg";
 import { EditorMode, TransformMode, ViewMode, SelectionMode } from "../editor";
 import { ToolbarButton } from "./ToolbarButton";
+import { WorkspaceTabs, WorkspaceType } from "./WorkspaceTabs";
 
 interface ToolbarProps {
   mode: EditorMode;
   transformMode: TransformMode;
   viewMode: ViewMode;
   selectionMode: SelectionMode;
+  workspace: WorkspaceType;
   onModeChange: (mode: EditorMode) => void;
   onViewModeChange: (mode: ViewMode) => void;
   onSelectionModeChange: (mode: SelectionMode) => void;
+  onWorkspaceChange: (workspace: WorkspaceType) => void;
 }
 
 export function Toolbar({
@@ -24,13 +27,22 @@ export function Toolbar({
   transformMode,
   viewMode,
   selectionMode,
+  workspace,
   onModeChange,
   onViewModeChange,
   onSelectionModeChange,
+  onWorkspaceChange,
 }: ToolbarProps) {
   return (
     <div className="toolbar">
       <div className="toolbar-section">
+        <WorkspaceTabs
+          activeWorkspace={workspace}
+          onWorkspaceChange={onWorkspaceChange}
+        />
+
+        <div className="toolbar-divider" />
+
         <div className="toolbar-group">
           <ToolbarButton
             active={mode === "object"}

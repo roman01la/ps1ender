@@ -2,8 +2,21 @@ import { useEffect, useRef } from "react";
 import meshPlaneIcon from "../icons/mesh_plane.svg";
 import meshCubeIcon from "../icons/mesh_cube.svg";
 import meshCircleIcon from "../icons/mesh_circle.svg";
+import meshUVSphereIcon from "../icons/mesh_uvsphere.svg";
+import meshIcoSphereIcon from "../icons/mesh_icosphere.svg";
+import meshCylinderIcon from "../icons/mesh_cylinder.svg";
+import meshConeIcon from "../icons/mesh_cone.svg";
+import meshTorusIcon from "../icons/mesh_torus.svg";
 
-export type PrimitiveType = "plane" | "cube" | "circle";
+export type PrimitiveType =
+  | "plane"
+  | "cube"
+  | "circle"
+  | "uvsphere"
+  | "icosphere"
+  | "cylinder"
+  | "cone"
+  | "torus";
 
 interface AddMenuProps {
   x: number;
@@ -16,6 +29,11 @@ const PRIMITIVES: { type: PrimitiveType; label: string; icon: string }[] = [
   { type: "plane", label: "Plane", icon: meshPlaneIcon },
   { type: "cube", label: "Cube", icon: meshCubeIcon },
   { type: "circle", label: "Circle", icon: meshCircleIcon },
+  { type: "uvsphere", label: "UV Sphere", icon: meshUVSphereIcon },
+  { type: "icosphere", label: "Ico Sphere", icon: meshIcoSphereIcon },
+  { type: "cylinder", label: "Cylinder", icon: meshCylinderIcon },
+  { type: "cone", label: "Cone", icon: meshConeIcon },
+  { type: "torus", label: "Torus", icon: meshTorusIcon },
 ];
 
 export function AddMenu({ x, y, onSelect, onClose }: AddMenuProps) {

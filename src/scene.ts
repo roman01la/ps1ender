@@ -1,5 +1,7 @@
 import { Vector3, Matrix4, Color } from "./math";
 import { Mesh, Vertex } from "./primitives";
+import { Texture } from "./texture";
+import { MaterialRegistry } from "./material";
 
 /**
  * A scene object that can be transformed and rendered
@@ -13,6 +15,8 @@ export class SceneObject {
   public selected: boolean = false;
   public visible: boolean = true;
   public parent: SceneObject | null = null;
+  public texture: Texture | null = null; // Per-object texture
+  public materialId: string | null = null; // Reference to material in registry
 
   constructor(name: string, mesh: Mesh) {
     this.name = name;
@@ -20,6 +24,7 @@ export class SceneObject {
     this.position = Vector3.zero();
     this.rotation = Vector3.zero();
     this.scale = new Vector3(1, 1, 1);
+    // materialId will be set when added to scene
   }
 
   /**
@@ -281,15 +286,22 @@ export class Scene {
   public gridDivisions: number = 10;
   /** The active (last selected) object - used for parenting and other operations */
   public activeObject: SceneObject | null = null;
+  /** Global material registry */
+  public materials: MaterialRegistry;
 
   constructor() {
     this.camera = new Camera();
+    this.materials = new MaterialRegistry();
   }
 
   /**
    * Add an object to the scene
    */
   addObject(obj: SceneObject): void {
+    // Assign default material if none set
+    if (!obj.materialId) {
+      obj.materialId = this.materials.getDefault().id;
+    }
     this.objects.push(obj);
   }
 

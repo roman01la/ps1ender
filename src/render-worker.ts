@@ -80,6 +80,7 @@ export interface RenderObject {
   modelMatrix: Float32Array; // 16 floats, row-major
   isEdgeOnly: boolean;
   smoothShading: boolean;
+  hasTexture: boolean; // Whether this object has a texture assigned
 }
 
 /** Line data for grid/wireframe/gizmo */
@@ -875,11 +876,11 @@ function renderFullFrame(frame: RenderFrame): void {
     // Apply settings for this render pass
     applySettings();
 
-    // Set per-mesh smooth shading and per-frame texturing flag
+    // Set per-mesh smooth shading and per-object texturing flag
     if (wasmInstance) {
       wasmInstance.setEnableSmoothShading(obj.smoothShading);
-      // Use per-frame texturing flag to avoid settings race condition
-      wasmInstance.setEnableTexturing(frame.enableTexturing);
+      // Use per-object texture flag - only render with texture if object has one AND texturing is enabled
+      wasmInstance.setEnableTexturing(frame.enableTexturing && obj.hasTexture);
     }
 
     renderMeshWasm(

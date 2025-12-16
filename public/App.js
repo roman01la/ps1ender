@@ -38,12 +38,12 @@ var require_react_development = __commonJS((exports, module) => {
       this.updater = updater || ReactNoopUpdateQueue;
     }
     function noop() {}
-    function testStringCoercion(value) {
-      return "" + value;
+    function testStringCoercion(value2) {
+      return "" + value2;
     }
-    function checkKeyStringCoercion(value) {
+    function checkKeyStringCoercion(value2) {
       try {
-        testStringCoercion(value);
+        testStringCoercion(value2);
         var JSCompiler_inline_result = false;
       } catch (e) {
         JSCompiler_inline_result = true;
@@ -51,9 +51,9 @@ var require_react_development = __commonJS((exports, module) => {
       if (JSCompiler_inline_result) {
         JSCompiler_inline_result = console;
         var JSCompiler_temp_const = JSCompiler_inline_result.error;
-        var JSCompiler_inline_result$jscomp$0 = typeof Symbol === "function" && Symbol.toStringTag && value[Symbol.toStringTag] || value.constructor.name || "Object";
+        var JSCompiler_inline_result$jscomp$0 = typeof Symbol === "function" && Symbol.toStringTag && value2[Symbol.toStringTag] || value2.constructor.name || "Object";
         JSCompiler_temp_const.call(JSCompiler_inline_result, "The provided key is an unsupported type %s. This value must be coerced to a string before using it here.", JSCompiler_inline_result$jscomp$0);
-        return testStringCoercion(value);
+        return testStringCoercion(value2);
       }
     }
     function getComponentNameFromType(type) {
@@ -277,11 +277,11 @@ var require_react_development = __commonJS((exports, module) => {
     function mapChildren(children, func, context) {
       if (children == null)
         return children;
-      var result = [], count = 0;
-      mapIntoArray(children, result, "", "", function(child) {
+      var result2 = [], count = 0;
+      mapIntoArray(children, result2, "", "", function(child) {
         return func.call(context, child, count++);
       });
-      return result;
+      return result2;
     }
     function lazyInitializer(payload) {
       if (payload._status === -1) {
@@ -539,14 +539,14 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
       actScopeDepth++;
       var queue = ReactSharedInternals.actQueue = prevActQueue !== null ? prevActQueue : [], didAwaitActCall = false;
       try {
-        var result = callback();
+        var result2 = callback();
       } catch (error) {
         ReactSharedInternals.thrownErrors.push(error);
       }
       if (0 < ReactSharedInternals.thrownErrors.length)
         throw popActScope(prevActQueue, prevActScopeDepth), callback = aggregateErrors(ReactSharedInternals.thrownErrors), ReactSharedInternals.thrownErrors.length = 0, callback;
-      if (result !== null && typeof result === "object" && typeof result.then === "function") {
-        var thenable = result;
+      if (result2 !== null && typeof result2 === "object" && typeof result2.then === "function") {
+        var thenable = result2;
         queueSeveralMicrotasks(function() {
           didAwaitActCall || didWarnNoAwaitAct || (didWarnNoAwaitAct = true, console.error("You called act(async () => ...) without await. This could lead to unexpected testing behaviour, interleaving multiple act calls and mixing their scopes. You should - await act(async () => ...);"));
         });
@@ -577,7 +577,7 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
           }
         };
       }
-      var returnValue$jscomp$0 = result;
+      var returnValue$jscomp$0 = result2;
       popActScope(prevActQueue, prevActScopeDepth);
       prevActScopeDepth === 0 && (flushActQueue(queue), queue.length !== 0 && queueSeveralMicrotasks(function() {
         didAwaitActCall || didWarnNoAwaitAct || (didWarnNoAwaitAct = true, console.error("A component suspended inside an `act` scope, but the `act` call was not awaited. When testing React components that depend on asynchronous data, you must await the result:\n\nawait act(() => ...)"));
@@ -773,11 +773,11 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
       Context.$$typeof === REACT_CONSUMER_TYPE && console.error("Calling useContext(Context.Consumer) is not supported and will cause bugs. Did you mean to call useContext(Context) instead?");
       return dispatcher.useContext(Context);
     };
-    exports.useDebugValue = function(value, formatterFn) {
-      return resolveDispatcher().useDebugValue(value, formatterFn);
+    exports.useDebugValue = function(value2, formatterFn) {
+      return resolveDispatcher().useDebugValue(value2, formatterFn);
     };
-    exports.useDeferredValue = function(value, initialValue) {
-      return resolveDispatcher().useDeferredValue(value, initialValue);
+    exports.useDeferredValue = function(value2, initialValue) {
+      return resolveDispatcher().useDeferredValue(value2, initialValue);
     };
     exports.useEffect = function(create, deps) {
       create == null && console.warn("React Hook useEffect requires an effect callback. Did you forget to pass a callback to the hook?");
@@ -1102,8 +1102,8 @@ var require_react_dom_development = __commonJS((exports) => {
   var React = __toESM(require_react(), 1);
   (function() {
     function noop() {}
-    function testStringCoercion(value) {
-      return "" + value;
+    function testStringCoercion(value2) {
+      return "" + value2;
     }
     function createPortal$1(children, containerInfo, implementation) {
       var key = 3 < arguments.length && arguments[3] !== undefined ? arguments[3] : null;
@@ -1122,11 +1122,11 @@ var require_react_dom_development = __commonJS((exports) => {
         implementation
       };
     }
-    function getCrossOriginStringAs(as, input) {
+    function getCrossOriginStringAs(as, input2) {
       if (as === "font")
         return "";
-      if (typeof input === "string")
-        return input === "use-credentials" ? input : "";
+      if (typeof input2 === "string")
+        return input2 === "use-credentials" ? input2 : "";
     }
     function getValueDescriptorExpectingObjectForWarning(thing) {
       return thing === null ? "`null`" : thing === undefined ? "`undefined`" : thing === "" ? "an empty string" : 'something with type "' + typeof thing + '"';
@@ -1299,11 +1299,11 @@ var require_react_dom_client_development = __commonJS((exports) => {
         fiber = fiber.next, id--;
       return fiber;
     }
-    function copyWithSetImpl(obj, path, index, value) {
+    function copyWithSetImpl(obj, path, index, value2) {
       if (index >= path.length)
-        return value;
+        return value2;
       var key = path[index], updated = isArrayImpl(obj) ? obj.slice() : assign({}, obj);
-      updated[key] = copyWithSetImpl(obj[key], path, index + 1, value);
+      updated[key] = copyWithSetImpl(obj[key], path, index + 1, value2);
       return updated;
     }
     function copyWithRename(obj, oldPath, newPath) {
@@ -1346,8 +1346,8 @@ var require_react_dom_client_development = __commonJS((exports) => {
     function warnForMissingKey() {}
     function setToSortedString(set) {
       var array = [];
-      set.forEach(function(value) {
-        array.push(value);
+      set.forEach(function(value2) {
+        array.push(value2);
       });
       return array.sort().join(", ");
     }
@@ -1619,11 +1619,11 @@ var require_react_dom_client_development = __commonJS((exports) => {
     function pop(cursor, fiber) {
       0 > index$jscomp$0 ? console.error("Unexpected pop.") : (fiber !== fiberStack[index$jscomp$0] && console.error("Unexpected Fiber popped."), cursor.current = valueStack[index$jscomp$0], valueStack[index$jscomp$0] = null, fiberStack[index$jscomp$0] = null, index$jscomp$0--);
     }
-    function push(cursor, value, fiber) {
+    function push(cursor, value2, fiber) {
       index$jscomp$0++;
       valueStack[index$jscomp$0] = cursor.current;
       fiberStack[index$jscomp$0] = fiber;
-      cursor.current = value;
+      cursor.current = value2;
     }
     function requiredContext(c) {
       c === null && console.error("Expected host context to exist. This error is likely caused by a bug in React. Please file an issue.");
@@ -1996,30 +1996,30 @@ Error generating stack: ` + x.message + `
       isRendering = false;
       current = fiber;
     }
-    function typeName(value) {
-      return typeof Symbol === "function" && Symbol.toStringTag && value[Symbol.toStringTag] || value.constructor.name || "Object";
+    function typeName(value2) {
+      return typeof Symbol === "function" && Symbol.toStringTag && value2[Symbol.toStringTag] || value2.constructor.name || "Object";
     }
-    function willCoercionThrow(value) {
+    function willCoercionThrow(value2) {
       try {
-        return testStringCoercion(value), false;
+        return testStringCoercion(value2), false;
       } catch (e) {
         return true;
       }
     }
-    function testStringCoercion(value) {
-      return "" + value;
+    function testStringCoercion(value2) {
+      return "" + value2;
     }
-    function checkAttributeStringCoercion(value, attributeName) {
-      if (willCoercionThrow(value))
-        return console.error("The provided `%s` attribute is an unsupported type %s. This value must be coerced to a string before using it here.", attributeName, typeName(value)), testStringCoercion(value);
+    function checkAttributeStringCoercion(value2, attributeName) {
+      if (willCoercionThrow(value2))
+        return console.error("The provided `%s` attribute is an unsupported type %s. This value must be coerced to a string before using it here.", attributeName, typeName(value2)), testStringCoercion(value2);
     }
-    function checkCSSPropertyStringCoercion(value, propName) {
-      if (willCoercionThrow(value))
-        return console.error("The provided `%s` CSS property is an unsupported type %s. This value must be coerced to a string before using it here.", propName, typeName(value)), testStringCoercion(value);
+    function checkCSSPropertyStringCoercion(value2, propName) {
+      if (willCoercionThrow(value2))
+        return console.error("The provided `%s` CSS property is an unsupported type %s. This value must be coerced to a string before using it here.", propName, typeName(value2)), testStringCoercion(value2);
     }
-    function checkFormFieldValueStringCoercion(value) {
-      if (willCoercionThrow(value))
-        return console.error("Form field values (value, checked, defaultValue, or defaultChecked props) must be strings, not %s. This value must be coerced to a string before using it here.", typeName(value)), testStringCoercion(value);
+    function checkFormFieldValueStringCoercion(value2) {
+      if (willCoercionThrow(value2))
+        return console.error("Form field values (value, checked, defaultValue, or defaultChecked props) must be strings, not %s. This value must be coerced to a string before using it here.", typeName(value2)), testStringCoercion(value2);
     }
     function injectInternals(internals) {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined")
@@ -2398,12 +2398,12 @@ Error generating stack: ` + x.message + `
         return node === "" + expected ? expected : node;
       }
     }
-    function setValueForAttribute(node, name, value) {
+    function setValueForAttribute(node, name, value2) {
       if (isAttributeNameSafe(name))
-        if (value === null)
+        if (value2 === null)
           node.removeAttribute(name);
         else {
-          switch (typeof value) {
+          switch (typeof value2) {
             case "undefined":
             case "function":
             case "symbol":
@@ -2416,15 +2416,15 @@ Error generating stack: ` + x.message + `
                 return;
               }
           }
-          checkAttributeStringCoercion(value, name);
-          node.setAttribute(name, "" + value);
+          checkAttributeStringCoercion(value2, name);
+          node.setAttribute(name, "" + value2);
         }
     }
-    function setValueForKnownAttribute(node, name, value) {
-      if (value === null)
+    function setValueForKnownAttribute(node, name, value2) {
+      if (value2 === null)
         node.removeAttribute(name);
       else {
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
@@ -2432,15 +2432,15 @@ Error generating stack: ` + x.message + `
             node.removeAttribute(name);
             return;
         }
-        checkAttributeStringCoercion(value, name);
-        node.setAttribute(name, "" + value);
+        checkAttributeStringCoercion(value2, name);
+        node.setAttribute(name, "" + value2);
       }
     }
-    function setValueForNamespacedAttribute(node, namespace, name, value) {
-      if (value === null)
+    function setValueForNamespacedAttribute(node, namespace, name, value2) {
+      if (value2 === null)
         node.removeAttribute(name);
       else {
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
@@ -2448,20 +2448,20 @@ Error generating stack: ` + x.message + `
             node.removeAttribute(name);
             return;
         }
-        checkAttributeStringCoercion(value, name);
-        node.setAttributeNS(namespace, name, "" + value);
+        checkAttributeStringCoercion(value2, name);
+        node.setAttributeNS(namespace, name, "" + value2);
       }
     }
-    function getToStringValue(value) {
-      switch (typeof value) {
+    function getToStringValue(value2) {
+      switch (typeof value2) {
         case "bigint":
         case "boolean":
         case "number":
         case "string":
         case "undefined":
-          return value;
+          return value2;
         case "object":
-          return checkFormFieldValueStringCoercion(value), value;
+          return checkFormFieldValueStringCoercion(value2), value2;
         default:
           return "";
       }
@@ -2479,10 +2479,10 @@ Error generating stack: ` + x.message + `
           get: function() {
             return get.call(this);
           },
-          set: function(value) {
-            checkFormFieldValueStringCoercion(value);
-            currentValue = "" + value;
-            set.call(this, value);
+          set: function(value2) {
+            checkFormFieldValueStringCoercion(value2);
+            currentValue = "" + value2;
+            set.call(this, value2);
           }
         });
         Object.defineProperty(node, valueField, {
@@ -2492,9 +2492,9 @@ Error generating stack: ` + x.message + `
           getValue: function() {
             return currentValue;
           },
-          setValue: function(value) {
-            checkFormFieldValueStringCoercion(value);
-            currentValue = "" + value;
+          setValue: function(value2) {
+            checkFormFieldValueStringCoercion(value2);
+            currentValue = "" + value2;
           },
           stopTracking: function() {
             node._valueTracker = null;
@@ -2516,9 +2516,9 @@ Error generating stack: ` + x.message + `
       if (!tracker)
         return true;
       var lastValue = tracker.getValue();
-      var value = "";
-      node && (value = isCheckable(node) ? node.checked ? "true" : "false" : node.value);
-      node = value;
+      var value2 = "";
+      node && (value2 = isCheckable(node) ? node.checked ? "true" : "false" : node.value);
+      node = value2;
       return node !== lastValue ? (tracker.setValue(node), true) : false;
     }
     function getActiveElement(doc) {
@@ -2531,8 +2531,8 @@ Error generating stack: ` + x.message + `
         return doc.body;
       }
     }
-    function escapeSelectorAttributeValueInsideDoubleQuotes(value) {
-      return value.replace(escapeSelectorAttributeValueInsideDoubleQuotesRegex, function(ch) {
+    function escapeSelectorAttributeValueInsideDoubleQuotes(value2) {
+      return value2.replace(escapeSelectorAttributeValueInsideDoubleQuotesRegex, function(ch) {
         return "\\" + ch.charCodeAt(0).toString(16) + " ";
       });
     }
@@ -2540,33 +2540,33 @@ Error generating stack: ` + x.message + `
       props.checked === undefined || props.defaultChecked === undefined || didWarnCheckedDefaultChecked || (console.error("%s contains an input of type %s with both checked and defaultChecked props. Input elements must be either controlled or uncontrolled (specify either the checked prop, or the defaultChecked prop, but not both). Decide between using a controlled or uncontrolled input element and remove one of these props. More info: https://react.dev/link/controlled-components", getCurrentFiberOwnerNameInDevOrNull() || "A component", props.type), didWarnCheckedDefaultChecked = true);
       props.value === undefined || props.defaultValue === undefined || didWarnValueDefaultValue$1 || (console.error("%s contains an input of type %s with both value and defaultValue props. Input elements must be either controlled or uncontrolled (specify either the value prop, or the defaultValue prop, but not both). Decide between using a controlled or uncontrolled input element and remove one of these props. More info: https://react.dev/link/controlled-components", getCurrentFiberOwnerNameInDevOrNull() || "A component", props.type), didWarnValueDefaultValue$1 = true);
     }
-    function updateInput(element, value, defaultValue, lastDefaultValue, checked, defaultChecked, type, name) {
+    function updateInput(element, value2, defaultValue, lastDefaultValue, checked, defaultChecked, type, name) {
       element.name = "";
       type != null && typeof type !== "function" && typeof type !== "symbol" && typeof type !== "boolean" ? (checkAttributeStringCoercion(type, "type"), element.type = type) : element.removeAttribute("type");
-      if (value != null)
+      if (value2 != null)
         if (type === "number") {
-          if (value === 0 && element.value === "" || element.value != value)
-            element.value = "" + getToStringValue(value);
+          if (value2 === 0 && element.value === "" || element.value != value2)
+            element.value = "" + getToStringValue(value2);
         } else
-          element.value !== "" + getToStringValue(value) && (element.value = "" + getToStringValue(value));
+          element.value !== "" + getToStringValue(value2) && (element.value = "" + getToStringValue(value2));
       else
         type !== "submit" && type !== "reset" || element.removeAttribute("value");
-      value != null ? setDefaultValue(element, type, getToStringValue(value)) : defaultValue != null ? setDefaultValue(element, type, getToStringValue(defaultValue)) : lastDefaultValue != null && element.removeAttribute("value");
+      value2 != null ? setDefaultValue(element, type, getToStringValue(value2)) : defaultValue != null ? setDefaultValue(element, type, getToStringValue(defaultValue)) : lastDefaultValue != null && element.removeAttribute("value");
       checked == null && defaultChecked != null && (element.defaultChecked = !!defaultChecked);
       checked != null && (element.checked = checked && typeof checked !== "function" && typeof checked !== "symbol");
       name != null && typeof name !== "function" && typeof name !== "symbol" && typeof name !== "boolean" ? (checkAttributeStringCoercion(name, "name"), element.name = "" + getToStringValue(name)) : element.removeAttribute("name");
     }
-    function initInput(element, value, defaultValue, checked, defaultChecked, type, name, isHydrating2) {
+    function initInput(element, value2, defaultValue, checked, defaultChecked, type, name, isHydrating2) {
       type != null && typeof type !== "function" && typeof type !== "symbol" && typeof type !== "boolean" && (checkAttributeStringCoercion(type, "type"), element.type = type);
-      if (value != null || defaultValue != null) {
-        if (!(type !== "submit" && type !== "reset" || value !== undefined && value !== null)) {
+      if (value2 != null || defaultValue != null) {
+        if (!(type !== "submit" && type !== "reset" || value2 !== undefined && value2 !== null)) {
           track(element);
           return;
         }
         defaultValue = defaultValue != null ? "" + getToStringValue(defaultValue) : "";
-        value = value != null ? "" + getToStringValue(value) : defaultValue;
-        isHydrating2 || value === element.value || (element.value = value);
-        element.defaultValue = value;
+        value2 = value2 != null ? "" + getToStringValue(value2) : defaultValue;
+        isHydrating2 || value2 === element.value || (element.value = value2);
+        element.defaultValue = value2;
       }
       checked = checked != null ? checked : defaultChecked;
       checked = typeof checked !== "function" && typeof checked !== "symbol" && !!checked;
@@ -2575,8 +2575,8 @@ Error generating stack: ` + x.message + `
       name != null && typeof name !== "function" && typeof name !== "symbol" && typeof name !== "boolean" && (checkAttributeStringCoercion(name, "name"), element.name = name);
       track(element);
     }
-    function setDefaultValue(node, type, value) {
-      type === "number" && getActiveElement(node.ownerDocument) === node || node.defaultValue === "" + value || (node.defaultValue = "" + value);
+    function setDefaultValue(node, type, value2) {
+      type === "number" && getActiveElement(node.ownerDocument) === node || node.defaultValue === "" + value2 || (node.defaultValue = "" + value2);
     }
     function validateOptionProps(element, props) {
       props.value == null && (typeof props.children === "object" && props.children !== null ? React.Children.forEach(props.children, function(child) {
@@ -2626,15 +2626,15 @@ Check the render method of \`` + ownerName + "`." : "";
       props.value === undefined || props.defaultValue === undefined || didWarnValDefaultVal || (console.error("%s contains a textarea with both value and defaultValue props. Textarea elements must be either controlled or uncontrolled (specify either the value prop, or the defaultValue prop, but not both). Decide between using a controlled or uncontrolled textarea and remove one of these props. More info: https://react.dev/link/controlled-components", getCurrentFiberOwnerNameInDevOrNull() || "A component"), didWarnValDefaultVal = true);
       props.children != null && props.value == null && console.error("Use the `defaultValue` or `value` props instead of setting children on <textarea>.");
     }
-    function updateTextarea(element, value, defaultValue) {
-      if (value != null && (value = "" + getToStringValue(value), value !== element.value && (element.value = value), defaultValue == null)) {
-        element.defaultValue !== value && (element.defaultValue = value);
+    function updateTextarea(element, value2, defaultValue) {
+      if (value2 != null && (value2 = "" + getToStringValue(value2), value2 !== element.value && (element.value = value2), defaultValue == null)) {
+        element.defaultValue !== value2 && (element.defaultValue = value2);
         return;
       }
       element.defaultValue = defaultValue != null ? "" + getToStringValue(defaultValue) : "";
     }
-    function initTextarea(element, value, defaultValue, children) {
-      if (value == null) {
+    function initTextarea(element, value2, defaultValue, children) {
+      if (value2 == null) {
         if (children != null) {
           if (defaultValue != null)
             throw Error("If you supply `defaultValue` on a <textarea>, do not pass children.");
@@ -2646,9 +2646,9 @@ Check the render method of \`` + ownerName + "`." : "";
           defaultValue = children;
         }
         defaultValue == null && (defaultValue = "");
-        value = defaultValue;
+        value2 = defaultValue;
       }
-      defaultValue = getToStringValue(value);
+      defaultValue = getToStringValue(value2);
       element.defaultValue = defaultValue;
       children = element.textContent;
       children === defaultValue && children !== "" && children !== null && (element.value = children);
@@ -2715,27 +2715,27 @@ Check the render method of \`` + ownerName + "`." : "";
         return p0;
       });
     }
-    function describeValue(value, maxLength) {
-      switch (typeof value) {
+    function describeValue(value2, maxLength) {
+      switch (typeof value2) {
         case "string":
-          return value = JSON.stringify(value), value.length > maxLength ? 5 > maxLength ? '"..."' : value.slice(0, maxLength - 4) + '..."' : value;
+          return value2 = JSON.stringify(value2), value2.length > maxLength ? 5 > maxLength ? '"..."' : value2.slice(0, maxLength - 4) + '..."' : value2;
         case "object":
-          if (value === null)
+          if (value2 === null)
             return "null";
-          if (isArrayImpl(value))
+          if (isArrayImpl(value2))
             return "[...]";
-          if (value.$$typeof === REACT_ELEMENT_TYPE)
-            return (maxLength = getComponentNameFromType(value.type)) ? "<" + maxLength + ">" : "<...>";
-          var name = objectName(value);
+          if (value2.$$typeof === REACT_ELEMENT_TYPE)
+            return (maxLength = getComponentNameFromType(value2.type)) ? "<" + maxLength + ">" : "<...>";
+          var name = objectName(value2);
           if (name === "Object") {
             name = "";
             maxLength -= 2;
-            for (var propName in value)
-              if (value.hasOwnProperty(propName)) {
+            for (var propName in value2)
+              if (value2.hasOwnProperty(propName)) {
                 var jsonPropName = JSON.stringify(propName);
                 jsonPropName !== '"' + propName + '"' && (propName = jsonPropName);
                 maxLength -= propName.length - 2;
-                jsonPropName = describeValue(value[propName], 15 > maxLength ? maxLength : 15);
+                jsonPropName = describeValue(value2[propName], 15 > maxLength ? maxLength : 15);
                 maxLength -= jsonPropName.length;
                 if (0 > maxLength) {
                   name += name === "" ? "..." : ", ...";
@@ -2747,13 +2747,13 @@ Check the render method of \`` + ownerName + "`." : "";
           }
           return name;
         case "function":
-          return (maxLength = value.displayName || value.name) ? "function " + maxLength : "function";
+          return (maxLength = value2.displayName || value2.name) ? "function " + maxLength : "function";
         default:
-          return String(value);
+          return String(value2);
       }
     }
-    function describePropValue(value, maxLength) {
-      return typeof value !== "string" || needsEscaping.test(value) ? "{" + describeValue(value, maxLength - 2) + "}" : value.length > maxLength - 2 ? 5 > maxLength ? '"..."' : '"' + value.slice(0, maxLength - 5) + '..."' : '"' + value + '"';
+    function describePropValue(value2, maxLength) {
+      return typeof value2 !== "string" || needsEscaping.test(value2) ? "{" + describeValue(value2, maxLength - 2) + "}" : value2.length > maxLength - 2 ? 5 > maxLength ? '"..."' : '"' + value2.slice(0, maxLength - 5) + '..."' : '"' + value2 + '"';
     }
     function describeExpandedElement(type, props, rowPrefix) {
       var remainingRowLength = 120 - rowPrefix.length - type.length, properties = [], propName;
@@ -3113,10 +3113,10 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
         return character.toUpperCase();
       });
     }
-    function setValueForStyle(style2, styleName, value) {
+    function setValueForStyle(style2, styleName, value2) {
       var isCustomProperty = styleName.indexOf("--") === 0;
-      isCustomProperty || (-1 < styleName.indexOf("-") ? warnedStyleNames.hasOwnProperty(styleName) && warnedStyleNames[styleName] || (warnedStyleNames[styleName] = true, console.error("Unsupported style property %s. Did you mean %s?", styleName, camelize(styleName.replace(msPattern, "ms-")))) : badVendoredStyleNamePattern.test(styleName) ? warnedStyleNames.hasOwnProperty(styleName) && warnedStyleNames[styleName] || (warnedStyleNames[styleName] = true, console.error("Unsupported vendor-prefixed style property %s. Did you mean %s?", styleName, styleName.charAt(0).toUpperCase() + styleName.slice(1))) : !badStyleValueWithSemicolonPattern.test(value) || warnedStyleValues.hasOwnProperty(value) && warnedStyleValues[value] || (warnedStyleValues[value] = true, console.error(`Style property values shouldn't contain a semicolon. Try "%s: %s" instead.`, styleName, value.replace(badStyleValueWithSemicolonPattern, ""))), typeof value === "number" && (isNaN(value) ? warnedForNaNValue || (warnedForNaNValue = true, console.error("`NaN` is an invalid value for the `%s` css style property.", styleName)) : isFinite(value) || warnedForInfinityValue || (warnedForInfinityValue = true, console.error("`Infinity` is an invalid value for the `%s` css style property.", styleName))));
-      value == null || typeof value === "boolean" || value === "" ? isCustomProperty ? style2.setProperty(styleName, "") : styleName === "float" ? style2.cssFloat = "" : style2[styleName] = "" : isCustomProperty ? style2.setProperty(styleName, value) : typeof value !== "number" || value === 0 || unitlessNumbers.has(styleName) ? styleName === "float" ? style2.cssFloat = value : (checkCSSPropertyStringCoercion(value, styleName), style2[styleName] = ("" + value).trim()) : style2[styleName] = value + "px";
+      isCustomProperty || (-1 < styleName.indexOf("-") ? warnedStyleNames.hasOwnProperty(styleName) && warnedStyleNames[styleName] || (warnedStyleNames[styleName] = true, console.error("Unsupported style property %s. Did you mean %s?", styleName, camelize(styleName.replace(msPattern, "ms-")))) : badVendoredStyleNamePattern.test(styleName) ? warnedStyleNames.hasOwnProperty(styleName) && warnedStyleNames[styleName] || (warnedStyleNames[styleName] = true, console.error("Unsupported vendor-prefixed style property %s. Did you mean %s?", styleName, styleName.charAt(0).toUpperCase() + styleName.slice(1))) : !badStyleValueWithSemicolonPattern.test(value2) || warnedStyleValues.hasOwnProperty(value2) && warnedStyleValues[value2] || (warnedStyleValues[value2] = true, console.error(`Style property values shouldn't contain a semicolon. Try "%s: %s" instead.`, styleName, value2.replace(badStyleValueWithSemicolonPattern, ""))), typeof value2 === "number" && (isNaN(value2) ? warnedForNaNValue || (warnedForNaNValue = true, console.error("`NaN` is an invalid value for the `%s` css style property.", styleName)) : isFinite(value2) || warnedForInfinityValue || (warnedForInfinityValue = true, console.error("`Infinity` is an invalid value for the `%s` css style property.", styleName))));
+      value2 == null || typeof value2 === "boolean" || value2 === "" ? isCustomProperty ? style2.setProperty(styleName, "") : styleName === "float" ? style2.cssFloat = "" : style2[styleName] = "" : isCustomProperty ? style2.setProperty(styleName, value2) : typeof value2 !== "number" || value2 === 0 || unitlessNumbers.has(styleName) ? styleName === "float" ? style2.cssFloat = value2 : (checkCSSPropertyStringCoercion(value2, styleName), style2[styleName] = ("" + value2).trim()) : style2[styleName] = value2 + "px";
     }
     function setValueForStyles(node, styles, prevStyles) {
       if (styles != null && typeof styles !== "object")
@@ -3145,8 +3145,8 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
             if (key = expandedUpdates[_key2], (longhands = _key[_key2]) && key !== longhands && (i = key + "," + longhands, !key$jscomp$0[i])) {
               key$jscomp$0[i] = true;
               i = console;
-              var value = styles[key];
-              i.error.call(i, "%s a style property during rerender (%s) when a conflicting property is set (%s) can lead to styling bugs. To avoid this, don't mix shorthand and non-shorthand properties for the same value; instead, replace the shorthand with separate values.", value == null || typeof value === "boolean" || value === "" ? "Removing" : "Updating", key, longhands);
+              var value2 = styles[key];
+              i.error.call(i, "%s a style property during rerender (%s) when a conflicting property is set (%s) can lead to styling bugs. To avoid this, don't mix shorthand and non-shorthand properties for the same value; instead, replace the shorthand with separate values.", value2 == null || typeof value2 === "boolean" || value2 === "" ? "Removing" : "Updating", key, longhands);
             }
         }
         for (var styleName in prevStyles)
@@ -3206,13 +3206,13 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
       }).join(", ");
       invalidProps.length === 1 ? console.error("Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props", props, type) : 1 < invalidProps.length && console.error("Invalid aria props %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props", props, type);
     }
-    function validateProperty(tagName, name, value, eventRegistry) {
+    function validateProperty(tagName, name, value2, eventRegistry) {
       if (hasOwnProperty.call(warnedProperties, name) && warnedProperties[name])
         return true;
       var lowerCasedName = name.toLowerCase();
       if (lowerCasedName === "onfocusin" || lowerCasedName === "onfocusout")
         return console.error("React uses onFocus and onBlur instead of onFocusIn and onFocusOut. All React events are normalized to bubble, so onFocusIn and onFocusOut are not needed/supported by React."), warnedProperties[name] = true;
-      if (typeof value === "function" && (tagName === "form" && name === "action" || tagName === "input" && name === "formAction" || tagName === "button" && name === "formAction"))
+      if (typeof value2 === "function" && (tagName === "form" && name === "action" || tagName === "input" && name === "formAction" || tagName === "button" && name === "formAction"))
         return true;
       if (eventRegistry != null) {
         tagName = eventRegistry.possibleRegistrationNames;
@@ -3231,9 +3231,9 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
         return console.error("Directly setting property `innerHTML` is not permitted. For more information, lookup documentation on `dangerouslySetInnerHTML`."), warnedProperties[name] = true;
       if (lowerCasedName === "aria")
         return console.error("The `aria` attribute is reserved for future use in React. Pass individual `aria-` attributes instead."), warnedProperties[name] = true;
-      if (lowerCasedName === "is" && value !== null && value !== undefined && typeof value !== "string")
-        return console.error("Received a `%s` for a string attribute `is`. If this is expected, cast the value to a string.", typeof value), warnedProperties[name] = true;
-      if (typeof value === "number" && isNaN(value))
+      if (lowerCasedName === "is" && value2 !== null && value2 !== undefined && typeof value2 !== "string")
+        return console.error("Received a `%s` for a string attribute `is`. If this is expected, cast the value to a string.", typeof value2), warnedProperties[name] = true;
+      if (typeof value2 === "number" && isNaN(value2))
         return console.error("Received NaN for the `%s` attribute. If this is expected, cast the value to a string.", name), warnedProperties[name] = true;
       if (possibleStandardNames.hasOwnProperty(lowerCasedName)) {
         if (lowerCasedName = possibleStandardNames[lowerCasedName], lowerCasedName !== name)
@@ -3255,7 +3255,7 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
         case "textContent":
           return true;
       }
-      switch (typeof value) {
+      switch (typeof value2) {
         case "boolean":
           switch (name) {
             case "autoFocus":
@@ -3301,14 +3301,14 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
               lowerCasedName = name.toLowerCase().slice(0, 5);
               if (lowerCasedName === "data-" || lowerCasedName === "aria-")
                 return true;
-              value ? console.error('Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.', value, name, name, value, name) : console.error('Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.\n\nIf you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead.', value, name, name, value, name, name, name);
+              value2 ? console.error('Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.', value2, name, name, value2, name) : console.error('Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}.\n\nIf you used to conditionally omit it with %s={condition && value}, pass %s={condition ? value : undefined} instead.', value2, name, name, value2, name, name, name);
               return warnedProperties[name] = true;
           }
         case "function":
         case "symbol":
           return warnedProperties[name] = true, false;
         case "string":
-          if (value === "false" || value === "true") {
+          if (value2 === "false" || value2 === "true") {
             switch (name) {
               case "checked":
               case "selected":
@@ -3341,7 +3341,7 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
               default:
                 return true;
             }
-            console.error("Received the string `%s` for the boolean attribute `%s`. %s Did you mean %s={%s}?", value, name, value === "false" ? "The browser will interpret it as a truthy value." : 'Although this works, it will not work as expected if you pass the string "false".', name, value);
+            console.error("Received the string `%s` for the boolean attribute `%s`. %s Did you mean %s={%s}?", value2, name, value2 === "false" ? "The browser will interpret it as a truthy value." : 'Although this works, it will not work as expected if you pass the string "false".', name, value2);
             warnedProperties[name] = true;
           }
       }
@@ -3716,16 +3716,16 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
     }
     function getArrayKind(array) {
       for (var kind = EMPTY_ARRAY, i = 0;i < array.length; i++) {
-        var value = array[i];
-        if (typeof value === "object" && value !== null)
-          if (isArrayImpl(value) && value.length === 2 && typeof value[0] === "string") {
+        var value2 = array[i];
+        if (typeof value2 === "object" && value2 !== null)
+          if (isArrayImpl(value2) && value2.length === 2 && typeof value2[0] === "string") {
             if (kind !== EMPTY_ARRAY && kind !== ENTRIES_ARRAY)
               return COMPLEX_ARRAY;
             kind = ENTRIES_ARRAY;
           } else
             return COMPLEX_ARRAY;
         else {
-          if (typeof value === "function" || typeof value === "string" && 50 < value.length || kind !== EMPTY_ARRAY && kind !== PRIMITIVE_ARRAY)
+          if (typeof value2 === "function" || typeof value2 === "string" && 50 < value2.length || kind !== EMPTY_ARRAY && kind !== PRIMITIVE_ARRAY)
             return COMPLEX_ARRAY;
           kind = PRIMITIVE_ARRAY;
         }
@@ -3736,23 +3736,23 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
       for (var key in object)
         hasOwnProperty.call(object, key) && key[0] !== "_" && addValueToProperties(key, object[key], properties, indent, prefix2);
     }
-    function addValueToProperties(propertyName, value, properties, indent, prefix2) {
-      switch (typeof value) {
+    function addValueToProperties(propertyName, value2, properties, indent, prefix2) {
+      switch (typeof value2) {
         case "object":
-          if (value === null) {
-            value = "null";
+          if (value2 === null) {
+            value2 = "null";
             break;
           } else {
-            if (value.$$typeof === REACT_ELEMENT_TYPE) {
-              var typeName2 = getComponentNameFromType(value.type) || "…", key = value.key;
-              value = value.props;
-              var propsKeys = Object.keys(value), propsLength = propsKeys.length;
+            if (value2.$$typeof === REACT_ELEMENT_TYPE) {
+              var typeName2 = getComponentNameFromType(value2.type) || "…", key = value2.key;
+              value2 = value2.props;
+              var propsKeys = Object.keys(value2), propsLength = propsKeys.length;
               if (key == null && propsLength === 0) {
-                value = "<" + typeName2 + " />";
+                value2 = "<" + typeName2 + " />";
                 break;
               }
               if (3 > indent || propsLength === 1 && propsKeys[0] === "children" && key == null) {
-                value = "<" + typeName2 + " … />";
+                value2 = "<" + typeName2 + " … />";
                 break;
               }
               properties.push([
@@ -3761,38 +3761,38 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
               ]);
               key !== null && addValueToProperties("key", key, properties, indent + 1, prefix2);
               propertyName = false;
-              for (var propKey in value)
-                propKey === "children" ? value.children != null && (!isArrayImpl(value.children) || 0 < value.children.length) && (propertyName = true) : hasOwnProperty.call(value, propKey) && propKey[0] !== "_" && addValueToProperties(propKey, value[propKey], properties, indent + 1, prefix2);
+              for (var propKey in value2)
+                propKey === "children" ? value2.children != null && (!isArrayImpl(value2.children) || 0 < value2.children.length) && (propertyName = true) : hasOwnProperty.call(value2, propKey) && propKey[0] !== "_" && addValueToProperties(propKey, value2[propKey], properties, indent + 1, prefix2);
               properties.push([
                 "",
                 propertyName ? ">…</" + typeName2 + ">" : "/>"
               ]);
               return;
             }
-            typeName2 = Object.prototype.toString.call(value);
+            typeName2 = Object.prototype.toString.call(value2);
             typeName2 = typeName2.slice(8, typeName2.length - 1);
             if (typeName2 === "Array") {
-              if (propKey = getArrayKind(value), propKey === PRIMITIVE_ARRAY || propKey === EMPTY_ARRAY) {
-                value = JSON.stringify(value);
+              if (propKey = getArrayKind(value2), propKey === PRIMITIVE_ARRAY || propKey === EMPTY_ARRAY) {
+                value2 = JSON.stringify(value2);
                 break;
               } else if (propKey === ENTRIES_ARRAY) {
                 properties.push([
                   prefix2 + "  ".repeat(indent) + propertyName,
                   ""
                 ]);
-                for (propertyName = 0;propertyName < value.length; propertyName++)
-                  typeName2 = value[propertyName], addValueToProperties(typeName2[0], typeName2[1], properties, indent + 1, prefix2);
+                for (propertyName = 0;propertyName < value2.length; propertyName++)
+                  typeName2 = value2[propertyName], addValueToProperties(typeName2[0], typeName2[1], properties, indent + 1, prefix2);
                 return;
               }
             }
             if (typeName2 === "Promise") {
-              if (value.status === "fulfilled") {
-                if (typeName2 = properties.length, addValueToProperties(propertyName, value.value, properties, indent, prefix2), properties.length > typeName2) {
+              if (value2.status === "fulfilled") {
+                if (typeName2 = properties.length, addValueToProperties(propertyName, value2.value, properties, indent, prefix2), properties.length > typeName2) {
                   properties = properties[typeName2];
                   properties[1] = "Promise<" + (properties[1] || "Object") + ">";
                   return;
                 }
-              } else if (value.status === "rejected" && (typeName2 = properties.length, addValueToProperties(propertyName, value.reason, properties, indent, prefix2), properties.length > typeName2)) {
+              } else if (value2.status === "rejected" && (typeName2 = properties.length, addValueToProperties(propertyName, value2.reason, properties, indent, prefix2), properties.length > typeName2)) {
                 properties = properties[typeName2];
                 properties[1] = "Rejected Promise<" + properties[1] + ">";
                 return;
@@ -3803,32 +3803,32 @@ This will cause a hydration error.%s`, parentTag, implicitRootScope);
               ]);
               return;
             }
-            typeName2 === "Object" && (propKey = Object.getPrototypeOf(value)) && typeof propKey.constructor === "function" && (typeName2 = propKey.constructor.name);
+            typeName2 === "Object" && (propKey = Object.getPrototypeOf(value2)) && typeof propKey.constructor === "function" && (typeName2 = propKey.constructor.name);
             properties.push([
               prefix2 + "  ".repeat(indent) + propertyName,
               typeName2 === "Object" ? 3 > indent ? "" : "…" : typeName2
             ]);
-            3 > indent && addObjectToProperties(value, properties, indent + 1, prefix2);
+            3 > indent && addObjectToProperties(value2, properties, indent + 1, prefix2);
             return;
           }
         case "function":
-          value = value.name === "" ? "() => {}" : value.name + "() {}";
+          value2 = value2.name === "" ? "() => {}" : value2.name + "() {}";
           break;
         case "string":
-          value = value === OMITTED_PROP_ERROR ? "…" : JSON.stringify(value);
+          value2 = value2 === OMITTED_PROP_ERROR ? "…" : JSON.stringify(value2);
           break;
         case "undefined":
-          value = "undefined";
+          value2 = "undefined";
           break;
         case "boolean":
-          value = value ? "true" : "false";
+          value2 = value2 ? "true" : "false";
           break;
         default:
-          value = String(value);
+          value2 = String(value2);
       }
       properties.push([
         prefix2 + "  ".repeat(indent) + propertyName,
-        value
+        value2
       ]);
     }
     function addObjectDiffToProperties(prev, next, properties, indent) {
@@ -4340,21 +4340,21 @@ Check the render method of \`` + fiberTag + "`.");
       };
       return mode;
     }
-    function createCapturedValueAtFiber(value, source) {
-      if (typeof value === "object" && value !== null) {
-        var existing = CapturedStacks.get(value);
+    function createCapturedValueAtFiber(value2, source) {
+      if (typeof value2 === "object" && value2 !== null) {
+        var existing = CapturedStacks.get(value2);
         if (existing !== undefined)
           return existing;
         source = {
-          value,
+          value: value2,
           source,
           stack: getStackByFiberInDevAndProd(source)
         };
-        CapturedStacks.set(value, source);
+        CapturedStacks.set(value2, source);
         return source;
       }
       return {
-        value,
+        value: value2,
         source,
         stack: getStackByFiberInDevAndProd(source)
       };
@@ -4738,8 +4738,8 @@ It can also happen if the client has a browser extension installed which messes 
       return readContextForConsumer(consumer, context);
     }
     function readContextForConsumer(consumer, context) {
-      var value = context._currentValue;
-      context = { context, memoizedValue: value, next: null };
+      var value2 = context._currentValue;
+      context = { context, memoizedValue: value2, next: null };
       if (lastContextDependency === null) {
         if (consumer === null)
           throw Error("Context can only be read while React is rendering. In classes, you can read it in the render method or getDerivedStateFromProps. In function components, you can read it directly in the function body, but not inside Hooks like useReducer() or useMemo().");
@@ -4752,7 +4752,7 @@ It can also happen if the client has a browser extension installed which messes 
         consumer.flags |= 524288;
       } else
         lastContextDependency = lastContextDependency.next = context;
-      return value;
+      return value2;
     }
     function createCache() {
       return {
@@ -4917,7 +4917,7 @@ It can also happen if the client has a browser extension installed which messes 
           (0, listeners[i])();
       }
     }
-    function chainThenableValue(thenable, result) {
+    function chainThenableValue(thenable, result2) {
       var listeners = [], thenableWithOverride = {
         status: "pending",
         value: null,
@@ -4928,9 +4928,9 @@ It can also happen if the client has a browser extension installed which messes 
       };
       thenable.then(function() {
         thenableWithOverride.status = "fulfilled";
-        thenableWithOverride.value = result;
+        thenableWithOverride.value = result2;
         for (var i = 0;i < listeners.length; i++)
-          (0, listeners[i])(result);
+          (0, listeners[i])(result2);
       }, function(error) {
         thenableWithOverride.status = "rejected";
         thenableWithOverride.reason = error;
@@ -5332,30 +5332,30 @@ It can also happen if the client has a browser extension installed which messes 
       function reconcileChildrenIterator(returnFiber, currentFirstChild, newChildren, lanes) {
         if (newChildren == null)
           throw Error("An iterable object provided no iterator.");
-        for (var resultingFirstChild = null, previousNewFiber = null, oldFiber = currentFirstChild, newIdx = currentFirstChild = 0, nextOldFiber = null, knownKeys = null, step = newChildren.next();oldFiber !== null && !step.done; newIdx++, step = newChildren.next()) {
+        for (var resultingFirstChild = null, previousNewFiber = null, oldFiber = currentFirstChild, newIdx = currentFirstChild = 0, nextOldFiber = null, knownKeys = null, step2 = newChildren.next();oldFiber !== null && !step2.done; newIdx++, step2 = newChildren.next()) {
           oldFiber.index > newIdx ? (nextOldFiber = oldFiber, oldFiber = null) : nextOldFiber = oldFiber.sibling;
-          var newFiber = updateSlot(returnFiber, oldFiber, step.value, lanes);
+          var newFiber = updateSlot(returnFiber, oldFiber, step2.value, lanes);
           if (newFiber === null) {
             oldFiber === null && (oldFiber = nextOldFiber);
             break;
           }
-          knownKeys = warnOnInvalidKey(returnFiber, newFiber, step.value, knownKeys);
+          knownKeys = warnOnInvalidKey(returnFiber, newFiber, step2.value, knownKeys);
           shouldTrackSideEffects && oldFiber && newFiber.alternate === null && deleteChild(returnFiber, oldFiber);
           currentFirstChild = placeChild(newFiber, currentFirstChild, newIdx);
           previousNewFiber === null ? resultingFirstChild = newFiber : previousNewFiber.sibling = newFiber;
           previousNewFiber = newFiber;
           oldFiber = nextOldFiber;
         }
-        if (step.done)
+        if (step2.done)
           return deleteRemainingChildren(returnFiber, oldFiber), isHydrating && pushTreeFork(returnFiber, newIdx), resultingFirstChild;
         if (oldFiber === null) {
-          for (;!step.done; newIdx++, step = newChildren.next())
-            oldFiber = createChild(returnFiber, step.value, lanes), oldFiber !== null && (knownKeys = warnOnInvalidKey(returnFiber, oldFiber, step.value, knownKeys), currentFirstChild = placeChild(oldFiber, currentFirstChild, newIdx), previousNewFiber === null ? resultingFirstChild = oldFiber : previousNewFiber.sibling = oldFiber, previousNewFiber = oldFiber);
+          for (;!step2.done; newIdx++, step2 = newChildren.next())
+            oldFiber = createChild(returnFiber, step2.value, lanes), oldFiber !== null && (knownKeys = warnOnInvalidKey(returnFiber, oldFiber, step2.value, knownKeys), currentFirstChild = placeChild(oldFiber, currentFirstChild, newIdx), previousNewFiber === null ? resultingFirstChild = oldFiber : previousNewFiber.sibling = oldFiber, previousNewFiber = oldFiber);
           isHydrating && pushTreeFork(returnFiber, newIdx);
           return resultingFirstChild;
         }
-        for (oldFiber = mapRemainingChildren(oldFiber);!step.done; newIdx++, step = newChildren.next())
-          nextOldFiber = updateFromMap(oldFiber, returnFiber, newIdx, step.value, lanes), nextOldFiber !== null && (knownKeys = warnOnInvalidKey(returnFiber, nextOldFiber, step.value, knownKeys), shouldTrackSideEffects && nextOldFiber.alternate !== null && oldFiber.delete(nextOldFiber.key === null ? newIdx : nextOldFiber.key), currentFirstChild = placeChild(nextOldFiber, currentFirstChild, newIdx), previousNewFiber === null ? resultingFirstChild = nextOldFiber : previousNewFiber.sibling = nextOldFiber, previousNewFiber = nextOldFiber);
+        for (oldFiber = mapRemainingChildren(oldFiber);!step2.done; newIdx++, step2 = newChildren.next())
+          nextOldFiber = updateFromMap(oldFiber, returnFiber, newIdx, step2.value, lanes), nextOldFiber !== null && (knownKeys = warnOnInvalidKey(returnFiber, nextOldFiber, step2.value, knownKeys), shouldTrackSideEffects && nextOldFiber.alternate !== null && oldFiber.delete(nextOldFiber.key === null ? newIdx : nextOldFiber.key), currentFirstChild = placeChild(nextOldFiber, currentFirstChild, newIdx), previousNewFiber === null ? resultingFirstChild = nextOldFiber : previousNewFiber.sibling = nextOldFiber, previousNewFiber = nextOldFiber);
         shouldTrackSideEffects && oldFiber.forEach(function(child) {
           return deleteChild(returnFiber, child);
         });
@@ -6605,34 +6605,34 @@ Incoming: %s`, currentHookNameInDev, "[" + prevDeps.join(", ") + "]", "[" + next
       hook.memoizedState = [prevState, deps];
       return prevState;
     }
-    function mountDeferredValue(value, initialValue) {
+    function mountDeferredValue(value2, initialValue) {
       var hook = mountWorkInProgressHook();
-      return mountDeferredValueImpl(hook, value, initialValue);
+      return mountDeferredValueImpl(hook, value2, initialValue);
     }
-    function updateDeferredValue(value, initialValue) {
+    function updateDeferredValue(value2, initialValue) {
       var hook = updateWorkInProgressHook();
-      return updateDeferredValueImpl(hook, currentHook.memoizedState, value, initialValue);
+      return updateDeferredValueImpl(hook, currentHook.memoizedState, value2, initialValue);
     }
-    function rerenderDeferredValue(value, initialValue) {
+    function rerenderDeferredValue(value2, initialValue) {
       var hook = updateWorkInProgressHook();
-      return currentHook === null ? mountDeferredValueImpl(hook, value, initialValue) : updateDeferredValueImpl(hook, currentHook.memoizedState, value, initialValue);
+      return currentHook === null ? mountDeferredValueImpl(hook, value2, initialValue) : updateDeferredValueImpl(hook, currentHook.memoizedState, value2, initialValue);
     }
-    function mountDeferredValueImpl(hook, value, initialValue) {
+    function mountDeferredValueImpl(hook, value2, initialValue) {
       if (initialValue === undefined || (renderLanes & 1073741824) !== 0 && (workInProgressRootRenderLanes & 261930) === 0)
-        return hook.memoizedState = value;
+        return hook.memoizedState = value2;
       hook.memoizedState = initialValue;
       hook = requestDeferredLane();
       currentlyRenderingFiber.lanes |= hook;
       workInProgressRootSkippedLanes |= hook;
       return initialValue;
     }
-    function updateDeferredValueImpl(hook, prevValue, value, initialValue) {
-      if (objectIs(value, prevValue))
-        return value;
+    function updateDeferredValueImpl(hook, prevValue, value2, initialValue) {
+      if (objectIs(value2, prevValue))
+        return value2;
       if (currentTreeHiddenStackCursor.current !== null)
-        return hook = mountDeferredValueImpl(hook, value, initialValue), objectIs(hook, prevValue) || (didReceiveUpdate = true), hook;
+        return hook = mountDeferredValueImpl(hook, value2, initialValue), objectIs(hook, prevValue) || (didReceiveUpdate = true), hook;
       if ((renderLanes & 42) === 0 || (renderLanes & 1073741824) !== 0 && (workInProgressRootRenderLanes & 261930) === 0)
-        return didReceiveUpdate = true, hook.memoizedState = value;
+        return didReceiveUpdate = true, hook.memoizedState = value2;
       hook = requestDeferredLane();
       currentlyRenderingFiber.lanes |= hook;
       workInProgressRootSkippedLanes |= hook;
@@ -7025,10 +7025,10 @@ Visit https://react.dev/link/error-boundaries to learn more about error boundari
         typeof getDerivedStateFromError === "function" || (fiber.lanes & 2) === 0 && console.error("%s: Error boundaries should implement getDerivedStateFromError(). In that method, return a state update to display an error message or fallback UI.", getComponentNameFromFiber(fiber) || "Unknown");
       });
     }
-    function throwException(root2, returnFiber, sourceFiber, value, rootRenderLanes) {
+    function throwException(root2, returnFiber, sourceFiber, value2, rootRenderLanes) {
       sourceFiber.flags |= 32768;
       isDevToolsPresent && restorePendingUpdaters(root2, rootRenderLanes);
-      if (value !== null && typeof value === "object" && typeof value.then === "function") {
+      if (value2 !== null && typeof value2 === "object" && typeof value2.then === "function") {
         returnFiber = sourceFiber.alternate;
         returnFiber !== null && propagateParentContextChanges(returnFiber, sourceFiber, rootRenderLanes, true);
         isHydrating && (didSuspendOrErrorDEV = true);
@@ -7037,36 +7037,36 @@ Visit https://react.dev/link/error-boundaries to learn more about error boundari
           switch (sourceFiber.tag) {
             case 31:
             case 13:
-              return shellBoundary === null ? renderDidSuspendDelayIfPossible() : sourceFiber.alternate === null && workInProgressRootExitStatus === RootInProgress && (workInProgressRootExitStatus = RootSuspended), sourceFiber.flags &= -257, sourceFiber.flags |= 65536, sourceFiber.lanes = rootRenderLanes, value === noopSuspenseyCommitThenable ? sourceFiber.flags |= 16384 : (returnFiber = sourceFiber.updateQueue, returnFiber === null ? sourceFiber.updateQueue = new Set([value]) : returnFiber.add(value), attachPingListener(root2, value, rootRenderLanes)), false;
+              return shellBoundary === null ? renderDidSuspendDelayIfPossible() : sourceFiber.alternate === null && workInProgressRootExitStatus === RootInProgress && (workInProgressRootExitStatus = RootSuspended), sourceFiber.flags &= -257, sourceFiber.flags |= 65536, sourceFiber.lanes = rootRenderLanes, value2 === noopSuspenseyCommitThenable ? sourceFiber.flags |= 16384 : (returnFiber = sourceFiber.updateQueue, returnFiber === null ? sourceFiber.updateQueue = new Set([value2]) : returnFiber.add(value2), attachPingListener(root2, value2, rootRenderLanes)), false;
             case 22:
-              return sourceFiber.flags |= 65536, value === noopSuspenseyCommitThenable ? sourceFiber.flags |= 16384 : (returnFiber = sourceFiber.updateQueue, returnFiber === null ? (returnFiber = {
+              return sourceFiber.flags |= 65536, value2 === noopSuspenseyCommitThenable ? sourceFiber.flags |= 16384 : (returnFiber = sourceFiber.updateQueue, returnFiber === null ? (returnFiber = {
                 transitions: null,
                 markerInstances: null,
-                retryQueue: new Set([value])
-              }, sourceFiber.updateQueue = returnFiber) : (sourceFiber = returnFiber.retryQueue, sourceFiber === null ? returnFiber.retryQueue = new Set([value]) : sourceFiber.add(value)), attachPingListener(root2, value, rootRenderLanes)), false;
+                retryQueue: new Set([value2])
+              }, sourceFiber.updateQueue = returnFiber) : (sourceFiber = returnFiber.retryQueue, sourceFiber === null ? returnFiber.retryQueue = new Set([value2]) : sourceFiber.add(value2)), attachPingListener(root2, value2, rootRenderLanes)), false;
           }
           throw Error("Unexpected Suspense handler tag (" + sourceFiber.tag + "). This is a bug in React.");
         }
-        attachPingListener(root2, value, rootRenderLanes);
+        attachPingListener(root2, value2, rootRenderLanes);
         renderDidSuspendDelayIfPossible();
         return false;
       }
       if (isHydrating)
-        return didSuspendOrErrorDEV = true, returnFiber = suspenseHandlerStackCursor.current, returnFiber !== null ? ((returnFiber.flags & 65536) === 0 && (returnFiber.flags |= 256), returnFiber.flags |= 65536, returnFiber.lanes = rootRenderLanes, value !== HydrationMismatchException && queueHydrationError(createCapturedValueAtFiber(Error("There was an error while hydrating but React was able to recover by instead client rendering from the nearest Suspense boundary.", { cause: value }), sourceFiber))) : (value !== HydrationMismatchException && queueHydrationError(createCapturedValueAtFiber(Error("There was an error while hydrating but React was able to recover by instead client rendering the entire root.", { cause: value }), sourceFiber)), root2 = root2.current.alternate, root2.flags |= 65536, rootRenderLanes &= -rootRenderLanes, root2.lanes |= rootRenderLanes, value = createCapturedValueAtFiber(value, sourceFiber), rootRenderLanes = createRootErrorUpdate(root2.stateNode, value, rootRenderLanes), enqueueCapturedUpdate(root2, rootRenderLanes), workInProgressRootExitStatus !== RootSuspendedWithDelay && (workInProgressRootExitStatus = RootErrored)), false;
-      var error = createCapturedValueAtFiber(Error("There was an error during concurrent rendering but React was able to recover by instead synchronously rendering the entire root.", { cause: value }), sourceFiber);
+        return didSuspendOrErrorDEV = true, returnFiber = suspenseHandlerStackCursor.current, returnFiber !== null ? ((returnFiber.flags & 65536) === 0 && (returnFiber.flags |= 256), returnFiber.flags |= 65536, returnFiber.lanes = rootRenderLanes, value2 !== HydrationMismatchException && queueHydrationError(createCapturedValueAtFiber(Error("There was an error while hydrating but React was able to recover by instead client rendering from the nearest Suspense boundary.", { cause: value2 }), sourceFiber))) : (value2 !== HydrationMismatchException && queueHydrationError(createCapturedValueAtFiber(Error("There was an error while hydrating but React was able to recover by instead client rendering the entire root.", { cause: value2 }), sourceFiber)), root2 = root2.current.alternate, root2.flags |= 65536, rootRenderLanes &= -rootRenderLanes, root2.lanes |= rootRenderLanes, value2 = createCapturedValueAtFiber(value2, sourceFiber), rootRenderLanes = createRootErrorUpdate(root2.stateNode, value2, rootRenderLanes), enqueueCapturedUpdate(root2, rootRenderLanes), workInProgressRootExitStatus !== RootSuspendedWithDelay && (workInProgressRootExitStatus = RootErrored)), false;
+      var error = createCapturedValueAtFiber(Error("There was an error during concurrent rendering but React was able to recover by instead synchronously rendering the entire root.", { cause: value2 }), sourceFiber);
       workInProgressRootConcurrentErrors === null ? workInProgressRootConcurrentErrors = [error] : workInProgressRootConcurrentErrors.push(error);
       workInProgressRootExitStatus !== RootSuspendedWithDelay && (workInProgressRootExitStatus = RootErrored);
       if (returnFiber === null)
         return true;
-      value = createCapturedValueAtFiber(value, sourceFiber);
+      value2 = createCapturedValueAtFiber(value2, sourceFiber);
       sourceFiber = returnFiber;
       do {
         switch (sourceFiber.tag) {
           case 3:
-            return sourceFiber.flags |= 65536, root2 = rootRenderLanes & -rootRenderLanes, sourceFiber.lanes |= root2, root2 = createRootErrorUpdate(sourceFiber.stateNode, value, root2), enqueueCapturedUpdate(sourceFiber, root2), false;
+            return sourceFiber.flags |= 65536, root2 = rootRenderLanes & -rootRenderLanes, sourceFiber.lanes |= root2, root2 = createRootErrorUpdate(sourceFiber.stateNode, value2, root2), enqueueCapturedUpdate(sourceFiber, root2), false;
           case 1:
             if (returnFiber = sourceFiber.type, error = sourceFiber.stateNode, (sourceFiber.flags & 128) === 0 && (typeof returnFiber.getDerivedStateFromError === "function" || error !== null && typeof error.componentDidCatch === "function" && (legacyErrorBoundariesThatAlreadyFailed === null || !legacyErrorBoundariesThatAlreadyFailed.has(error))))
-              return sourceFiber.flags |= 65536, rootRenderLanes &= -rootRenderLanes, sourceFiber.lanes |= rootRenderLanes, rootRenderLanes = createClassErrorUpdate(rootRenderLanes), initializeClassErrorUpdate(rootRenderLanes, root2, sourceFiber, value), enqueueCapturedUpdate(sourceFiber, rootRenderLanes), false;
+              return sourceFiber.flags |= 65536, rootRenderLanes &= -rootRenderLanes, sourceFiber.lanes |= rootRenderLanes, rootRenderLanes = createClassErrorUpdate(rootRenderLanes), initializeClassErrorUpdate(rootRenderLanes, root2, sourceFiber, value2), enqueueCapturedUpdate(sourceFiber, rootRenderLanes), false;
         }
         sourceFiber = sourceFiber.return;
       } while (sourceFiber !== null);
@@ -7674,8 +7674,8 @@ https://react.dev/link/unsafe-component-lifecycles`, _instance, newApiName, stat
             }
           else if (suspenseContext = getIteratorFn(newChildren), typeof suspenseContext === "function") {
             if (suspenseContext = suspenseContext.call(newChildren))
-              for (var step = suspenseContext.next(), _i = 0;!step.done; step = suspenseContext.next()) {
-                if (!validateSuspenseListNestedChild(step.value, _i))
+              for (var step2 = suspenseContext.next(), _i = 0;!step2.done; step2 = suspenseContext.next()) {
+                if (!validateSuspenseListNestedChild(step2.value, _i))
                   break a;
                 _i++;
               }
@@ -10183,8 +10183,8 @@ Learn more about data fetching with Hooks: https://react.dev/link/hooks-data-fet
         else {
           var endTime = renderStartTime, debugTask = workInProgressUpdateTask;
           if (supportsUserTiming && !(endTime <= previousRenderStartTime)) {
-            var color = (lanes & 738197653) === lanes ? "tertiary-dark" : "primary-dark", label = (lanes & 536870912) === lanes ? "Prewarm" : (lanes & 201326741) === lanes ? "Interrupted Hydration" : "Interrupted Render";
-            debugTask ? debugTask.run(console.timeStamp.bind(console, label, previousRenderStartTime, endTime, currentTrack, LANES_TRACK_GROUP, color)) : console.timeStamp(label, previousRenderStartTime, endTime, currentTrack, LANES_TRACK_GROUP, color);
+            var color = (lanes & 738197653) === lanes ? "tertiary-dark" : "primary-dark", label2 = (lanes & 536870912) === lanes ? "Prewarm" : (lanes & 201326741) === lanes ? "Interrupted Hydration" : "Interrupted Render";
+            debugTask ? debugTask.run(console.timeStamp.bind(console, label2, previousRenderStartTime, endTime, currentTrack, LANES_TRACK_GROUP, color)) : console.timeStamp(label2, previousRenderStartTime, endTime, currentTrack, LANES_TRACK_GROUP, color);
           }
         }
         finalizeRender(workInProgressRootRenderLanes, renderStartTime);
@@ -10202,7 +10202,7 @@ Learn more about data fetching with Hooks: https://react.dev/link/hooks-data-fet
         debugTask = renderStartTime;
         endTime = blockingUpdateTask;
         color = blockingUpdateMethodName;
-        label = blockingUpdateComponentName;
+        label2 = blockingUpdateComponentName;
         if (supportsUserTiming) {
           currentTrack = "Blocking";
           0 < previousRenderStartTime ? previousRenderStartTime > debugTask && (previousRenderStartTime = debugTask) : previousRenderStartTime = debugTask;
@@ -10211,7 +10211,7 @@ Learn more about data fetching with Hooks: https://react.dev/link/hooks-data-fet
             var color$jscomp$0 = eventIsRepeat ? "secondary-light" : "warning";
             endTime ? endTime.run(console.timeStamp.bind(console, eventIsRepeat ? "Consecutive" : "Event: " + eventType, eventTime, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, color$jscomp$0)) : console.timeStamp(eventIsRepeat ? "Consecutive" : "Event: " + eventType, eventTime, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, color$jscomp$0);
           }
-          debugTask > previousRenderStartTime && (eventTime = isSpawnedUpdate ? "error" : (lanes & 738197653) === lanes ? "tertiary-light" : "primary-light", isSpawnedUpdate = isPingedUpdate ? "Promise Resolved" : isSpawnedUpdate ? "Cascading Update" : 5 < debugTask - previousRenderStartTime ? "Update Blocked" : "Update", isPingedUpdate = [], label != null && isPingedUpdate.push(["Component name", label]), color != null && isPingedUpdate.push(["Method name", color]), previousRenderStartTime = {
+          debugTask > previousRenderStartTime && (eventTime = isSpawnedUpdate ? "error" : (lanes & 738197653) === lanes ? "tertiary-light" : "primary-light", isSpawnedUpdate = isPingedUpdate ? "Promise Resolved" : isSpawnedUpdate ? "Cascading Update" : 5 < debugTask - previousRenderStartTime ? "Update Blocked" : "Update", isPingedUpdate = [], label2 != null && isPingedUpdate.push(["Component name", label2]), color != null && isPingedUpdate.push(["Method name", color]), previousRenderStartTime = {
             start: previousRenderStartTime,
             end: debugTask,
             detail: {
@@ -10232,7 +10232,7 @@ Learn more about data fetching with Hooks: https://react.dev/link/hooks-data-fet
         blockingEventTime = -1.1;
         blockingClampTime = now();
       }
-      (lanes & 4194048) !== 0 && (workInProgressUpdateTask = transitionUpdateTask, debugTask = 0 <= transitionStartTime && transitionStartTime < transitionClampTime ? transitionClampTime : transitionStartTime, previousRenderStartTime = 0 <= transitionUpdateTime && transitionUpdateTime < transitionClampTime ? transitionClampTime : transitionUpdateTime, endTime = 0 <= transitionEventTime && transitionEventTime < transitionClampTime ? transitionClampTime : transitionEventTime, color = 0 <= endTime ? endTime : 0 <= previousRenderStartTime ? previousRenderStartTime : renderStartTime, 0 <= transitionSuspendedTime ? (setCurrentTrackFromLanes(256), logSuspendedWithDelayPhase(transitionSuspendedTime, color, lanes, workInProgressUpdateTask)) : (animatingLanes & 4194048) !== 0 && (setCurrentTrackFromLanes(256), logAnimatingPhase(transitionClampTime, color, animatingTask)), isPingedUpdate = endTime, eventTime = transitionEventType, eventType = 0 < transitionEventRepeatTime, eventIsRepeat = transitionUpdateType === PINGED_UPDATE, color = renderStartTime, endTime = transitionUpdateTask, label = transitionUpdateMethodName, isSpawnedUpdate = transitionUpdateComponentName, supportsUserTiming && (currentTrack = "Transition", 0 < previousRenderStartTime ? previousRenderStartTime > color && (previousRenderStartTime = color) : previousRenderStartTime = color, 0 < debugTask ? debugTask > previousRenderStartTime && (debugTask = previousRenderStartTime) : debugTask = previousRenderStartTime, 0 < isPingedUpdate ? isPingedUpdate > debugTask && (isPingedUpdate = debugTask) : isPingedUpdate = debugTask, debugTask > isPingedUpdate && eventTime !== null && (color$jscomp$0 = eventType ? "secondary-light" : "warning", endTime ? endTime.run(console.timeStamp.bind(console, eventType ? "Consecutive" : "Event: " + eventTime, isPingedUpdate, debugTask, currentTrack, LANES_TRACK_GROUP, color$jscomp$0)) : console.timeStamp(eventType ? "Consecutive" : "Event: " + eventTime, isPingedUpdate, debugTask, currentTrack, LANES_TRACK_GROUP, color$jscomp$0)), previousRenderStartTime > debugTask && (endTime ? endTime.run(console.timeStamp.bind(console, "Action", debugTask, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, "primary-dark")) : console.timeStamp("Action", debugTask, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, "primary-dark")), color > previousRenderStartTime && (debugTask = eventIsRepeat ? "Promise Resolved" : 5 < color - previousRenderStartTime ? "Update Blocked" : "Update", isPingedUpdate = [], isSpawnedUpdate != null && isPingedUpdate.push(["Component name", isSpawnedUpdate]), label != null && isPingedUpdate.push(["Method name", label]), previousRenderStartTime = {
+      (lanes & 4194048) !== 0 && (workInProgressUpdateTask = transitionUpdateTask, debugTask = 0 <= transitionStartTime && transitionStartTime < transitionClampTime ? transitionClampTime : transitionStartTime, previousRenderStartTime = 0 <= transitionUpdateTime && transitionUpdateTime < transitionClampTime ? transitionClampTime : transitionUpdateTime, endTime = 0 <= transitionEventTime && transitionEventTime < transitionClampTime ? transitionClampTime : transitionEventTime, color = 0 <= endTime ? endTime : 0 <= previousRenderStartTime ? previousRenderStartTime : renderStartTime, 0 <= transitionSuspendedTime ? (setCurrentTrackFromLanes(256), logSuspendedWithDelayPhase(transitionSuspendedTime, color, lanes, workInProgressUpdateTask)) : (animatingLanes & 4194048) !== 0 && (setCurrentTrackFromLanes(256), logAnimatingPhase(transitionClampTime, color, animatingTask)), isPingedUpdate = endTime, eventTime = transitionEventType, eventType = 0 < transitionEventRepeatTime, eventIsRepeat = transitionUpdateType === PINGED_UPDATE, color = renderStartTime, endTime = transitionUpdateTask, label2 = transitionUpdateMethodName, isSpawnedUpdate = transitionUpdateComponentName, supportsUserTiming && (currentTrack = "Transition", 0 < previousRenderStartTime ? previousRenderStartTime > color && (previousRenderStartTime = color) : previousRenderStartTime = color, 0 < debugTask ? debugTask > previousRenderStartTime && (debugTask = previousRenderStartTime) : debugTask = previousRenderStartTime, 0 < isPingedUpdate ? isPingedUpdate > debugTask && (isPingedUpdate = debugTask) : isPingedUpdate = debugTask, debugTask > isPingedUpdate && eventTime !== null && (color$jscomp$0 = eventType ? "secondary-light" : "warning", endTime ? endTime.run(console.timeStamp.bind(console, eventType ? "Consecutive" : "Event: " + eventTime, isPingedUpdate, debugTask, currentTrack, LANES_TRACK_GROUP, color$jscomp$0)) : console.timeStamp(eventType ? "Consecutive" : "Event: " + eventTime, isPingedUpdate, debugTask, currentTrack, LANES_TRACK_GROUP, color$jscomp$0)), previousRenderStartTime > debugTask && (endTime ? endTime.run(console.timeStamp.bind(console, "Action", debugTask, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, "primary-dark")) : console.timeStamp("Action", debugTask, previousRenderStartTime, currentTrack, LANES_TRACK_GROUP, "primary-dark")), color > previousRenderStartTime && (debugTask = eventIsRepeat ? "Promise Resolved" : 5 < color - previousRenderStartTime ? "Update Blocked" : "Update", isPingedUpdate = [], isSpawnedUpdate != null && isPingedUpdate.push(["Component name", isSpawnedUpdate]), label2 != null && isPingedUpdate.push(["Method name", label2]), previousRenderStartTime = {
         start: previousRenderStartTime,
         end: color,
         detail: {
@@ -11692,80 +11692,80 @@ This ensures that you're testing the behavior the user would see in the browser.
       clientText = normalizeMarkupForTextOrAttribute(clientText);
       return normalizeMarkupForTextOrAttribute(serverText) === clientText ? true : false;
     }
-    function setProp(domElement, tag, key, value, props, prevValue) {
+    function setProp(domElement, tag, key, value2, props, prevValue) {
       switch (key) {
         case "children":
-          if (typeof value === "string")
-            validateTextNesting(value, tag, false), tag === "body" || tag === "textarea" && value === "" || setTextContent(domElement, value);
-          else if (typeof value === "number" || typeof value === "bigint")
-            validateTextNesting("" + value, tag, false), tag !== "body" && setTextContent(domElement, "" + value);
+          if (typeof value2 === "string")
+            validateTextNesting(value2, tag, false), tag === "body" || tag === "textarea" && value2 === "" || setTextContent(domElement, value2);
+          else if (typeof value2 === "number" || typeof value2 === "bigint")
+            validateTextNesting("" + value2, tag, false), tag !== "body" && setTextContent(domElement, "" + value2);
           break;
         case "className":
-          setValueForKnownAttribute(domElement, "class", value);
+          setValueForKnownAttribute(domElement, "class", value2);
           break;
         case "tabIndex":
-          setValueForKnownAttribute(domElement, "tabindex", value);
+          setValueForKnownAttribute(domElement, "tabindex", value2);
           break;
         case "dir":
         case "role":
         case "viewBox":
         case "width":
         case "height":
-          setValueForKnownAttribute(domElement, key, value);
+          setValueForKnownAttribute(domElement, key, value2);
           break;
         case "style":
-          setValueForStyles(domElement, value, prevValue);
+          setValueForStyles(domElement, value2, prevValue);
           break;
         case "data":
           if (tag !== "object") {
-            setValueForKnownAttribute(domElement, "data", value);
+            setValueForKnownAttribute(domElement, "data", value2);
             break;
           }
         case "src":
         case "href":
-          if (value === "" && (tag !== "a" || key !== "href")) {
+          if (value2 === "" && (tag !== "a" || key !== "href")) {
             key === "src" ? console.error('An empty string ("") was passed to the %s attribute. This may cause the browser to download the whole page again over the network. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', key, key) : console.error('An empty string ("") was passed to the %s attribute. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', key, key);
             domElement.removeAttribute(key);
             break;
           }
-          if (value == null || typeof value === "function" || typeof value === "symbol" || typeof value === "boolean") {
+          if (value2 == null || typeof value2 === "function" || typeof value2 === "symbol" || typeof value2 === "boolean") {
             domElement.removeAttribute(key);
             break;
           }
-          checkAttributeStringCoercion(value, key);
-          value = sanitizeURL("" + value);
-          domElement.setAttribute(key, value);
+          checkAttributeStringCoercion(value2, key);
+          value2 = sanitizeURL("" + value2);
+          domElement.setAttribute(key, value2);
           break;
         case "action":
         case "formAction":
-          value != null && (tag === "form" ? key === "formAction" ? console.error("You can only pass the formAction prop to <input> or <button>. Use the action prop on <form>.") : typeof value === "function" && (props.encType == null && props.method == null || didWarnFormActionMethod || (didWarnFormActionMethod = true, console.error("Cannot specify a encType or method for a form that specifies a function as the action. React provides those automatically. They will get overridden.")), props.target == null || didWarnFormActionTarget || (didWarnFormActionTarget = true, console.error("Cannot specify a target for a form that specifies a function as the action. The function will always be executed in the same window."))) : tag === "input" || tag === "button" ? key === "action" ? console.error("You can only pass the action prop to <form>. Use the formAction prop on <input> or <button>.") : tag !== "input" || props.type === "submit" || props.type === "image" || didWarnFormActionType ? tag !== "button" || props.type == null || props.type === "submit" || didWarnFormActionType ? typeof value === "function" && (props.name == null || didWarnFormActionName || (didWarnFormActionName = true, console.error('Cannot specify a "name" prop for a button that specifies a function as a formAction. React needs it to encode which action should be invoked. It will get overridden.')), props.formEncType == null && props.formMethod == null || didWarnFormActionMethod || (didWarnFormActionMethod = true, console.error("Cannot specify a formEncType or formMethod for a button that specifies a function as a formAction. React provides those automatically. They will get overridden.")), props.formTarget == null || didWarnFormActionTarget || (didWarnFormActionTarget = true, console.error("Cannot specify a formTarget for a button that specifies a function as a formAction. The function will always be executed in the same window."))) : (didWarnFormActionType = true, console.error('A button can only specify a formAction along with type="submit" or no type.')) : (didWarnFormActionType = true, console.error('An input can only specify a formAction along with type="submit" or type="image".')) : key === "action" ? console.error("You can only pass the action prop to <form>.") : console.error("You can only pass the formAction prop to <input> or <button>."));
-          if (typeof value === "function") {
+          value2 != null && (tag === "form" ? key === "formAction" ? console.error("You can only pass the formAction prop to <input> or <button>. Use the action prop on <form>.") : typeof value2 === "function" && (props.encType == null && props.method == null || didWarnFormActionMethod || (didWarnFormActionMethod = true, console.error("Cannot specify a encType or method for a form that specifies a function as the action. React provides those automatically. They will get overridden.")), props.target == null || didWarnFormActionTarget || (didWarnFormActionTarget = true, console.error("Cannot specify a target for a form that specifies a function as the action. The function will always be executed in the same window."))) : tag === "input" || tag === "button" ? key === "action" ? console.error("You can only pass the action prop to <form>. Use the formAction prop on <input> or <button>.") : tag !== "input" || props.type === "submit" || props.type === "image" || didWarnFormActionType ? tag !== "button" || props.type == null || props.type === "submit" || didWarnFormActionType ? typeof value2 === "function" && (props.name == null || didWarnFormActionName || (didWarnFormActionName = true, console.error('Cannot specify a "name" prop for a button that specifies a function as a formAction. React needs it to encode which action should be invoked. It will get overridden.')), props.formEncType == null && props.formMethod == null || didWarnFormActionMethod || (didWarnFormActionMethod = true, console.error("Cannot specify a formEncType or formMethod for a button that specifies a function as a formAction. React provides those automatically. They will get overridden.")), props.formTarget == null || didWarnFormActionTarget || (didWarnFormActionTarget = true, console.error("Cannot specify a formTarget for a button that specifies a function as a formAction. The function will always be executed in the same window."))) : (didWarnFormActionType = true, console.error('A button can only specify a formAction along with type="submit" or no type.')) : (didWarnFormActionType = true, console.error('An input can only specify a formAction along with type="submit" or type="image".')) : key === "action" ? console.error("You can only pass the action prop to <form>.") : console.error("You can only pass the formAction prop to <input> or <button>."));
+          if (typeof value2 === "function") {
             domElement.setAttribute(key, "javascript:throw new Error('A React form was unexpectedly submitted. If you called form.submit() manually, consider using form.requestSubmit() instead. If you\\'re trying to use event.stopPropagation() in a submit event handler, consider also calling event.preventDefault().')");
             break;
           } else
             typeof prevValue === "function" && (key === "formAction" ? (tag !== "input" && setProp(domElement, tag, "name", props.name, props, null), setProp(domElement, tag, "formEncType", props.formEncType, props, null), setProp(domElement, tag, "formMethod", props.formMethod, props, null), setProp(domElement, tag, "formTarget", props.formTarget, props, null)) : (setProp(domElement, tag, "encType", props.encType, props, null), setProp(domElement, tag, "method", props.method, props, null), setProp(domElement, tag, "target", props.target, props, null)));
-          if (value == null || typeof value === "symbol" || typeof value === "boolean") {
+          if (value2 == null || typeof value2 === "symbol" || typeof value2 === "boolean") {
             domElement.removeAttribute(key);
             break;
           }
-          checkAttributeStringCoercion(value, key);
-          value = sanitizeURL("" + value);
-          domElement.setAttribute(key, value);
+          checkAttributeStringCoercion(value2, key);
+          value2 = sanitizeURL("" + value2);
+          domElement.setAttribute(key, value2);
           break;
         case "onClick":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), domElement.onclick = noop$1);
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), domElement.onclick = noop$1);
           break;
         case "onScroll":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), listenToNonDelegatedEvent("scroll", domElement));
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), listenToNonDelegatedEvent("scroll", domElement));
           break;
         case "onScrollEnd":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), listenToNonDelegatedEvent("scrollend", domElement));
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), listenToNonDelegatedEvent("scrollend", domElement));
           break;
         case "dangerouslySetInnerHTML":
-          if (value != null) {
-            if (typeof value !== "object" || !("__html" in value))
+          if (value2 != null) {
+            if (typeof value2 !== "object" || !("__html" in value2))
               throw Error("`props.dangerouslySetInnerHTML` must be in the form `{__html: ...}`. Please visit https://react.dev/link/dangerously-set-inner-html for more information.");
-            key = value.__html;
+            key = value2.__html;
             if (key != null) {
               if (props.children != null)
                 throw Error("Can only set one of `children` or `props.dangerouslySetInnerHTML`.");
@@ -11774,10 +11774,10 @@ This ensures that you're testing the behavior the user would see in the browser.
           }
           break;
         case "multiple":
-          domElement.multiple = value && typeof value !== "function" && typeof value !== "symbol";
+          domElement.multiple = value2 && typeof value2 !== "function" && typeof value2 !== "symbol";
           break;
         case "muted":
-          domElement.muted = value && typeof value !== "function" && typeof value !== "symbol";
+          domElement.muted = value2 && typeof value2 !== "function" && typeof value2 !== "symbol";
           break;
         case "suppressContentEditableWarning":
         case "suppressHydrationWarning":
@@ -11789,12 +11789,12 @@ This ensures that you're testing the behavior the user would see in the browser.
         case "autoFocus":
           break;
         case "xlinkHref":
-          if (value == null || typeof value === "function" || typeof value === "boolean" || typeof value === "symbol") {
+          if (value2 == null || typeof value2 === "function" || typeof value2 === "boolean" || typeof value2 === "symbol") {
             domElement.removeAttribute("xlink:href");
             break;
           }
-          checkAttributeStringCoercion(value, key);
-          key = sanitizeURL("" + value);
+          checkAttributeStringCoercion(value2, key);
+          key = sanitizeURL("" + value2);
           domElement.setAttributeNS(xlinkNamespace, "xlink:href", key);
           break;
         case "contentEditable":
@@ -11805,10 +11805,10 @@ This ensures that you're testing the behavior the user would see in the browser.
         case "externalResourcesRequired":
         case "focusable":
         case "preserveAlpha":
-          value != null && typeof value !== "function" && typeof value !== "symbol" ? (checkAttributeStringCoercion(value, key), domElement.setAttribute(key, "" + value)) : domElement.removeAttribute(key);
+          value2 != null && typeof value2 !== "function" && typeof value2 !== "symbol" ? (checkAttributeStringCoercion(value2, key), domElement.setAttribute(key, "" + value2)) : domElement.removeAttribute(key);
           break;
         case "inert":
-          value !== "" || didWarnForNewBooleanPropsWithEmptyValue[key] || (didWarnForNewBooleanPropsWithEmptyValue[key] = true, console.error("Received an empty string for a boolean attribute `%s`. This will treat the attribute as if it were false. Either pass `false` to silence this warning, or pass `true` if you used an empty string in earlier versions of React to indicate this attribute is true.", key));
+          value2 !== "" || didWarnForNewBooleanPropsWithEmptyValue[key] || (didWarnForNewBooleanPropsWithEmptyValue[key] = true, console.error("Received an empty string for a boolean attribute `%s`. This will treat the attribute as if it were false. Either pass `false` to silence this warning, or pass `true` if you used an empty string in earlier versions of React to indicate this attribute is true.", key));
         case "allowFullScreen":
         case "async":
         case "autoPlay":
@@ -11831,77 +11831,77 @@ This ensures that you're testing the behavior the user would see in the browser.
         case "scoped":
         case "seamless":
         case "itemScope":
-          value && typeof value !== "function" && typeof value !== "symbol" ? domElement.setAttribute(key, "") : domElement.removeAttribute(key);
+          value2 && typeof value2 !== "function" && typeof value2 !== "symbol" ? domElement.setAttribute(key, "") : domElement.removeAttribute(key);
           break;
         case "capture":
         case "download":
-          value === true ? domElement.setAttribute(key, "") : value !== false && value != null && typeof value !== "function" && typeof value !== "symbol" ? (checkAttributeStringCoercion(value, key), domElement.setAttribute(key, value)) : domElement.removeAttribute(key);
+          value2 === true ? domElement.setAttribute(key, "") : value2 !== false && value2 != null && typeof value2 !== "function" && typeof value2 !== "symbol" ? (checkAttributeStringCoercion(value2, key), domElement.setAttribute(key, value2)) : domElement.removeAttribute(key);
           break;
         case "cols":
         case "rows":
         case "size":
         case "span":
-          value != null && typeof value !== "function" && typeof value !== "symbol" && !isNaN(value) && 1 <= value ? (checkAttributeStringCoercion(value, key), domElement.setAttribute(key, value)) : domElement.removeAttribute(key);
+          value2 != null && typeof value2 !== "function" && typeof value2 !== "symbol" && !isNaN(value2) && 1 <= value2 ? (checkAttributeStringCoercion(value2, key), domElement.setAttribute(key, value2)) : domElement.removeAttribute(key);
           break;
         case "rowSpan":
         case "start":
-          value == null || typeof value === "function" || typeof value === "symbol" || isNaN(value) ? domElement.removeAttribute(key) : (checkAttributeStringCoercion(value, key), domElement.setAttribute(key, value));
+          value2 == null || typeof value2 === "function" || typeof value2 === "symbol" || isNaN(value2) ? domElement.removeAttribute(key) : (checkAttributeStringCoercion(value2, key), domElement.setAttribute(key, value2));
           break;
         case "popover":
           listenToNonDelegatedEvent("beforetoggle", domElement);
           listenToNonDelegatedEvent("toggle", domElement);
-          setValueForAttribute(domElement, "popover", value);
+          setValueForAttribute(domElement, "popover", value2);
           break;
         case "xlinkActuate":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:actuate", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:actuate", value2);
           break;
         case "xlinkArcrole":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:arcrole", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:arcrole", value2);
           break;
         case "xlinkRole":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:role", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:role", value2);
           break;
         case "xlinkShow":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:show", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:show", value2);
           break;
         case "xlinkTitle":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:title", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:title", value2);
           break;
         case "xlinkType":
-          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:type", value);
+          setValueForNamespacedAttribute(domElement, xlinkNamespace, "xlink:type", value2);
           break;
         case "xmlBase":
-          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:base", value);
+          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:base", value2);
           break;
         case "xmlLang":
-          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:lang", value);
+          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:lang", value2);
           break;
         case "xmlSpace":
-          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:space", value);
+          setValueForNamespacedAttribute(domElement, xmlNamespace, "xml:space", value2);
           break;
         case "is":
           prevValue != null && console.error('Cannot update the "is" prop after it has been initialized.');
-          setValueForAttribute(domElement, "is", value);
+          setValueForAttribute(domElement, "is", value2);
           break;
         case "innerText":
         case "textContent":
           break;
         case "popoverTarget":
-          didWarnPopoverTargetObject || value == null || typeof value !== "object" || (didWarnPopoverTargetObject = true, console.error("The `popoverTarget` prop expects the ID of an Element as a string. Received %s instead.", value));
+          didWarnPopoverTargetObject || value2 == null || typeof value2 !== "object" || (didWarnPopoverTargetObject = true, console.error("The `popoverTarget` prop expects the ID of an Element as a string. Received %s instead.", value2));
         default:
-          !(2 < key.length) || key[0] !== "o" && key[0] !== "O" || key[1] !== "n" && key[1] !== "N" ? (key = getAttributeAlias(key), setValueForAttribute(domElement, key, value)) : registrationNameDependencies.hasOwnProperty(key) && value != null && typeof value !== "function" && warnForInvalidEventListener(key, value);
+          !(2 < key.length) || key[0] !== "o" && key[0] !== "O" || key[1] !== "n" && key[1] !== "N" ? (key = getAttributeAlias(key), setValueForAttribute(domElement, key, value2)) : registrationNameDependencies.hasOwnProperty(key) && value2 != null && typeof value2 !== "function" && warnForInvalidEventListener(key, value2);
       }
     }
-    function setPropOnCustomElement(domElement, tag, key, value, props, prevValue) {
+    function setPropOnCustomElement(domElement, tag, key, value2, props, prevValue) {
       switch (key) {
         case "style":
-          setValueForStyles(domElement, value, prevValue);
+          setValueForStyles(domElement, value2, prevValue);
           break;
         case "dangerouslySetInnerHTML":
-          if (value != null) {
-            if (typeof value !== "object" || !("__html" in value))
+          if (value2 != null) {
+            if (typeof value2 !== "object" || !("__html" in value2))
               throw Error("`props.dangerouslySetInnerHTML` must be in the form `{__html: ...}`. Please visit https://react.dev/link/dangerously-set-inner-html for more information.");
-            key = value.__html;
+            key = value2.__html;
             if (key != null) {
               if (props.children != null)
                 throw Error("Can only set one of `children` or `props.dangerouslySetInnerHTML`.");
@@ -11910,16 +11910,16 @@ This ensures that you're testing the behavior the user would see in the browser.
           }
           break;
         case "children":
-          typeof value === "string" ? setTextContent(domElement, value) : (typeof value === "number" || typeof value === "bigint") && setTextContent(domElement, "" + value);
+          typeof value2 === "string" ? setTextContent(domElement, value2) : (typeof value2 === "number" || typeof value2 === "bigint") && setTextContent(domElement, "" + value2);
           break;
         case "onScroll":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), listenToNonDelegatedEvent("scroll", domElement));
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), listenToNonDelegatedEvent("scroll", domElement));
           break;
         case "onScrollEnd":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), listenToNonDelegatedEvent("scrollend", domElement));
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), listenToNonDelegatedEvent("scrollend", domElement));
           break;
         case "onClick":
-          value != null && (typeof value !== "function" && warnForInvalidEventListener(key, value), domElement.onclick = noop$1);
+          value2 != null && (typeof value2 !== "function" && warnForInvalidEventListener(key, value2), domElement.onclick = noop$1);
           break;
         case "suppressContentEditableWarning":
         case "suppressHydrationWarning":
@@ -11931,15 +11931,15 @@ This ensures that you're testing the behavior the user would see in the browser.
           break;
         default:
           if (registrationNameDependencies.hasOwnProperty(key))
-            value != null && typeof value !== "function" && warnForInvalidEventListener(key, value);
+            value2 != null && typeof value2 !== "function" && warnForInvalidEventListener(key, value2);
           else
             a: {
-              if (key[0] === "o" && key[1] === "n" && (props = key.endsWith("Capture"), tag = key.slice(2, props ? key.length - 7 : undefined), prevValue = domElement[internalPropsKey] || null, prevValue = prevValue != null ? prevValue[key] : null, typeof prevValue === "function" && domElement.removeEventListener(tag, prevValue, props), typeof value === "function")) {
+              if (key[0] === "o" && key[1] === "n" && (props = key.endsWith("Capture"), tag = key.slice(2, props ? key.length - 7 : undefined), prevValue = domElement[internalPropsKey] || null, prevValue = prevValue != null ? prevValue[key] : null, typeof prevValue === "function" && domElement.removeEventListener(tag, prevValue, props), typeof value2 === "function")) {
                 typeof prevValue !== "function" && prevValue !== null && (key in domElement ? domElement[key] = null : domElement.hasAttribute(key) && domElement.removeAttribute(key));
-                domElement.addEventListener(tag, value, props);
+                domElement.addEventListener(tag, value2, props);
                 break a;
               }
-              key in domElement ? domElement[key] = value : value === true ? domElement.setAttribute(key, "") : setValueForAttribute(domElement, key, value);
+              key in domElement ? domElement[key] = value2 : value2 === true ? domElement.setAttribute(key, "") : setValueForAttribute(domElement, key, value2);
             }
       }
     }
@@ -12151,7 +12151,7 @@ This ensures that you're testing the behavior the user would see in the browser.
         case "li":
           break;
         case "input":
-          var name = null, type = null, value = null, defaultValue = null, lastDefaultValue = null, checked = null, defaultChecked = null;
+          var name = null, type = null, value2 = null, defaultValue = null, lastDefaultValue = null, checked = null, defaultChecked = null;
           for (propKey in lastProps) {
             var lastProp = lastProps[propKey];
             if (lastProps.hasOwnProperty(propKey) && lastProp != null)
@@ -12184,7 +12184,7 @@ This ensures that you're testing the behavior the user would see in the browser.
                   defaultChecked = propKey;
                   break;
                 case "value":
-                  value = propKey;
+                  value2 = propKey;
                   break;
                 case "defaultValue":
                   defaultValue = propKey;
@@ -12202,10 +12202,10 @@ This ensures that you're testing the behavior the user would see in the browser.
           nextProps = nextProps.type === "checkbox" || nextProps.type === "radio" ? nextProps.checked != null : nextProps.value != null;
           tag || !nextProps || didWarnUncontrolledToControlled || (console.error("A component is changing an uncontrolled input to be controlled. This is likely caused by the value changing from undefined to a defined value, which should not happen. Decide between using a controlled or uncontrolled input element for the lifetime of the component. More info: https://react.dev/link/controlled-components"), didWarnUncontrolledToControlled = true);
           !tag || nextProps || didWarnControlledToUncontrolled || (console.error("A component is changing a controlled input to be uncontrolled. This is likely caused by the value changing from a defined to undefined, which should not happen. Decide between using a controlled or uncontrolled input element for the lifetime of the component. More info: https://react.dev/link/controlled-components"), didWarnControlledToUncontrolled = true);
-          updateInput(domElement, value, defaultValue, lastDefaultValue, checked, defaultChecked, type, name);
+          updateInput(domElement, value2, defaultValue, lastDefaultValue, checked, defaultChecked, type, name);
           return;
         case "select":
-          propKey = value = defaultValue = _propKey8 = null;
+          propKey = value2 = defaultValue = _propKey8 = null;
           for (type in lastProps)
             if (lastDefaultValue = lastProps[type], lastProps.hasOwnProperty(type) && lastDefaultValue != null)
               switch (type) {
@@ -12226,12 +12226,12 @@ This ensures that you're testing the behavior the user would see in the browser.
                   defaultValue = type;
                   break;
                 case "multiple":
-                  value = type;
+                  value2 = type;
                 default:
                   type !== lastDefaultValue && setProp(domElement, tag, name, type, nextProps, lastDefaultValue);
               }
           nextProps = defaultValue;
-          tag = value;
+          tag = value2;
           lastProps = propKey;
           _propKey8 != null ? updateOptions(domElement, !!tag, _propKey8, false) : !!lastProps !== !!tag && (nextProps != null ? updateOptions(domElement, !!tag, nextProps, true) : updateOptions(domElement, !!tag, tag ? [] : "", false));
           return;
@@ -12247,9 +12247,9 @@ This ensures that you're testing the behavior the user would see in the browser.
                 default:
                   setProp(domElement, tag, defaultValue, null, nextProps, name);
               }
-          for (value in nextProps)
-            if (name = nextProps[value], type = lastProps[value], nextProps.hasOwnProperty(value) && (name != null || type != null))
-              switch (value) {
+          for (value2 in nextProps)
+            if (name = nextProps[value2], type = lastProps[value2], nextProps.hasOwnProperty(value2) && (name != null || type != null))
+              switch (value2) {
                 case "value":
                   _propKey8 = name;
                   break;
@@ -12263,7 +12263,7 @@ This ensures that you're testing the behavior the user would see in the browser.
                     throw Error("`dangerouslySetInnerHTML` does not make sense on <textarea>.");
                   break;
                 default:
-                  name !== type && setProp(domElement, tag, value, name, nextProps, type);
+                  name !== type && setProp(domElement, tag, value2, name, nextProps, type);
               }
           updateTextarea(domElement, _propKey8, propKey);
           return;
@@ -12357,128 +12357,128 @@ This ensures that you're testing the behavior the user would see in the browser.
         var delimiter = clientValue = "", styleName;
         for (styleName in value$jscomp$0)
           if (value$jscomp$0.hasOwnProperty(styleName)) {
-            var value = value$jscomp$0[styleName];
-            value != null && typeof value !== "boolean" && value !== "" && (styleName.indexOf("--") === 0 ? (checkCSSPropertyStringCoercion(value, styleName), clientValue += delimiter + styleName + ":" + ("" + value).trim()) : typeof value !== "number" || value === 0 || unitlessNumbers.has(styleName) ? (checkCSSPropertyStringCoercion(value, styleName), clientValue += delimiter + styleName.replace(uppercasePattern, "-$1").toLowerCase().replace(msPattern$1, "-ms-") + ":" + ("" + value).trim()) : clientValue += delimiter + styleName.replace(uppercasePattern, "-$1").toLowerCase().replace(msPattern$1, "-ms-") + ":" + value + "px", delimiter = ";");
+            var value2 = value$jscomp$0[styleName];
+            value2 != null && typeof value2 !== "boolean" && value2 !== "" && (styleName.indexOf("--") === 0 ? (checkCSSPropertyStringCoercion(value2, styleName), clientValue += delimiter + styleName + ":" + ("" + value2).trim()) : typeof value2 !== "number" || value2 === 0 || unitlessNumbers.has(styleName) ? (checkCSSPropertyStringCoercion(value2, styleName), clientValue += delimiter + styleName.replace(uppercasePattern, "-$1").toLowerCase().replace(msPattern$1, "-ms-") + ":" + ("" + value2).trim()) : clientValue += delimiter + styleName.replace(uppercasePattern, "-$1").toLowerCase().replace(msPattern$1, "-ms-") + ":" + value2 + "px", delimiter = ";");
           }
         clientValue = clientValue || null;
         value$jscomp$0 = domElement.getAttribute("style");
         value$jscomp$0 !== clientValue && (clientValue = normalizeMarkupForTextOrAttribute(clientValue), normalizeMarkupForTextOrAttribute(value$jscomp$0) !== clientValue && (serverDifferences.style = getStylesObjectFromElement(domElement)));
       }
     }
-    function hydrateAttribute(domElement, propKey, attributeName, value, extraAttributes, serverDifferences) {
+    function hydrateAttribute(domElement, propKey, attributeName, value2, extraAttributes, serverDifferences) {
       extraAttributes.delete(attributeName);
       domElement = domElement.getAttribute(attributeName);
       if (domElement === null)
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
           case "boolean":
             return;
         }
-      else if (value != null)
-        switch (typeof value) {
+      else if (value2 != null)
+        switch (typeof value2) {
           case "function":
           case "symbol":
           case "boolean":
             break;
           default:
-            if (checkAttributeStringCoercion(value, propKey), domElement === "" + value)
+            if (checkAttributeStringCoercion(value2, propKey), domElement === "" + value2)
               return;
         }
-      warnForPropDifference(propKey, domElement, value, serverDifferences);
+      warnForPropDifference(propKey, domElement, value2, serverDifferences);
     }
-    function hydrateBooleanAttribute(domElement, propKey, attributeName, value, extraAttributes, serverDifferences) {
+    function hydrateBooleanAttribute(domElement, propKey, attributeName, value2, extraAttributes, serverDifferences) {
       extraAttributes.delete(attributeName);
       domElement = domElement.getAttribute(attributeName);
       if (domElement === null) {
-        switch (typeof value) {
+        switch (typeof value2) {
           case "function":
           case "symbol":
             return;
         }
-        if (!value)
+        if (!value2)
           return;
       } else
-        switch (typeof value) {
+        switch (typeof value2) {
           case "function":
           case "symbol":
             break;
           default:
-            if (value)
+            if (value2)
               return;
         }
-      warnForPropDifference(propKey, domElement, value, serverDifferences);
+      warnForPropDifference(propKey, domElement, value2, serverDifferences);
     }
-    function hydrateBooleanishAttribute(domElement, propKey, attributeName, value, extraAttributes, serverDifferences) {
+    function hydrateBooleanishAttribute(domElement, propKey, attributeName, value2, extraAttributes, serverDifferences) {
       extraAttributes.delete(attributeName);
       domElement = domElement.getAttribute(attributeName);
       if (domElement === null)
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
             return;
         }
-      else if (value != null)
-        switch (typeof value) {
+      else if (value2 != null)
+        switch (typeof value2) {
           case "function":
           case "symbol":
             break;
           default:
-            if (checkAttributeStringCoercion(value, attributeName), domElement === "" + value)
+            if (checkAttributeStringCoercion(value2, attributeName), domElement === "" + value2)
               return;
         }
-      warnForPropDifference(propKey, domElement, value, serverDifferences);
+      warnForPropDifference(propKey, domElement, value2, serverDifferences);
     }
-    function hydrateNumericAttribute(domElement, propKey, attributeName, value, extraAttributes, serverDifferences) {
+    function hydrateNumericAttribute(domElement, propKey, attributeName, value2, extraAttributes, serverDifferences) {
       extraAttributes.delete(attributeName);
       domElement = domElement.getAttribute(attributeName);
       if (domElement === null)
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
           case "boolean":
             return;
           default:
-            if (isNaN(value))
+            if (isNaN(value2))
               return;
         }
-      else if (value != null)
-        switch (typeof value) {
+      else if (value2 != null)
+        switch (typeof value2) {
           case "function":
           case "symbol":
           case "boolean":
             break;
           default:
-            if (!isNaN(value) && (checkAttributeStringCoercion(value, propKey), domElement === "" + value))
+            if (!isNaN(value2) && (checkAttributeStringCoercion(value2, propKey), domElement === "" + value2))
               return;
         }
-      warnForPropDifference(propKey, domElement, value, serverDifferences);
+      warnForPropDifference(propKey, domElement, value2, serverDifferences);
     }
-    function hydrateSanitizedAttribute(domElement, propKey, attributeName, value, extraAttributes, serverDifferences) {
+    function hydrateSanitizedAttribute(domElement, propKey, attributeName, value2, extraAttributes, serverDifferences) {
       extraAttributes.delete(attributeName);
       domElement = domElement.getAttribute(attributeName);
       if (domElement === null)
-        switch (typeof value) {
+        switch (typeof value2) {
           case "undefined":
           case "function":
           case "symbol":
           case "boolean":
             return;
         }
-      else if (value != null)
-        switch (typeof value) {
+      else if (value2 != null)
+        switch (typeof value2) {
           case "function":
           case "symbol":
           case "boolean":
             break;
           default:
-            if (checkAttributeStringCoercion(value, propKey), attributeName = sanitizeURL("" + value), domElement === attributeName)
+            if (checkAttributeStringCoercion(value2, propKey), attributeName = sanitizeURL("" + value2), domElement === attributeName)
               return;
         }
-      warnForPropDifference(propKey, domElement, value, serverDifferences);
+      warnForPropDifference(propKey, domElement, value2, serverDifferences);
     }
     function diffHydratedProperties(domElement, tag, props, hostContext) {
       for (var serverDifferences = {}, extraAttributes = new Set, attributes = domElement.attributes, i = 0;i < attributes.length; i++)
@@ -12495,14 +12495,14 @@ This ensures that you're testing the behavior the user would see in the browser.
       if (isCustomElement(tag))
         for (var propKey in props) {
           if (props.hasOwnProperty(propKey)) {
-            var value = props[propKey];
-            if (value != null) {
+            var value2 = props[propKey];
+            if (value2 != null) {
               if (registrationNameDependencies.hasOwnProperty(propKey))
-                typeof value !== "function" && warnForInvalidEventListener(propKey, value);
+                typeof value2 !== "function" && warnForInvalidEventListener(propKey, value2);
               else if (props.suppressHydrationWarning !== true)
                 switch (propKey) {
                   case "children":
-                    typeof value !== "string" && typeof value !== "number" || warnForPropDifference("children", domElement.textContent, value, serverDifferences);
+                    typeof value2 !== "string" && typeof value2 !== "number" || warnForPropDifference("children", domElement.textContent, value2, serverDifferences);
                     continue;
                   case "suppressContentEditableWarning":
                   case "suppressHydrationWarning":
@@ -12513,12 +12513,12 @@ This ensures that you're testing the behavior the user would see in the browser.
                     continue;
                   case "dangerouslySetInnerHTML":
                     attributes = domElement.innerHTML;
-                    value = value ? value.__html : undefined;
-                    value != null && (value = normalizeHTML(domElement, value), warnForPropDifference(propKey, attributes, value, serverDifferences));
+                    value2 = value2 ? value2.__html : undefined;
+                    value2 != null && (value2 = normalizeHTML(domElement, value2), warnForPropDifference(propKey, attributes, value2, serverDifferences));
                     continue;
                   case "style":
                     extraAttributes.delete(propKey);
-                    diffHydratedStyles(domElement, value, serverDifferences);
+                    diffHydratedStyles(domElement, value2, serverDifferences);
                     continue;
                   case "offsetParent":
                   case "offsetTop":
@@ -12533,22 +12533,22 @@ This ensures that you're testing the behavior the user would see in the browser.
                     continue;
                   case "className":
                     extraAttributes.delete("class");
-                    attributes = getValueForAttributeOnCustomComponent(domElement, "class", value);
-                    warnForPropDifference("className", attributes, value, serverDifferences);
+                    attributes = getValueForAttributeOnCustomComponent(domElement, "class", value2);
+                    warnForPropDifference("className", attributes, value2, serverDifferences);
                     continue;
                   default:
-                    hostContext.context === HostContextNamespaceNone && tag !== "svg" && tag !== "math" ? extraAttributes.delete(propKey.toLowerCase()) : extraAttributes.delete(propKey), attributes = getValueForAttributeOnCustomComponent(domElement, propKey, value), warnForPropDifference(propKey, attributes, value, serverDifferences);
+                    hostContext.context === HostContextNamespaceNone && tag !== "svg" && tag !== "math" ? extraAttributes.delete(propKey.toLowerCase()) : extraAttributes.delete(propKey), attributes = getValueForAttributeOnCustomComponent(domElement, propKey, value2), warnForPropDifference(propKey, attributes, value2, serverDifferences);
                 }
             }
           }
         }
       else
-        for (value in props)
-          if (props.hasOwnProperty(value) && (propKey = props[value], propKey != null)) {
-            if (registrationNameDependencies.hasOwnProperty(value))
-              typeof propKey !== "function" && warnForInvalidEventListener(value, propKey);
+        for (value2 in props)
+          if (props.hasOwnProperty(value2) && (propKey = props[value2], propKey != null)) {
+            if (registrationNameDependencies.hasOwnProperty(value2))
+              typeof propKey !== "function" && warnForInvalidEventListener(value2, propKey);
             else if (props.suppressHydrationWarning !== true)
-              switch (value) {
+              switch (value2) {
                 case "children":
                   typeof propKey !== "string" && typeof propKey !== "number" || warnForPropDifference("children", domElement.textContent, propKey, serverDifferences);
                   continue;
@@ -12565,74 +12565,74 @@ This ensures that you're testing the behavior the user would see in the browser.
                 case "dangerouslySetInnerHTML":
                   attributes = domElement.innerHTML;
                   propKey = propKey ? propKey.__html : undefined;
-                  propKey != null && (propKey = normalizeHTML(domElement, propKey), attributes !== propKey && (serverDifferences[value] = { __html: attributes }));
+                  propKey != null && (propKey = normalizeHTML(domElement, propKey), attributes !== propKey && (serverDifferences[value2] = { __html: attributes }));
                   continue;
                 case "className":
-                  hydrateAttribute(domElement, value, "class", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "class", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "tabIndex":
-                  hydrateAttribute(domElement, value, "tabindex", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "tabindex", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "style":
-                  extraAttributes.delete(value);
+                  extraAttributes.delete(value2);
                   diffHydratedStyles(domElement, propKey, serverDifferences);
                   continue;
                 case "multiple":
-                  extraAttributes.delete(value);
-                  warnForPropDifference(value, domElement.multiple, propKey, serverDifferences);
+                  extraAttributes.delete(value2);
+                  warnForPropDifference(value2, domElement.multiple, propKey, serverDifferences);
                   continue;
                 case "muted":
-                  extraAttributes.delete(value);
-                  warnForPropDifference(value, domElement.muted, propKey, serverDifferences);
+                  extraAttributes.delete(value2);
+                  warnForPropDifference(value2, domElement.muted, propKey, serverDifferences);
                   continue;
                 case "autoFocus":
                   extraAttributes.delete("autofocus");
-                  warnForPropDifference(value, domElement.autofocus, propKey, serverDifferences);
+                  warnForPropDifference(value2, domElement.autofocus, propKey, serverDifferences);
                   continue;
                 case "data":
                   if (tag !== "object") {
-                    extraAttributes.delete(value);
+                    extraAttributes.delete(value2);
                     attributes = domElement.getAttribute("data");
-                    warnForPropDifference(value, attributes, propKey, serverDifferences);
+                    warnForPropDifference(value2, attributes, propKey, serverDifferences);
                     continue;
                   }
                 case "src":
                 case "href":
-                  if (!(propKey !== "" || tag === "a" && value === "href" || tag === "object" && value === "data")) {
-                    value === "src" ? console.error('An empty string ("") was passed to the %s attribute. This may cause the browser to download the whole page again over the network. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', value, value) : console.error('An empty string ("") was passed to the %s attribute. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', value, value);
+                  if (!(propKey !== "" || tag === "a" && value2 === "href" || tag === "object" && value2 === "data")) {
+                    value2 === "src" ? console.error('An empty string ("") was passed to the %s attribute. This may cause the browser to download the whole page again over the network. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', value2, value2) : console.error('An empty string ("") was passed to the %s attribute. To fix this, either do not render the element at all or pass null to %s instead of an empty string.', value2, value2);
                     continue;
                   }
-                  hydrateSanitizedAttribute(domElement, value, value, propKey, extraAttributes, serverDifferences);
+                  hydrateSanitizedAttribute(domElement, value2, value2, propKey, extraAttributes, serverDifferences);
                   continue;
                 case "action":
                 case "formAction":
-                  attributes = domElement.getAttribute(value);
+                  attributes = domElement.getAttribute(value2);
                   if (typeof propKey === "function") {
-                    extraAttributes.delete(value.toLowerCase());
-                    value === "formAction" ? (extraAttributes.delete("name"), extraAttributes.delete("formenctype"), extraAttributes.delete("formmethod"), extraAttributes.delete("formtarget")) : (extraAttributes.delete("enctype"), extraAttributes.delete("method"), extraAttributes.delete("target"));
+                    extraAttributes.delete(value2.toLowerCase());
+                    value2 === "formAction" ? (extraAttributes.delete("name"), extraAttributes.delete("formenctype"), extraAttributes.delete("formmethod"), extraAttributes.delete("formtarget")) : (extraAttributes.delete("enctype"), extraAttributes.delete("method"), extraAttributes.delete("target"));
                     continue;
                   } else if (attributes === EXPECTED_FORM_ACTION_URL) {
-                    extraAttributes.delete(value.toLowerCase());
-                    warnForPropDifference(value, "function", propKey, serverDifferences);
+                    extraAttributes.delete(value2.toLowerCase());
+                    warnForPropDifference(value2, "function", propKey, serverDifferences);
                     continue;
                   }
-                  hydrateSanitizedAttribute(domElement, value, value.toLowerCase(), propKey, extraAttributes, serverDifferences);
+                  hydrateSanitizedAttribute(domElement, value2, value2.toLowerCase(), propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkHref":
-                  hydrateSanitizedAttribute(domElement, value, "xlink:href", propKey, extraAttributes, serverDifferences);
+                  hydrateSanitizedAttribute(domElement, value2, "xlink:href", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "contentEditable":
-                  hydrateBooleanishAttribute(domElement, value, "contenteditable", propKey, extraAttributes, serverDifferences);
+                  hydrateBooleanishAttribute(domElement, value2, "contenteditable", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "spellCheck":
-                  hydrateBooleanishAttribute(domElement, value, "spellcheck", propKey, extraAttributes, serverDifferences);
+                  hydrateBooleanishAttribute(domElement, value2, "spellcheck", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "draggable":
                 case "autoReverse":
                 case "externalResourcesRequired":
                 case "focusable":
                 case "preserveAlpha":
-                  hydrateBooleanishAttribute(domElement, value, value, propKey, extraAttributes, serverDifferences);
+                  hydrateBooleanishAttribute(domElement, value2, value2, propKey, extraAttributes, serverDifferences);
                   continue;
                 case "allowFullScreen":
                 case "async":
@@ -12656,13 +12656,13 @@ This ensures that you're testing the behavior the user would see in the browser.
                 case "scoped":
                 case "seamless":
                 case "itemScope":
-                  hydrateBooleanAttribute(domElement, value, value.toLowerCase(), propKey, extraAttributes, serverDifferences);
+                  hydrateBooleanAttribute(domElement, value2, value2.toLowerCase(), propKey, extraAttributes, serverDifferences);
                   continue;
                 case "capture":
                 case "download":
                   a: {
                     i = domElement;
-                    var attributeName = attributes = value, serverDifferences$jscomp$0 = serverDifferences;
+                    var attributeName = attributes = value2, serverDifferences$jscomp$0 = serverDifferences;
                     extraAttributes.delete(attributeName);
                     i = i.getAttribute(attributeName);
                     if (i === null)
@@ -12697,7 +12697,7 @@ This ensures that you're testing the behavior the user would see in the browser.
                 case "span":
                   a: {
                     i = domElement;
-                    attributeName = attributes = value;
+                    attributeName = attributes = value2;
                     serverDifferences$jscomp$0 = serverDifferences;
                     extraAttributes.delete(attributeName);
                     i = i.getAttribute(attributeName);
@@ -12726,50 +12726,50 @@ This ensures that you're testing the behavior the user would see in the browser.
                   }
                   continue;
                 case "rowSpan":
-                  hydrateNumericAttribute(domElement, value, "rowspan", propKey, extraAttributes, serverDifferences);
+                  hydrateNumericAttribute(domElement, value2, "rowspan", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "start":
-                  hydrateNumericAttribute(domElement, value, value, propKey, extraAttributes, serverDifferences);
+                  hydrateNumericAttribute(domElement, value2, value2, propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xHeight":
-                  hydrateAttribute(domElement, value, "x-height", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "x-height", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkActuate":
-                  hydrateAttribute(domElement, value, "xlink:actuate", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:actuate", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkArcrole":
-                  hydrateAttribute(domElement, value, "xlink:arcrole", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:arcrole", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkRole":
-                  hydrateAttribute(domElement, value, "xlink:role", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:role", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkShow":
-                  hydrateAttribute(domElement, value, "xlink:show", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:show", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkTitle":
-                  hydrateAttribute(domElement, value, "xlink:title", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:title", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xlinkType":
-                  hydrateAttribute(domElement, value, "xlink:type", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xlink:type", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xmlBase":
-                  hydrateAttribute(domElement, value, "xml:base", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xml:base", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xmlLang":
-                  hydrateAttribute(domElement, value, "xml:lang", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xml:lang", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "xmlSpace":
-                  hydrateAttribute(domElement, value, "xml:space", propKey, extraAttributes, serverDifferences);
+                  hydrateAttribute(domElement, value2, "xml:space", propKey, extraAttributes, serverDifferences);
                   continue;
                 case "inert":
-                  propKey !== "" || didWarnForNewBooleanPropsWithEmptyValue[value] || (didWarnForNewBooleanPropsWithEmptyValue[value] = true, console.error("Received an empty string for a boolean attribute `%s`. This will treat the attribute as if it were false. Either pass `false` to silence this warning, or pass `true` if you used an empty string in earlier versions of React to indicate this attribute is true.", value));
-                  hydrateBooleanAttribute(domElement, value, value, propKey, extraAttributes, serverDifferences);
+                  propKey !== "" || didWarnForNewBooleanPropsWithEmptyValue[value2] || (didWarnForNewBooleanPropsWithEmptyValue[value2] = true, console.error("Received an empty string for a boolean attribute `%s`. This will treat the attribute as if it were false. Either pass `false` to silence this warning, or pass `true` if you used an empty string in earlier versions of React to indicate this attribute is true.", value2));
+                  hydrateBooleanAttribute(domElement, value2, value2, propKey, extraAttributes, serverDifferences);
                   continue;
                 default:
-                  if (!(2 < value.length) || value[0] !== "o" && value[0] !== "O" || value[1] !== "n" && value[1] !== "N") {
-                    i = getAttributeAlias(value);
+                  if (!(2 < value2.length) || value2[0] !== "o" && value2[0] !== "O" || value2[1] !== "n" && value2[1] !== "N") {
+                    i = getAttributeAlias(value2);
                     attributes = false;
-                    hostContext.context === HostContextNamespaceNone && tag !== "svg" && tag !== "math" ? extraAttributes.delete(i.toLowerCase()) : (attributeName = value.toLowerCase(), attributeName = possibleStandardNames.hasOwnProperty(attributeName) ? possibleStandardNames[attributeName] || null : null, attributeName !== null && attributeName !== value && (attributes = true, extraAttributes.delete(attributeName)), extraAttributes.delete(i));
+                    hostContext.context === HostContextNamespaceNone && tag !== "svg" && tag !== "math" ? extraAttributes.delete(i.toLowerCase()) : (attributeName = value2.toLowerCase(), attributeName = possibleStandardNames.hasOwnProperty(attributeName) ? possibleStandardNames[attributeName] || null : null, attributeName !== null && attributeName !== value2 && (attributes = true, extraAttributes.delete(attributeName)), extraAttributes.delete(i));
                     a:
                       if (attributeName = domElement, serverDifferences$jscomp$0 = i, i = propKey, isAttributeNameSafe(serverDifferences$jscomp$0))
                         if (attributeName.hasAttribute(serverDifferences$jscomp$0))
@@ -12787,7 +12787,7 @@ This ensures that you're testing the behavior the user would see in the browser.
                         }
                       else
                         i = undefined;
-                    attributes || warnForPropDifference(value, i, propKey, serverDifferences);
+                    attributes || warnForPropDifference(value2, i, propKey, serverDifferences);
                   }
               }
           }
@@ -15540,10 +15540,10 @@ Check the top-level render call using <` + componentName2 + ">.");
         currentHookNameInDev = "useDebugValue";
         mountHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         mountHookTypesDev();
-        return mountDeferredValue(value, initialValue);
+        return mountDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -15666,10 +15666,10 @@ Check the top-level render call using <` + componentName2 + ">.");
         currentHookNameInDev = "useDebugValue";
         updateHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         updateHookTypesDev();
-        return mountDeferredValue(value, initialValue);
+        return mountDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -15792,10 +15792,10 @@ Check the top-level render call using <` + componentName2 + ">.");
         currentHookNameInDev = "useDebugValue";
         updateHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         updateHookTypesDev();
-        return updateDeferredValue(value, initialValue);
+        return updateDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -15918,10 +15918,10 @@ Check the top-level render call using <` + componentName2 + ">.");
         currentHookNameInDev = "useDebugValue";
         updateHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         updateHookTypesDev();
-        return rerenderDeferredValue(value, initialValue);
+        return rerenderDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -16059,11 +16059,11 @@ Check the top-level render call using <` + componentName2 + ">.");
         warnInvalidHookAccess();
         mountHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         warnInvalidHookAccess();
         mountHookTypesDev();
-        return mountDeferredValue(value, initialValue);
+        return mountDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -16210,11 +16210,11 @@ Check the top-level render call using <` + componentName2 + ">.");
         warnInvalidHookAccess();
         updateHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         warnInvalidHookAccess();
         updateHookTypesDev();
-        return updateDeferredValue(value, initialValue);
+        return updateDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -16361,11 +16361,11 @@ Check the top-level render call using <` + componentName2 + ">.");
         warnInvalidHookAccess();
         updateHookTypesDev();
       },
-      useDeferredValue: function(value, initialValue) {
+      useDeferredValue: function(value2, initialValue) {
         currentHookNameInDev = "useDeferredValue";
         warnInvalidHookAccess();
         updateHookTypesDev();
-        return rerenderDeferredValue(value, initialValue);
+        return rerenderDeferredValue(value2, initialValue);
       },
       useTransition: function() {
         currentHookNameInDev = "useTransition";
@@ -16685,9 +16685,9 @@ Check the top-level render call using <` + componentName2 + ">.");
     }, badgeFormat = "%c%s%c", badgeStyle = "background: #e6e6e6;background: light-dark(rgba(0,0,0,0.1), rgba(255,255,255,0.25));color: #000000;color: light-dark(#000000, #ffffff);border-radius: 2px", resetStyle = "", pad = " ", bind = Function.prototype.bind;
     var didWarnAboutNestedUpdates = false;
     var overrideHookState = null, overrideHookStateDeletePath = null, overrideHookStateRenamePath = null, overrideProps = null, overridePropsDeletePath = null, overridePropsRenamePath = null, scheduleUpdate = null, scheduleRetry = null, setErrorHandler = null, setSuspenseHandler = null;
-    overrideHookState = function(fiber, id, path, value) {
+    overrideHookState = function(fiber, id, path, value2) {
       id = findHook(fiber, id);
-      id !== null && (path = copyWithSetImpl(id.memoizedState, path, 0, value), id.memoizedState = path, id.baseState = path, fiber.memoizedProps = assign({}, fiber.memoizedProps), path = enqueueConcurrentRenderForLane(fiber, 2), path !== null && scheduleUpdateOnFiber(path, fiber, 2));
+      id !== null && (path = copyWithSetImpl(id.memoizedState, path, 0, value2), id.memoizedState = path, id.baseState = path, fiber.memoizedProps = assign({}, fiber.memoizedProps), path = enqueueConcurrentRenderForLane(fiber, 2), path !== null && scheduleUpdateOnFiber(path, fiber, 2));
     };
     overrideHookStateDeletePath = function(fiber, id, path) {
       id = findHook(fiber, id);
@@ -16697,8 +16697,8 @@ Check the top-level render call using <` + componentName2 + ">.");
       id = findHook(fiber, id);
       id !== null && (oldPath = copyWithRename(id.memoizedState, oldPath, newPath), id.memoizedState = oldPath, id.baseState = oldPath, fiber.memoizedProps = assign({}, fiber.memoizedProps), oldPath = enqueueConcurrentRenderForLane(fiber, 2), oldPath !== null && scheduleUpdateOnFiber(oldPath, fiber, 2));
     };
-    overrideProps = function(fiber, path, value) {
-      fiber.pendingProps = copyWithSetImpl(fiber.memoizedProps, path, 0, value);
+    overrideProps = function(fiber, path, value2) {
+      fiber.pendingProps = copyWithSetImpl(fiber.memoizedProps, path, 0, value2);
       fiber.alternate && (fiber.alternate.pendingProps = fiber.pendingProps);
       path = enqueueConcurrentRenderForLane(fiber, 2);
       path !== null && scheduleUpdateOnFiber(path, fiber, 2);
@@ -16913,12 +16913,12 @@ var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
         }
       return null;
     }
-    function testStringCoercion(value) {
-      return "" + value;
+    function testStringCoercion(value2) {
+      return "" + value2;
     }
-    function checkKeyStringCoercion(value) {
+    function checkKeyStringCoercion(value2) {
       try {
-        testStringCoercion(value);
+        testStringCoercion(value2);
         var JSCompiler_inline_result = false;
       } catch (e) {
         JSCompiler_inline_result = true;
@@ -16926,9 +16926,9 @@ var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
       if (JSCompiler_inline_result) {
         JSCompiler_inline_result = console;
         var JSCompiler_temp_const = JSCompiler_inline_result.error;
-        var JSCompiler_inline_result$jscomp$0 = typeof Symbol === "function" && Symbol.toStringTag && value[Symbol.toStringTag] || value.constructor.name || "Object";
+        var JSCompiler_inline_result$jscomp$0 = typeof Symbol === "function" && Symbol.toStringTag && value2[Symbol.toStringTag] || value2.constructor.name || "Object";
         JSCompiler_temp_const.call(JSCompiler_inline_result, "The provided key is an unsupported type %s. This value must be coerced to a string before using it here.", JSCompiler_inline_result$jscomp$0);
-        return testStringCoercion(value);
+        return testStringCoercion(value2);
       }
     }
     function getTaskName(type) {
@@ -17088,7 +17088,7 @@ var require_jsx_dev_runtime = __commonJS((exports, module) => {
 });
 
 // src/App.tsx
-var import_react6 = __toESM(require_react(), 1);
+var import_react9 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // src/math.ts
@@ -17269,23 +17269,23 @@ class Matrix4 {
     if (Math.abs(det) < 0.0001)
       return null;
     const invDet = 1 / det;
-    const result = new Matrix4;
+    const result2 = new Matrix4;
     for (let i = 0;i < 16; i++) {
-      result.data[i] = inv[i] * invDet;
+      result2.data[i] = inv[i] * invDet;
     }
-    return result;
+    return result2;
   }
   multiply(other) {
-    const result = new Matrix4;
+    const result2 = new Matrix4;
     const a = this.data;
     const b = other.data;
-    const r = result.data;
+    const r = result2.data;
     for (let row = 0;row < 4; row++) {
       for (let col = 0;col < 4; col++) {
         r[row * 4 + col] = a[row * 4 + 0] * b[0 * 4 + col] + a[row * 4 + 1] * b[1 * 4 + col] + a[row * 4 + 2] * b[2 * 4 + col] + a[row * 4 + 3] * b[3 * 4 + col];
       }
     }
-    return result;
+    return result2;
   }
   transformVector4(v) {
     const d = this.data;
@@ -17805,11 +17805,11 @@ class Mesh {
       return [];
     const triStart = this.getTriangleStartForFace(faceIdx);
     const triCount = this.getTriangleCountForFace(faceIdx);
-    const result = [];
+    const result2 = [];
     for (let i = 0;i < triCount; i++) {
-      result.push(triStart + i);
+      result2.push(triStart + i);
     }
-    return result;
+    return result2;
   }
   getQuadDiagonalEdges() {
     const diagonals = new Set;
@@ -17916,6 +17916,240 @@ function createCircleMesh(radius = 1, segments = 32) {
     const current = i;
     const next = (i + 1) % segments;
     indices.push(current, next, current);
+  }
+  return new Mesh(vertices, indices);
+}
+function createUVSphereMesh(radius = 1, segments = 32, rings = 16) {
+  const color = Color.white();
+  const vertices = [];
+  const indices = [];
+  for (let ring = 0;ring <= rings; ring++) {
+    const phi = ring / rings * Math.PI;
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+    for (let seg = 0;seg <= segments; seg++) {
+      const theta = seg / segments * Math.PI * 2;
+      const sinTheta = Math.sin(theta);
+      const cosTheta = Math.cos(theta);
+      const x = radius * sinPhi * cosTheta;
+      const y = radius * sinPhi * sinTheta;
+      const z = radius * cosPhi;
+      const normal = new Vector3(sinPhi * cosTheta, sinPhi * sinTheta, cosPhi);
+      const u = seg / segments;
+      const v = ring / rings;
+      vertices.push(new Vertex(new Vector3(x, y, z), color, normal, u, v));
+    }
+  }
+  for (let ring = 0;ring < rings; ring++) {
+    for (let seg = 0;seg < segments; seg++) {
+      const current = ring * (segments + 1) + seg;
+      const next = current + segments + 1;
+      indices.push(current, next, current + 1);
+      indices.push(current + 1, next, next + 1);
+    }
+  }
+  return new Mesh(vertices, indices);
+}
+function createIcoSphereMesh(radius = 1, subdivisions = 2) {
+  const color = Color.white();
+  const t = (1 + Math.sqrt(5)) / 2;
+  const initialPositions = [
+    [-1, t, 0],
+    [1, t, 0],
+    [-1, -t, 0],
+    [1, -t, 0],
+    [0, -1, t],
+    [0, 1, t],
+    [0, -1, -t],
+    [0, 1, -t],
+    [t, 0, -1],
+    [t, 0, 1],
+    [-t, 0, -1],
+    [-t, 0, 1]
+  ].map(([x, y, z]) => {
+    const len = Math.sqrt(x * x + y * y + z * z);
+    return new Vector3(x / len, y / len, z / len);
+  });
+  let faces = [
+    [0, 11, 5],
+    [0, 5, 1],
+    [0, 1, 7],
+    [0, 7, 10],
+    [0, 10, 11],
+    [1, 5, 9],
+    [5, 11, 4],
+    [11, 10, 2],
+    [10, 7, 6],
+    [7, 1, 8],
+    [3, 9, 4],
+    [3, 4, 2],
+    [3, 2, 6],
+    [3, 6, 8],
+    [3, 8, 9],
+    [4, 9, 5],
+    [2, 4, 11],
+    [6, 2, 10],
+    [8, 6, 7],
+    [9, 8, 1]
+  ];
+  let positions = [...initialPositions];
+  const midpointCache = new Map;
+  const getMidpoint = (i1, i2) => {
+    const key = i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
+    if (midpointCache.has(key)) {
+      return midpointCache.get(key);
+    }
+    const p1 = positions[i1];
+    const p2 = positions[i2];
+    const mid = new Vector3((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2).normalize();
+    const idx = positions.length;
+    positions.push(mid);
+    midpointCache.set(key, idx);
+    return idx;
+  };
+  for (let i = 0;i < subdivisions; i++) {
+    const newFaces = [];
+    for (const [v0, v1, v2] of faces) {
+      const a = getMidpoint(v0, v1);
+      const b = getMidpoint(v1, v2);
+      const c = getMidpoint(v2, v0);
+      newFaces.push([v0, a, c], [v1, b, a], [v2, c, b], [a, b, c]);
+    }
+    faces = newFaces;
+    midpointCache.clear();
+  }
+  const vertices = [];
+  const indices = [];
+  for (const [i0, i1, i2] of faces) {
+    const baseIdx = vertices.length;
+    for (const idx of [i0, i1, i2]) {
+      const pos = positions[idx].mul(radius);
+      const normal = positions[idx];
+      const u = 0.5 + Math.atan2(normal.y, normal.x) / (2 * Math.PI);
+      const v = 0.5 - Math.asin(normal.z) / Math.PI;
+      vertices.push(new Vertex(pos, color, normal, u, v));
+    }
+    indices.push(baseIdx, baseIdx + 1, baseIdx + 2);
+  }
+  return new Mesh(vertices, indices);
+}
+function createCylinderMesh(radius = 1, depth = 2, vertices_count = 32) {
+  const color = Color.white();
+  const vertices = [];
+  const indices = [];
+  const halfDepth = depth / 2;
+  const topCenterIdx = 0;
+  const bottomCenterIdx = 1;
+  vertices.push(new Vertex(new Vector3(0, 0, halfDepth), color, new Vector3(0, 0, 1), 0.5, 0.5), new Vertex(new Vector3(0, 0, -halfDepth), color, new Vector3(0, 0, -1), 0.5, 0.5));
+  for (let i = 0;i <= vertices_count; i++) {
+    const angle = i / vertices_count * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const x = radius * cos;
+    const y = radius * sin;
+    const capU = (cos + 1) / 2;
+    const capV = (sin + 1) / 2;
+    const sideU = i / vertices_count;
+    vertices.push(new Vertex(new Vector3(x, y, halfDepth), color, new Vector3(0, 0, 1), capU, capV));
+    vertices.push(new Vertex(new Vector3(x, y, -halfDepth), color, new Vector3(0, 0, -1), capU, capV));
+    vertices.push(new Vertex(new Vector3(x, y, halfDepth), color, new Vector3(cos, sin, 0), sideU, 0));
+    vertices.push(new Vertex(new Vector3(x, y, -halfDepth), color, new Vector3(cos, sin, 0), sideU, 1));
+  }
+  for (let i = 0;i < vertices_count; i++) {
+    const base = 2 + i * 4;
+    const nextBase = 2 + (i + 1) % (vertices_count + 1) * 4;
+    indices.push(topCenterIdx, base, nextBase);
+    indices.push(bottomCenterIdx, nextBase + 1, base + 1);
+    indices.push(base + 2, base + 3, nextBase + 2);
+    indices.push(nextBase + 2, base + 3, nextBase + 3);
+  }
+  return new Mesh(vertices, indices);
+}
+function createConeMesh(radius1 = 1, radius2 = 0, depth = 2, vertices_count = 32) {
+  const color = Color.white();
+  const vertices = [];
+  const indices = [];
+  const halfDepth = depth / 2;
+  const hasTopCap = radius2 > 0.001;
+  const sideAngle = Math.atan2(radius1 - radius2, depth);
+  const cosAngle = Math.cos(sideAngle);
+  const sinAngle = Math.sin(sideAngle);
+  let topCenterIdx = -1;
+  let bottomCenterIdx = -1;
+  bottomCenterIdx = vertices.length;
+  vertices.push(new Vertex(new Vector3(0, 0, -halfDepth), color, new Vector3(0, 0, -1), 0.5, 0.5));
+  topCenterIdx = vertices.length;
+  if (hasTopCap) {
+    vertices.push(new Vertex(new Vector3(0, 0, halfDepth), color, new Vector3(0, 0, 1), 0.5, 0.5));
+  } else {
+    vertices.push(new Vertex(new Vector3(0, 0, halfDepth), color, new Vector3(0, 0, 1), 0.5, 0.5));
+  }
+  for (let i = 0;i <= vertices_count; i++) {
+    const angle = i / vertices_count * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const bottomX = radius1 * cos;
+    const bottomY = radius1 * sin;
+    const topX = radius2 * cos;
+    const topY = radius2 * sin;
+    const capU = (cos + 1) / 2;
+    const capV = (sin + 1) / 2;
+    const sideU = i / vertices_count;
+    const sideNormal = new Vector3(cos * cosAngle, sin * cosAngle, sinAngle);
+    vertices.push(new Vertex(new Vector3(bottomX, bottomY, -halfDepth), color, new Vector3(0, 0, -1), capU, capV));
+    if (hasTopCap) {
+      vertices.push(new Vertex(new Vector3(topX, topY, halfDepth), color, new Vector3(0, 0, 1), capU, capV));
+    }
+    vertices.push(new Vertex(new Vector3(bottomX, bottomY, -halfDepth), color, sideNormal, sideU, 1));
+    vertices.push(new Vertex(new Vector3(topX, topY, halfDepth), color, sideNormal, sideU, 0));
+  }
+  const verticesPerRing = hasTopCap ? 4 : 3;
+  for (let i = 0;i < vertices_count; i++) {
+    const base = 2 + i * verticesPerRing;
+    const nextBase = 2 + (i + 1) % (vertices_count + 1) * verticesPerRing;
+    indices.push(bottomCenterIdx, nextBase, base);
+    if (hasTopCap) {
+      indices.push(topCenterIdx, base + 1, nextBase + 1);
+      const sideBase = base + 2;
+      const sideNextBase = nextBase + 2;
+      indices.push(sideBase, sideBase + 1, sideNextBase);
+      indices.push(sideNextBase, sideBase + 1, sideNextBase + 1);
+    } else {
+      const sideBase = base + 1;
+      const sideNextBase = nextBase + 1;
+      indices.push(sideBase, sideBase + 1, sideNextBase);
+    }
+  }
+  return new Mesh(vertices, indices);
+}
+function createTorusMesh(majorRadius = 1, minorRadius = 0.25, majorSegments = 48, minorSegments = 12) {
+  const color = Color.white();
+  const vertices = [];
+  const indices = [];
+  for (let i = 0;i <= majorSegments; i++) {
+    const majorAngle = i / majorSegments * Math.PI * 2;
+    const cosMajor = Math.cos(majorAngle);
+    const sinMajor = Math.sin(majorAngle);
+    for (let j = 0;j <= minorSegments; j++) {
+      const minorAngle = j / minorSegments * Math.PI * 2;
+      const cosMinor = Math.cos(minorAngle);
+      const sinMinor = Math.sin(minorAngle);
+      const x = (majorRadius + minorRadius * cosMinor) * cosMajor;
+      const y = (majorRadius + minorRadius * cosMinor) * sinMajor;
+      const z = minorRadius * sinMinor;
+      const normal = new Vector3(cosMinor * cosMajor, cosMinor * sinMajor, sinMinor);
+      const u = i / majorSegments;
+      const v = j / minorSegments;
+      vertices.push(new Vertex(new Vector3(x, y, z), color, normal, u, v));
+    }
+  }
+  for (let i = 0;i < majorSegments; i++) {
+    for (let j = 0;j < minorSegments; j++) {
+      const current = i * (minorSegments + 1) + j;
+      const next = current + minorSegments + 1;
+      indices.push(current, next, current + 1);
+      indices.push(current + 1, next, next + 1);
+    }
   }
   return new Mesh(vertices, indices);
 }
@@ -18054,10 +18288,10 @@ class MTLLoader {
     const lines = mtlContent.split(`
 `);
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.length === 0 || trimmed.startsWith("#"))
+      const trimmed2 = line.trim();
+      if (trimmed2.length === 0 || trimmed2.startsWith("#"))
         continue;
-      const parts = trimmed.split(/\s+/);
+      const parts = trimmed2.split(/\s+/);
       const command = parts[0];
       switch (command) {
         case "newmtl":
@@ -18087,8 +18321,8 @@ class MTLLoader {
         case "d":
         case "Tr":
           if (currentMaterial) {
-            const value = parseFloat(parts[1]) || 1;
-            currentMaterial.opacity = command === "Tr" ? 1 - value : value;
+            const value2 = parseFloat(parts[1]) || 1;
+            currentMaterial.opacity = command === "Tr" ? 1 - value2 : value2;
           }
           break;
         case "map_Kd":
@@ -18242,6 +18476,7 @@ class OBJLoader {
       }
     }
     const meshes = new Map;
+    const groupMaterials = new Map;
     let defaultMesh = null;
     for (const [name, data] of groups) {
       if (data.vertices.length > 0 && data.indices.length > 0) {
@@ -18250,6 +18485,9 @@ class OBJLoader {
         mesh.smoothShading = data.hasSmoothShading;
         OBJLoader.calculateNormalsIfMissing(mesh);
         meshes.set(name, mesh);
+        if (data.material) {
+          groupMaterials.set(name, data.material);
+        }
         if (!defaultMesh) {
           defaultMesh = mesh;
         }
@@ -18263,7 +18501,8 @@ class OBJLoader {
       defaultMesh,
       materials: new Map,
       defaultTexture: null,
-      mtlFile
+      mtlFile,
+      groupMaterials
     };
   }
   static calculateNormalsIfMissing(mesh) {
@@ -18298,16 +18537,16 @@ class OBJLoader {
       throw new Error(`Failed to load OBJ file: ${response.statusText}`);
     }
     const content = await response.text();
-    const result = OBJLoader.parse(content, defaultColor);
-    if (result.mtlFile) {
+    const result2 = OBJLoader.parse(content, defaultColor);
+    if (result2.mtlFile) {
       try {
         const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
-        const mtlUrl = baseUrl + result.mtlFile;
+        const mtlUrl = baseUrl + result2.mtlFile;
         const materials = await MTLLoader.load(mtlUrl, baseUrl);
-        result.materials = materials;
+        result2.materials = materials;
         for (const material of materials.values()) {
           if (material.diffuseTexture) {
-            result.defaultTexture = material.diffuseTexture;
+            result2.defaultTexture = material.diffuseTexture;
             break;
           }
         }
@@ -18315,7 +18554,7 @@ class OBJLoader {
         console.warn(`Failed to load MTL file: ${e}`);
       }
     }
-    return result;
+    return result2;
   }
   static assignRandomFaceColors(mesh) {
     for (const triangle of mesh.triangles) {
@@ -18342,6 +18581,310 @@ class OBJLoader {
   }
 }
 
+// src/material.ts
+function evaluateMaterial(material, ctx) {
+  const outputNode = material.nodes.find((n) => n.type === "output");
+  if (!outputNode) {
+    return { r: 255, g: 0, b: 255, a: 255 };
+  }
+  const colorSocket = outputNode.inputs.find((s) => s.id === "color");
+  if (!colorSocket) {
+    return { r: 255, g: 0, b: 255, a: 255 };
+  }
+  return evaluateSocket(material, outputNode.id, colorSocket.id, ctx);
+}
+function materialUsesTexture(material) {
+  const outputNode = material.nodes.find((n) => n.type === "output");
+  if (!outputNode)
+    return false;
+  const connection = material.connections.find((c) => c.toNodeId === outputNode.id && c.toSocketId === "color");
+  if (!connection)
+    return false;
+  const sourceNode = material.nodes.find((n) => n.id === connection.fromNodeId);
+  return sourceNode?.type === "texture";
+}
+function evaluateSocket(material, nodeId, socketId, ctx) {
+  const connection = material.connections.find((c) => c.toNodeId === nodeId && c.toSocketId === socketId);
+  if (!connection) {
+    return { r: 128, g: 128, b: 128, a: 255 };
+  }
+  const sourceNode = material.nodes.find((n) => n.id === connection.fromNodeId);
+  if (!sourceNode) {
+    return { r: 128, g: 128, b: 128, a: 255 };
+  }
+  return evaluateNode(material, sourceNode, connection.fromSocketId, ctx);
+}
+function evaluateNode(material, node, outputSocketId, ctx) {
+  switch (node.type) {
+    case "flat-color": {
+      const colorHex = node.data.color || "#808080";
+      return hexToRGBA(colorHex);
+    }
+    case "texture": {
+      const checker = (Math.floor(ctx.u * 8) + Math.floor(ctx.v * 8)) % 2 === 0;
+      return checker ? { r: 200, g: 200, b: 200, a: 255 } : { r: 100, g: 100, b: 100, a: 255 };
+    }
+    case "mix": {
+      const blendMode = node.data.blendMode || "multiply";
+      const factor = node.data.factor ?? 1;
+      const color1 = evaluateSocket(material, node.id, "color1", ctx);
+      const color2 = evaluateSocket(material, node.id, "color2", ctx);
+      return blendColors(color1, color2, blendMode, factor);
+    }
+    case "output":
+      return { r: 255, g: 0, b: 255, a: 255 };
+    default:
+      return { r: 255, g: 0, b: 255, a: 255 };
+  }
+}
+function hexToRGBA(hex) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  const a = h.length >= 8 ? parseInt(h.substring(6, 8), 16) : 255;
+  return { r, g, b, a };
+}
+function blendColors(color1, color2, mode, factor) {
+  const clamp = (v) => Math.min(255, Math.max(0, Math.round(v)));
+  switch (mode) {
+    case "multiply":
+      return {
+        r: clamp(color1.r * color2.r / 255),
+        g: clamp(color1.g * color2.g / 255),
+        b: clamp(color1.b * color2.b / 255),
+        a: clamp(color1.a * color2.a / 255)
+      };
+    case "add":
+      return {
+        r: clamp(color1.r + color2.r * factor),
+        g: clamp(color1.g + color2.g * factor),
+        b: clamp(color1.b + color2.b * factor),
+        a: clamp(color1.a)
+      };
+    case "mix":
+    default:
+      return {
+        r: clamp(color1.r * (1 - factor) + color2.r * factor),
+        g: clamp(color1.g * (1 - factor) + color2.g * factor),
+        b: clamp(color1.b * (1 - factor) + color2.b * factor),
+        a: clamp(color1.a * (1 - factor) + color2.a * factor)
+      };
+  }
+}
+
+class MaterialRegistry {
+  materials = new Map;
+  nextId = 1;
+  constructor() {
+    const defaultMat = this.createMaterial("Material");
+    this.materials.set(defaultMat.id, defaultMat);
+  }
+  createMaterial(name = "Material") {
+    let finalName = name;
+    let counter = 1;
+    while (this.getByName(finalName)) {
+      finalName = `${name}.${String(counter).padStart(3, "0")}`;
+      counter++;
+    }
+    const material = createDefaultMaterialData(`mat-${this.nextId++}`, finalName);
+    this.materials.set(material.id, material);
+    return material;
+  }
+  get(id) {
+    return this.materials.get(id);
+  }
+  getByName(name) {
+    for (const mat of this.materials.values()) {
+      if (mat.name === name)
+        return mat;
+    }
+    return;
+  }
+  getAll() {
+    return Array.from(this.materials.values());
+  }
+  update(material) {
+    if (this.materials.has(material.id)) {
+      this.materials.set(material.id, material);
+    }
+  }
+  delete(id) {
+    if (this.materials.size <= 1)
+      return false;
+    return this.materials.delete(id);
+  }
+  getDefault() {
+    return this.materials.values().next().value;
+  }
+  duplicate(id) {
+    const source = this.materials.get(id);
+    if (!source)
+      return;
+    const newMaterial = this.createMaterial(source.name);
+    newMaterial.nodes = JSON.parse(JSON.stringify(source.nodes));
+    newMaterial.connections = JSON.parse(JSON.stringify(source.connections));
+    this.materials.set(newMaterial.id, newMaterial);
+    return newMaterial;
+  }
+  createFromMTL(mtlMaterial, textureRegistry) {
+    const name = mtlMaterial.name || "Imported Material";
+    const id = `mat-${this.nextId++}`;
+    const nodes = [];
+    const connections = [];
+    nodes.push({
+      id: "output-1",
+      type: "output",
+      x: 500,
+      y: 150,
+      width: 140,
+      height: 80,
+      inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+      outputs: [],
+      data: {}
+    });
+    if (mtlMaterial.diffuseTexturePath) {
+      nodes.push({
+        id: "texture-1",
+        type: "texture",
+        x: 150,
+        y: 100,
+        width: 160,
+        height: 80,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: {
+          imagePath: mtlMaterial.diffuseTexturePath,
+          textureId: textureRegistry?.get(mtlMaterial.diffuseTexturePath)
+        }
+      });
+      connections.push({
+        id: "conn-1",
+        fromNodeId: "texture-1",
+        fromSocketId: "color",
+        toNodeId: "output-1",
+        toSocketId: "color"
+      });
+      if (mtlMaterial.diffuseColor) {
+        const colorHex = rgbToHex(mtlMaterial.diffuseColor);
+        nodes.push({
+          id: "flat-color-1",
+          type: "flat-color",
+          x: 150,
+          y: 220,
+          width: 160,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false }
+          ],
+          data: { color: colorHex }
+        });
+      }
+    } else if (mtlMaterial.diffuseColor) {
+      const colorHex = rgbToHex(mtlMaterial.diffuseColor);
+      nodes.push({
+        id: "flat-color-1",
+        type: "flat-color",
+        x: 150,
+        y: 150,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: colorHex }
+      });
+      connections.push({
+        id: "conn-1",
+        fromNodeId: "flat-color-1",
+        fromSocketId: "color",
+        toNodeId: "output-1",
+        toSocketId: "color"
+      });
+    } else {
+      nodes.push({
+        id: "flat-color-1",
+        type: "flat-color",
+        x: 150,
+        y: 150,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: "#808080" }
+      });
+      connections.push({
+        id: "conn-1",
+        fromNodeId: "flat-color-1",
+        fromSocketId: "color",
+        toNodeId: "output-1",
+        toSocketId: "color"
+      });
+    }
+    const material = {
+      id,
+      name,
+      nodes,
+      connections
+    };
+    this.materials.set(id, material);
+    return material;
+  }
+}
+function rgbToHex(rgb) {
+  const r = Math.min(255, Math.max(0, Math.round(rgb.r))).toString(16).padStart(2, "0");
+  const g = Math.min(255, Math.max(0, Math.round(rgb.g))).toString(16).padStart(2, "0");
+  const b = Math.min(255, Math.max(0, Math.round(rgb.b))).toString(16).padStart(2, "0");
+  return `#${r}${g}${b}`;
+}
+function createDefaultMaterialData(id, name) {
+  return {
+    id,
+    name,
+    nodes: [
+      {
+        id: "output-1",
+        type: "output",
+        x: 400,
+        y: 150,
+        width: 140,
+        height: 80,
+        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+        outputs: [],
+        data: {}
+      },
+      {
+        id: "flat-color-1",
+        type: "flat-color",
+        x: 150,
+        y: 150,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: "#808080" }
+      }
+    ],
+    connections: [
+      {
+        id: "conn-1",
+        fromNodeId: "flat-color-1",
+        fromSocketId: "color",
+        toNodeId: "output-1",
+        toSocketId: "color"
+      }
+    ]
+  };
+}
+
 // src/scene.ts
 class SceneObject {
   name;
@@ -18352,6 +18895,8 @@ class SceneObject {
   selected = false;
   visible = true;
   parent = null;
+  texture = null;
+  materialId = null;
   constructor(name, mesh) {
     this.name = name;
     this.mesh = mesh;
@@ -18504,10 +19049,15 @@ class Scene {
   gridSize = 10;
   gridDivisions = 10;
   activeObject = null;
+  materials;
   constructor() {
     this.camera = new Camera;
+    this.materials = new MaterialRegistry;
   }
   addObject(obj) {
+    if (!obj.materialId) {
+      obj.materialId = this.materials.getDefault().id;
+    }
     this.objects.push(obj);
   }
   removeObject(obj) {
@@ -18553,13 +19103,13 @@ class Scene {
     const vertices = [];
     const lineIndices = [];
     const halfSize = this.gridSize / 2;
-    const step = this.gridSize / this.gridDivisions;
+    const step2 = this.gridSize / this.gridDivisions;
     const gridColor = new Color(80, 80, 80);
     const axisColorX = new Color(150, 50, 50);
     const axisColorY = new Color(50, 150, 50);
     let vertexIndex = 0;
     for (let i = 0;i <= this.gridDivisions; i++) {
-      const y = -halfSize + i * step;
+      const y = -halfSize + i * step2;
       const isCenter = Math.abs(y) < 0.001;
       const color = isCenter ? axisColorX : gridColor;
       vertices.push(new Vertex(new Vector3(-halfSize, y, 0), color, new Vector3(0, 0, 1)));
@@ -18568,7 +19118,7 @@ class Scene {
       vertexIndex += 2;
     }
     for (let i = 0;i <= this.gridDivisions; i++) {
-      const x = -halfSize + i * step;
+      const x = -halfSize + i * step2;
       const isCenter = Math.abs(x) < 0.001;
       const color = isCenter ? axisColorY : gridColor;
       vertices.push(new Vertex(new Vector3(x, -halfSize, 0), color, new Vector3(0, 0, 1)));
@@ -19222,16 +19772,16 @@ class SelectionManager {
     for (const v of sourceVertices) {
       sourcePositionKeys.add(getPositionKey2(mesh.vertices[v].position));
     }
-    const result = new Set;
+    const result2 = new Set;
     for (const posKey of sourcePositionKeys) {
       const verts = positionToVertices.get(posKey) || [];
       for (const v of verts) {
         if (connectedVertices.has(v)) {
-          result.add(v);
+          result2.add(v);
         }
       }
     }
-    return result;
+    return result2;
   }
   getConnectedColocatedVertices(mesh, sourceVertices) {
     const epsilon = 0.0001;
@@ -19277,7 +19827,7 @@ class SelectionManager {
         geomEdgeToTriangles.get(edgeKey).add(triIdx);
       }
     }
-    const result = new Set;
+    const result2 = new Set;
     const sourceTriangles = new Set;
     for (const srcVertex of sourceVertices) {
       const tris = vertexToTriangles.get(srcVertex);
@@ -19325,11 +19875,11 @@ class SelectionManager {
       const colocatedVerts = positionToVertices.get(srcPosKey) || [];
       for (const v of colocatedVerts) {
         if (v !== srcVertex && connectedVertices.has(v)) {
-          result.add(v);
+          result2.add(v);
         }
       }
     }
-    return result;
+    return result2;
   }
   selectLinked(mesh) {
     if (!this.hasSelection())
@@ -20393,7 +20943,7 @@ class TransformManager {
   confirm(obj, isEditMode) {
     if (this._mode === "none")
       return null;
-    let result = null;
+    let result2 = null;
     if (isEditMode && this.vertexStartPositions.size > 0) {
       const beforeVertices = new Map;
       const afterVertices = new Map;
@@ -20401,7 +20951,7 @@ class TransformManager {
         beforeVertices.set(idx, pos.clone());
         afterVertices.set(idx, obj.mesh.vertices[idx].position.clone());
       }
-      result = {
+      result2 = {
         type: "vertex",
         transformType: this._mode,
         vertexData: {
@@ -20410,7 +20960,7 @@ class TransformManager {
         }
       };
     } else if (this._mode === "grab" && this.objectStartPos) {
-      result = {
+      result2 = {
         type: "object",
         transformType: "grab",
         objectData: {
@@ -20429,7 +20979,7 @@ class TransformManager {
         }
       };
     } else if (this._mode === "rotate" && this.objectStartRotation) {
-      result = {
+      result2 = {
         type: "object",
         transformType: "rotate",
         objectData: {
@@ -20448,7 +20998,7 @@ class TransformManager {
         }
       };
     } else if (this._mode === "scale" && this.objectStartScale) {
-      result = {
+      result2 = {
         type: "object",
         transformType: "scale",
         objectData: {
@@ -20468,8 +21018,8 @@ class TransformManager {
       };
     }
     this.clearState();
-    this.onCompleteCallback?.(result);
-    return result;
+    this.onCompleteCallback?.(result2);
+    return result2;
   }
   cancel(obj, isEditMode) {
     if (this._mode === "none")
@@ -20921,10 +21471,10 @@ class MeshEditManager {
     if (edgeList.length < 2)
       return [];
     const visited = new Set;
-    const result = [];
+    const result2 = [];
     let currentVertex = edgeList[0][0];
-    result.push(currentVertex);
-    while (result.length <= allVertices.size) {
+    result2.push(currentVertex);
+    while (result2.length <= allVertices.size) {
       const edges = vertexToEdges.get(currentVertex) || [];
       let foundNext = false;
       for (const [v0, v1] of edges) {
@@ -20933,11 +21483,11 @@ class MeshEditManager {
           continue;
         visited.add(edgeKey);
         const nextVertex = v0 === currentVertex ? v1 : v0;
-        if (nextVertex === result[0] && result.length >= 3) {
-          return result;
+        if (nextVertex === result2[0] && result2.length >= 3) {
+          return result2;
         }
-        if (!result.includes(nextVertex)) {
-          result.push(nextVertex);
+        if (!result2.includes(nextVertex)) {
+          result2.push(nextVertex);
           currentVertex = nextVertex;
           foundNext = true;
           break;
@@ -20946,11 +21496,11 @@ class MeshEditManager {
       if (!foundNext)
         break;
     }
-    if (result.length === allVertices.size && result.length >= 3) {
-      const lastEdgeKey = makeEdgeKey(result[result.length - 1], result[0]);
+    if (result2.length === allVertices.size && result2.length >= 3) {
+      const lastEdgeKey = makeEdgeKey(result2[result2.length - 1], result2[0]);
       for (const [v0, v1] of edgeList) {
         if (makeEdgeKey(v0, v1) === lastEdgeKey) {
-          return result;
+          return result2;
         }
       }
     }
@@ -21114,7 +21664,8 @@ class MeshEditManager {
     }
     const vertexMapping = new Map;
     const newVertexIndices = new Set;
-    const newFaceIndices = new Set;
+    const allNewFaceIndices = new Set;
+    const topFaceIndices = new Set;
     for (const faceIdx of selectedFaces) {
       if (faceIdx >= mesh.faceData.length)
         continue;
@@ -21140,33 +21691,35 @@ class MeshEditManager {
         const newV0 = localMapping.get(v0);
         const newV1 = localMapping.get(v1);
         mesh.faceData.push({ vertices: [v1, v0, newV0, newV1] });
-        newFaceIndices.add(mesh.faceData.length - 1);
+        allNewFaceIndices.add(mesh.faceData.length - 1);
       }
       const newTopVerts = faceVerts.map((v) => localMapping.get(v));
       mesh.faceData.push({ vertices: newTopVerts });
-      newFaceIndices.add(mesh.faceData.length - 1);
+      const topFaceIdx = mesh.faceData.length - 1;
+      allNewFaceIndices.add(topFaceIdx);
+      topFaceIndices.add(topFaceIdx);
     }
     const sortedFaces = Array.from(selectedFaces).sort((a, b) => b - a);
     for (const faceIdx of sortedFaces) {
       mesh.faceData.splice(faceIdx, 1);
       const adjustedIndices = new Set;
-      for (const idx of newFaceIndices) {
+      for (const idx of topFaceIndices) {
         if (idx > faceIdx) {
           adjustedIndices.add(idx - 1);
         } else {
           adjustedIndices.add(idx);
         }
       }
-      newFaceIndices.clear();
+      topFaceIndices.clear();
       for (const idx of adjustedIndices) {
-        newFaceIndices.add(idx);
+        topFaceIndices.add(idx);
       }
     }
     mesh.rebuildFromFaces();
     return {
       success: true,
       newVertices: newVertexIndices,
-      newFaces: newFaceIndices
+      newFaces: topFaceIndices
     };
   }
 }
@@ -21243,8 +21796,8 @@ class PickingManager {
     return closestIdx !== null ? { index: closestIdx, distance: closestDist } : null;
   }
   pickVertex(screenX, screenY, mesh, modelMatrix, ctx) {
-    const result = this.pickVertexWithDistance(screenX, screenY, mesh, modelMatrix, ctx);
-    return result ? result.index : null;
+    const result2 = this.pickVertexWithDistance(screenX, screenY, mesh, modelMatrix, ctx);
+    return result2 ? result2.index : null;
   }
   pickEdgeWithDistance(screenX, screenY, mesh, modelMatrix, ctx) {
     const edges = getMeshEdges2(mesh, true);
@@ -21270,8 +21823,8 @@ class PickingManager {
     return closestEdge !== null ? { edgeKey: closestEdge, distance: closestDist } : null;
   }
   pickEdge(screenX, screenY, mesh, modelMatrix, ctx) {
-    const result = this.pickEdgeWithDistance(screenX, screenY, mesh, modelMatrix, ctx);
-    return result ? result.edgeKey : null;
+    const result2 = this.pickEdgeWithDistance(screenX, screenY, mesh, modelMatrix, ctx);
+    return result2 ? result2.edgeKey : null;
   }
   pickFaceWithDepth(screenX, screenY, mesh, modelMatrix, ctx) {
     let closestTriangle = null;
@@ -21303,8 +21856,8 @@ class PickingManager {
     return null;
   }
   pickFace(screenX, screenY, mesh, modelMatrix, ctx) {
-    const result = this.pickFaceWithDepth(screenX, screenY, mesh, modelMatrix, ctx);
-    return result ? result.faceIndex : null;
+    const result2 = this.pickFaceWithDepth(screenX, screenY, mesh, modelMatrix, ctx);
+    return result2 ? result2.faceIndex : null;
   }
   getColocatedVertices(mesh, vertexIdx) {
     const targetPos = mesh.vertices[vertexIdx].position;
@@ -21460,6 +22013,46 @@ class PickingManager {
       }
     }
     return closestEdge !== null ? { edgeKey: closestEdge, distance: closestDist } : null;
+  }
+  boxSelectObjects(boxMinX, boxMinY, boxMaxX, boxMaxY, objects, ctx) {
+    const result2 = [];
+    for (const obj of objects) {
+      if (!obj.visible)
+        continue;
+      const bounds = obj.getWorldBounds();
+      const corners = [
+        new Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+        new Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+        new Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+        new Vector3(bounds.max.x, bounds.max.y, bounds.max.z)
+      ];
+      let screenMinX = Infinity;
+      let screenMinY = Infinity;
+      let screenMaxX = -Infinity;
+      let screenMaxY = -Infinity;
+      let hasVisibleCorner = false;
+      for (const corner of corners) {
+        const screen = this.projectToScreen(corner, ctx);
+        if (screen) {
+          hasVisibleCorner = true;
+          screenMinX = Math.min(screenMinX, screen.x);
+          screenMinY = Math.min(screenMinY, screen.y);
+          screenMaxX = Math.max(screenMaxX, screen.x);
+          screenMaxY = Math.max(screenMaxY, screen.y);
+        }
+      }
+      if (!hasVisibleCorner)
+        continue;
+      const intersects = screenMinX <= boxMaxX && screenMaxX >= boxMinX && screenMinY <= boxMaxY && screenMaxY >= boxMinY;
+      if (intersects) {
+        result2.push(obj);
+      }
+    }
+    return result2;
   }
 }
 
@@ -21926,6 +22519,26 @@ class Editor {
       selectionChange: { before, after }
     });
   }
+  pushTransformToHistory(objectName, beforePos, beforeRot, beforeScale, afterPos, afterRot, afterScale) {
+    this.pushHistoryAction({
+      type: "object-transform",
+      description: `Edit ${objectName} transform`,
+      objectTransform: {
+        before: {
+          objectName,
+          position: beforePos,
+          rotation: beforeRot,
+          scale: beforeScale
+        },
+        after: {
+          objectName,
+          position: afterPos,
+          rotation: afterRot,
+          scale: afterScale
+        }
+      }
+    });
+  }
   pushHistoryAction(action) {
     this.history.push(action);
   }
@@ -22083,6 +22696,13 @@ class Editor {
   }
   pickObject(screenX, screenY, canvasWidth, canvasHeight) {
     return this.picking.pickObject(screenX, screenY, this.scene.objects, {
+      camera: this.scene.camera,
+      canvasWidth,
+      canvasHeight
+    });
+  }
+  boxSelectObjects(boxMinX, boxMinY, boxMaxX, boxMaxY, canvasWidth, canvasHeight) {
+    return this.picking.boxSelectObjects(boxMinX, boxMinY, boxMaxX, boxMaxY, this.scene.objects, {
       camera: this.scene.camera,
       canvasWidth,
       canvasHeight
@@ -22373,16 +22993,16 @@ class Editor {
     const obj = selected[0];
     const mesh = obj.mesh;
     const beforeMesh = serializeMesh(mesh);
-    let result = { success: false, deletedFaces: 0, deletedVertices: 0 };
+    let result2 = { success: false, deletedFaces: 0, deletedVertices: 0 };
     if (this.selectionMode === "vertex") {
       const verticesToDelete = this.getSelectedVertexIndices();
-      result = this.meshEdit.deleteVertices(mesh, verticesToDelete);
+      result2 = this.meshEdit.deleteVertices(mesh, verticesToDelete);
     } else if (this.selectionMode === "edge") {
-      result = this.meshEdit.deleteEdges(mesh, this.selectedEdges);
+      result2 = this.meshEdit.deleteEdges(mesh, this.selectedEdges);
     } else if (this.selectionMode === "face") {
-      result = this.meshEdit.deleteFaces(mesh, this.selectedFaces);
+      result2 = this.meshEdit.deleteFaces(mesh, this.selectedFaces);
     }
-    if (result.success) {
+    if (result2.success) {
       mesh.rebuildMesh();
       const afterMesh = serializeMesh(mesh);
       this.pushHistoryAction({
@@ -22396,7 +23016,7 @@ class Editor {
       });
       this.clearEditSelections();
     }
-    return result.success;
+    return result2.success;
   }
   duplicateSelected() {
     if (this.mode !== "object")
@@ -22420,6 +23040,8 @@ class Editor {
       newObj.position = obj.position.clone();
       newObj.rotation = obj.rotation.clone();
       newObj.scale = obj.scale.clone();
+      newObj.texture = obj.texture;
+      newObj.materialId = obj.materialId;
       this.scene.addObject(newObj);
       newObjects.push(newObj);
       this.pushHistoryAction({
@@ -22513,8 +23135,8 @@ class Editor {
     const obj = selected[0];
     const mesh = obj.mesh;
     const beforeMesh = serializeMesh(mesh);
-    const result = this.meshEdit.extrudeEdges(mesh, this.selectedEdges);
-    if (!result.success)
+    const result2 = this.meshEdit.extrudeEdges(mesh, this.selectedEdges);
+    if (!result2.success)
       return false;
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -22527,13 +23149,13 @@ class Editor {
       }
     });
     this.selection.clearAll();
-    for (const edgeKey of result.newEdges) {
+    for (const edgeKey of result2.newEdges) {
       const [v0, v1] = edgeKey.split("-").map(Number);
-      if (result.newVertices.has(v0) && result.newVertices.has(v1)) {
+      if (result2.newVertices.has(v0) && result2.newVertices.has(v1)) {
         this.selection.addEdge(v0, v1);
       }
     }
-    this.transform.startVertexGrab(mesh, result.newVertices, obj.getModelMatrix());
+    this.transform.startVertexGrab(mesh, result2.newVertices, obj.getModelMatrix());
     return true;
   }
   extrudeVertices() {
@@ -22549,8 +23171,8 @@ class Editor {
     const obj = selected[0];
     const mesh = obj.mesh;
     const beforeMesh = serializeMesh(mesh);
-    const result = this.meshEdit.extrudeVertices(mesh, this.selectedVertices);
-    if (!result.success)
+    const result2 = this.meshEdit.extrudeVertices(mesh, this.selectedVertices);
+    if (!result2.success)
       return false;
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -22563,8 +23185,8 @@ class Editor {
       }
     });
     this.selection.clearAll();
-    this.selection.addVertices(result.newVertices);
-    this.transform.startVertexGrab(mesh, result.newVertices, obj.getModelMatrix());
+    this.selection.addVertices(result2.newVertices);
+    this.transform.startVertexGrab(mesh, result2.newVertices, obj.getModelMatrix());
     return true;
   }
   extrudeFaces() {
@@ -22580,8 +23202,8 @@ class Editor {
     const obj = selected[0];
     const mesh = obj.mesh;
     const beforeMesh = serializeMesh(mesh);
-    const result = this.meshEdit.extrudeFaces(mesh, this.selectedFaces);
-    if (!result.success)
+    const result2 = this.meshEdit.extrudeFaces(mesh, this.selectedFaces);
+    if (!result2.success)
       return false;
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -22594,10 +23216,10 @@ class Editor {
       }
     });
     this.selection.clearAll();
-    for (const faceIdx of result.newFaces) {
+    for (const faceIdx of result2.newFaces) {
       this.selection.addFace(faceIdx);
     }
-    this.transform.startVertexGrab(mesh, result.newVertices, obj.getModelMatrix());
+    this.transform.startVertexGrab(mesh, result2.newVertices, obj.getModelMatrix());
     return true;
   }
   joinVertices() {
@@ -22627,8 +23249,8 @@ class Editor {
     const beforeMesh = serializeMesh(mesh);
     if (numUniquePositions === 2) {
       const joinSet = new Set(vertexIndices);
-      const result = this.meshEdit.joinVertices(mesh, joinSet);
-      if (!result.success)
+      const result2 = this.meshEdit.joinVertices(mesh, joinSet);
+      if (!result2.success)
         return false;
       const afterMesh = serializeMesh(mesh);
       this.pushHistoryAction({
@@ -22640,7 +23262,7 @@ class Editor {
           after: afterMesh
         }
       });
-      const [v0, v1] = result.edgeKey.split("-").map(Number);
+      const [v0, v1] = result2.edgeKey.split("-").map(Number);
       this.selection.clearAll();
       this.setSelectionMode("edge");
       this.selection.addEdge(v0, v1);
@@ -22677,8 +23299,8 @@ class Editor {
     const obj = selected[0];
     const mesh = obj.mesh;
     const beforeMesh = serializeMesh(mesh);
-    const result = this.meshEdit.fillEdges(mesh, this.selectedEdges);
-    if (!result.success)
+    const result2 = this.meshEdit.fillEdges(mesh, this.selectedEdges);
+    if (!result2.success)
       return false;
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -22814,59 +23436,59 @@ class Editor {
     if (selected.length === 0)
       return;
     if (this.transform.isMultiObjectTransform) {
-      const result2 = this.transform.confirmMultiObject(selected);
-      if (result2 && result2.objects.length > 0) {
+      const result3 = this.transform.confirmMultiObject(selected);
+      if (result3 && result3.objects.length > 0) {
         const actionNames = {
           grab: "Move",
           rotate: "Rotate",
           scale: "Scale",
           none: "Transform"
         };
-        const actionName = actionNames[result2.transformType];
+        const actionName = actionNames[result3.transformType];
         this.pushHistoryAction({
           type: "multi-object-transform",
-          description: `${actionName} ${result2.objects.length} objects`,
+          description: `${actionName} ${result3.objects.length} objects`,
           multiObjectTransform: {
-            objects: result2.objects
+            objects: result3.objects
           }
         });
       }
       return;
     }
     const obj = selected[0];
-    const result = this.transform.confirm(obj, this.mode === "edit");
-    if (!result)
+    const result2 = this.transform.confirm(obj, this.mode === "edit");
+    if (!result2)
       return;
-    if (result.type === "vertex" && result.vertexData) {
+    if (result2.type === "vertex" && result2.vertexData) {
       const actionNames = {
         grab: "Move",
         rotate: "Rotate",
         scale: "Scale",
         none: "Transform"
       };
-      const actionName = actionNames[result.transformType];
+      const actionName = actionNames[result2.transformType];
       this.pushHistoryAction({
         type: "vertex-move",
-        description: `${actionName} ${result.vertexData.before.vertices.size} vertices`,
+        description: `${actionName} ${result2.vertexData.before.vertices.size} vertices`,
         vertexMove: {
-          before: result.vertexData.before,
-          after: result.vertexData.after
+          before: result2.vertexData.before,
+          after: result2.vertexData.after
         }
       });
-    } else if (result.type === "object" && result.objectData) {
+    } else if (result2.type === "object" && result2.objectData) {
       const actionNames = {
         grab: "Move",
         rotate: "Rotate",
         scale: "Scale",
         none: "Transform"
       };
-      const actionName = actionNames[result.transformType];
+      const actionName = actionNames[result2.transformType];
       this.pushHistoryAction({
         type: "object-transform",
-        description: `${actionName} ${result.objectData.before.objectName}`,
+        description: `${actionName} ${result2.objectData.before.objectName}`,
         objectTransform: {
-          before: result.objectData.before,
-          after: result.objectData.after
+          before: result2.objectData.before,
+          after: result2.objectData.after
         }
       });
     }
@@ -23303,6 +23925,7 @@ function useEditorUIState(editorRef, sceneRef) {
   const [selectedVertexCount, setSelectedVertexCount] = import_react.useState(0);
   const [selectedEdgeCount, setSelectedEdgeCount] = import_react.useState(0);
   const [selectedFaceCount, setSelectedFaceCount] = import_react.useState(0);
+  const [selectedDimensions, setSelectedDimensions] = import_react.useState(Vector3.zero());
   const [settings, setSettings] = import_react.useState(DEFAULT_SETTINGS);
   const lastUIUpdateRef = import_react.useRef(0);
   const updateUIStateImpl = import_react.useCallback(() => {
@@ -23334,8 +23957,11 @@ function useEditorUIState(editorRef, sceneRef) {
       setSelectedPosition(obj.position.clone());
       setSelectedRotation(obj.rotation.clone());
       setSelectedScale(obj.scale.clone());
+      const localSize = obj.mesh.getSize();
+      setSelectedDimensions(new Vector3(localSize.x * obj.scale.x, localSize.y * obj.scale.y, localSize.z * obj.scale.z));
     } else {
       setSelectedObjectName(null);
+      setSelectedDimensions(Vector3.zero());
     }
   }, [editorRef, sceneRef]);
   const updateUIState = import_react.useCallback((force = false) => {
@@ -23392,6 +24018,7 @@ function useEditorUIState(editorRef, sceneRef) {
       selectedVertexCount,
       selectedEdgeCount,
       selectedFaceCount,
+      selectedDimensions,
       settings
     },
     setters: {
@@ -23411,6 +24038,7 @@ function useEditorUIState(editorRef, sceneRef) {
       setSelectedVertexCount,
       setSelectedEdgeCount,
       setSelectedFaceCount,
+      setSelectedDimensions,
       setSettings
     },
     actions: {
@@ -23647,12 +24275,16 @@ class RenderWorkerClient {
 function serializeMatrix(m) {
   return new Float32Array(m.data);
 }
-function serializeMesh2(mesh) {
+function serializeMesh2(mesh, material) {
   const vertexCount = mesh.vertices.length;
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Uint8Array(vertexCount * 4);
+  let materialColor = null;
+  if (material) {
+    materialColor = evaluateMaterial(material, { u: 0, v: 0 });
+  }
   for (let i = 0;i < vertexCount; i++) {
     const v = mesh.vertices[i];
     const p = i * 3;
@@ -23666,10 +24298,17 @@ function serializeMesh2(mesh) {
     normals[p + 2] = v.normal.z;
     uvs[uv] = v.u;
     uvs[uv + 1] = v.v;
-    colors[c] = v.color.r;
-    colors[c + 1] = v.color.g;
-    colors[c + 2] = v.color.b;
-    colors[c + 3] = v.color.a;
+    if (materialColor) {
+      colors[c] = materialColor.r;
+      colors[c + 1] = materialColor.g;
+      colors[c + 2] = materialColor.b;
+      colors[c + 3] = materialColor.a;
+    } else {
+      colors[c] = v.color.r;
+      colors[c + 1] = v.color.g;
+      colors[c + 2] = v.color.b;
+      colors[c + 3] = v.color.a;
+    }
   }
   return {
     positions,
@@ -23870,16 +24509,19 @@ function buildRenderFrame(ctx, textureChanged = false) {
     if (!obj.visible)
       continue;
     const modelMatrix = obj.getModelMatrix();
+    const material = obj.materialId ? scene.materials.get(obj.materialId) : undefined;
     if (isEdgeOnlyMesh(obj.mesh)) {
       frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
     } else if (isWireframeMode) {
       frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
+      const useTexture = material ? materialUsesTexture(material) && !!obj.texture : false;
       frame.objects.push({
-        mesh: serializeMesh2(obj.mesh),
+        mesh: serializeMesh2(obj.mesh, material),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,
-        smoothShading: obj.mesh.smoothShading
+        smoothShading: obj.mesh.smoothShading,
+        hasTexture: useTexture
       });
     }
   }
@@ -23992,34 +24634,63 @@ function ToolbarButton({
   }, undefined, true, undefined, this);
 }
 
-// src/components/Toolbar.tsx
+// src/components/WorkspaceTabs.tsx
 var jsx_dev_runtime2 = __toESM(require_jsx_dev_runtime(), 1);
+var WORKSPACES = [
+  { id: "modeling", label: "Modeling" },
+  { id: "shading", label: "Shading" }
+];
+function WorkspaceTabs({
+  activeWorkspace,
+  onWorkspaceChange
+}) {
+  return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+    className: "workspace-tabs",
+    children: WORKSPACES.map((workspace) => /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("button", {
+      className: `workspace-tab ${activeWorkspace === workspace.id ? "active" : ""}`,
+      onClick: () => onWorkspaceChange(workspace.id),
+      children: workspace.label
+    }, workspace.id, false, undefined, this))
+  }, undefined, false, undefined, this);
+}
+
+// src/components/Toolbar.tsx
+var jsx_dev_runtime3 = __toESM(require_jsx_dev_runtime(), 1);
 function Toolbar({
   mode,
   transformMode,
   viewMode,
   selectionMode,
+  workspace,
   onModeChange,
   onViewModeChange,
-  onSelectionModeChange
+  onSelectionModeChange,
+  onWorkspaceChange
 }) {
-  return /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
     className: "toolbar",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
         className: "toolbar-section",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(WorkspaceTabs, {
+            activeWorkspace: workspace,
+            onWorkspaceChange
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+            className: "toolbar-divider"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "toolbar-group",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: mode === "object",
                 onClick: () => onModeChange("object"),
                 title: "Object Mode",
                 icon: object_datamode_default,
                 children: "Object"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: mode === "edit",
                 onClick: () => onModeChange("edit"),
                 title: "Edit Mode",
@@ -24028,27 +24699,27 @@ function Toolbar({
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          mode === "edit" && /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(jsx_dev_runtime2.Fragment, {
+          mode === "edit" && /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(jsx_dev_runtime3.Fragment, {
             children: [
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
                 className: "toolbar-divider"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
                 className: "toolbar-group",
                 children: [
-                  /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+                  /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                     active: selectionMode === "vertex",
                     onClick: () => onSelectionModeChange("vertex"),
                     title: "Vertex Select (1)",
                     icon: vertex_select_default
                   }, undefined, false, undefined, this),
-                  /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+                  /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                     active: selectionMode === "edge",
                     onClick: () => onSelectionModeChange("edge"),
                     title: "Edge Select (2)",
                     icon: edge_select_default
                   }, undefined, false, undefined, this),
-                  /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+                  /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                     active: selectionMode === "face",
                     onClick: () => onSelectionModeChange("face"),
                     title: "Face Select (3)",
@@ -24058,65 +24729,65 @@ function Toolbar({
               }, undefined, true, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "toolbar-divider"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "toolbar-group",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
                 className: "toolbar-label",
                 children: "Transform:"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: transformMode === "grab",
                 title: "Grab (G)",
-                children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
                   className: "icon",
                   children: "✥"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: transformMode === "rotate",
                 title: "Rotate (R)",
-                children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
                   className: "icon",
                   children: "↻"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: transformMode === "scale",
                 title: "Scale (S)",
-                children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
                   className: "icon",
                   children: "⤡"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "toolbar-divider"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
             className: "toolbar-group",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
                 className: "toolbar-label",
                 children: "Shading:"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: viewMode === "wireframe",
                 onClick: () => onViewModeChange("wireframe"),
                 title: "Wireframe (Z, 1)",
                 icon: shading_wire_default
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: viewMode === "solid",
                 onClick: () => onViewModeChange("solid"),
                 title: "Solid (Z, 2)",
                 icon: shading_solid_default
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime2.jsxDEV(ToolbarButton, {
+              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(ToolbarButton, {
                 active: viewMode === "material",
                 onClick: () => onViewModeChange("material"),
                 title: "Material Preview (Z, 3)",
@@ -24126,9 +24797,9 @@ function Toolbar({
           }, undefined, true, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
         className: "toolbar-section",
-        children: /* @__PURE__ */ jsx_dev_runtime2.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
           className: "toolbar-title",
           children: "PS1ender"
         }, undefined, false, undefined, this)
@@ -24137,8 +24808,670 @@ function Toolbar({
   }, undefined, true, undefined, this);
 }
 
-// src/components/SceneTree.tsx
+// src/components/NodeEditor.tsx
 var import_react2 = __toESM(require_react(), 1);
+var jsx_dev_runtime4 = __toESM(require_jsx_dev_runtime(), 1);
+var NODE_COLORS = {
+  output: "#6b3a3a",
+  texture: "#6b5a3a",
+  "flat-color": "#5a3a6b",
+  mix: "#3a5a6b"
+};
+var SOCKET_COLORS = {
+  color: "#c7c729",
+  float: "#a1a1a1"
+};
+function createNode(type, x, y) {
+  const baseId = `${type}-${Date.now()}`;
+  switch (type) {
+    case "output":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 140,
+        height: 80,
+        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+        outputs: [],
+        data: {}
+      };
+    case "texture":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 80,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { imagePath: "" }
+      };
+    case "flat-color":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: "#808080" }
+      };
+    case "mix":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 120,
+        inputs: [
+          { id: "color1", name: "Color1", type: "color", isInput: true },
+          { id: "color2", name: "Color2", type: "color", isInput: true }
+        ],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { blendMode: "multiply", factor: 1 }
+      };
+    default:
+      throw new Error(`Unknown node type: ${type}`);
+  }
+}
+function getNodeTitle(type) {
+  switch (type) {
+    case "output":
+      return "Material Output";
+    case "texture":
+      return "Texture";
+    case "flat-color":
+      return "Flat Color";
+    case "mix":
+      return "Mix";
+    default:
+      return type;
+  }
+}
+function NodeEditor({
+  materials,
+  selectedMaterialId,
+  onSelectMaterial,
+  onMaterialChange,
+  onNewMaterial
+}) {
+  const canvasRef = import_react2.useRef(null);
+  const containerRef = import_react2.useRef(null);
+  const material = materials.find((m) => m.id === selectedMaterialId) || null;
+  const [nodes, setNodes] = import_react2.useState(material?.nodes || []);
+  const [connections, setConnections] = import_react2.useState(material?.connections || []);
+  const [selectedNodeId, setSelectedNodeId] = import_react2.useState(null);
+  const [pan, setPan] = import_react2.useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = import_react2.useState(1);
+  import_react2.useEffect(() => {
+    if (material) {
+      setNodes(material.nodes);
+      setConnections(material.connections);
+      setSelectedNodeId(null);
+    } else {
+      setNodes([]);
+      setConnections([]);
+      setSelectedNodeId(null);
+    }
+  }, [material?.id]);
+  import_react2.useEffect(() => {
+    if (material && onMaterialChange) {
+      if (nodes !== material.nodes || connections !== material.connections) {
+        onMaterialChange({
+          ...material,
+          nodes,
+          connections
+        });
+      }
+    }
+  }, [nodes, connections, material, onMaterialChange]);
+  const [dragging, setDragging] = import_react2.useState(null);
+  const [pendingConnection, setPendingConnection] = import_react2.useState(null);
+  const [contextMenu, setContextMenu] = import_react2.useState(null);
+  const mousePositionRef = import_react2.useRef({ x: 0, y: 0 });
+  const isMouseOverRef = import_react2.useRef(false);
+  const getSocketPosition = import_react2.useCallback((node, socket) => {
+    const socketRadius = 6;
+    const headerHeight = 24;
+    const socketSpacing = 22;
+    const x = socket.isInput ? node.x : node.x + node.width;
+    let socketIndex = 0;
+    const sockets = socket.isInput ? node.inputs : node.outputs;
+    for (let i = 0;i < sockets.length; i++) {
+      if (sockets[i].id === socket.id) {
+        socketIndex = i;
+        break;
+      }
+    }
+    const y = node.y + headerHeight + 16 + socketIndex * socketSpacing;
+    return { x, y };
+  }, []);
+  const screenToCanvas = import_react2.useCallback((screenX, screenY) => {
+    const container = containerRef.current;
+    if (!container)
+      return { x: screenX, y: screenY };
+    const rect = container.getBoundingClientRect();
+    return {
+      x: (screenX - rect.left - pan.x) / zoom,
+      y: (screenY - rect.top - pan.y) / zoom
+    };
+  }, [pan, zoom]);
+  const findNodeAt = import_react2.useCallback((canvasX, canvasY) => {
+    for (let i = nodes.length - 1;i >= 0; i--) {
+      const node = nodes[i];
+      if (canvasX >= node.x && canvasX <= node.x + node.width && canvasY >= node.y && canvasY <= node.y + node.height) {
+        return node;
+      }
+    }
+    return null;
+  }, [nodes]);
+  const findSocketAt = import_react2.useCallback((canvasX, canvasY) => {
+    const socketRadius = 8;
+    for (const node of nodes) {
+      for (const socket of [...node.inputs, ...node.outputs]) {
+        const pos = getSocketPosition(node, socket);
+        const dist = Math.sqrt((canvasX - pos.x) ** 2 + (canvasY - pos.y) ** 2);
+        if (dist <= socketRadius) {
+          return { node, socket };
+        }
+      }
+    }
+    return null;
+  }, [nodes, getSocketPosition]);
+  const handleMouseDown2 = import_react2.useCallback((e) => {
+    const canvasPos = screenToCanvas(e.clientX, e.clientY);
+    const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
+    if (socketHit && e.button === 0) {
+      const { node: node2, socket } = socketHit;
+      if (socket.isInput) {
+        const existingConn = connections.find((c) => c.toNodeId === node2.id && c.toSocketId === socket.id);
+        if (existingConn) {
+          setConnections((prev) => prev.filter((c) => c.id !== existingConn.id));
+          setPendingConnection({
+            fromNodeId: existingConn.fromNodeId,
+            fromSocketId: existingConn.fromSocketId,
+            isInput: false,
+            mouseX: canvasPos.x,
+            mouseY: canvasPos.y
+          });
+          setDragging({
+            type: "socket",
+            startX: e.clientX,
+            startY: e.clientY
+          });
+          return;
+        }
+      }
+      setPendingConnection({
+        fromNodeId: node2.id,
+        fromSocketId: socket.id,
+        isInput: socket.isInput,
+        mouseX: canvasPos.x,
+        mouseY: canvasPos.y
+      });
+      setDragging({
+        type: "socket",
+        startX: e.clientX,
+        startY: e.clientY
+      });
+      return;
+    }
+    const node = findNodeAt(canvasPos.x, canvasPos.y);
+    if (node && e.button === 0) {
+      setSelectedNodeId(node.id);
+      setDragging({
+        type: "node",
+        nodeId: node.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        startNodeX: node.x,
+        startNodeY: node.y
+      });
+      setNodes((prev) => {
+        const idx = prev.findIndex((n) => n.id === node.id);
+        if (idx === -1 || idx === prev.length - 1)
+          return prev;
+        const newNodes = [...prev];
+        const [removed] = newNodes.splice(idx, 1);
+        newNodes.push(removed);
+        return newNodes;
+      });
+      return;
+    }
+    if (e.button === 1 || e.button === 0 && !node) {
+      setSelectedNodeId(null);
+      setDragging({
+        type: "pan",
+        startX: e.clientX - pan.x,
+        startY: e.clientY - pan.y
+      });
+    }
+  }, [screenToCanvas, findNodeAt, findSocketAt, connections, pan]);
+  const handleMouseMove = import_react2.useCallback((e) => {
+    if (!dragging)
+      return;
+    if (dragging.type === "node" && dragging.nodeId) {
+      const dx = (e.clientX - dragging.startX) / zoom;
+      const dy = (e.clientY - dragging.startY) / zoom;
+      setNodes((prev) => prev.map((n) => n.id === dragging.nodeId ? {
+        ...n,
+        x: (dragging.startNodeX ?? 0) + dx,
+        y: (dragging.startNodeY ?? 0) + dy
+      } : n));
+    } else if (dragging.type === "pan") {
+      setPan({
+        x: e.clientX - dragging.startX,
+        y: e.clientY - dragging.startY
+      });
+    } else if (dragging.type === "socket" && pendingConnection) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      setPendingConnection((prev) => prev ? { ...prev, mouseX: canvasPos.x, mouseY: canvasPos.y } : null);
+    }
+  }, [dragging, zoom, pendingConnection, screenToCanvas]);
+  const handleMouseUp = import_react2.useCallback((e) => {
+    if (dragging?.type === "socket" && pendingConnection) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
+      if (socketHit) {
+        const { node: targetNode, socket: targetSocket } = socketHit;
+        const canConnect = targetNode.id !== pendingConnection.fromNodeId && targetSocket.isInput !== pendingConnection.isInput && targetSocket.type === "color";
+        if (canConnect) {
+          const fromNode = pendingConnection.isInput ? targetNode.id : pendingConnection.fromNodeId;
+          const fromSocket = pendingConnection.isInput ? targetSocket.id : pendingConnection.fromSocketId;
+          const toNode = pendingConnection.isInput ? pendingConnection.fromNodeId : targetNode.id;
+          const toSocket = pendingConnection.isInput ? pendingConnection.fromSocketId : targetSocket.id;
+          setConnections((prev) => {
+            const filtered = prev.filter((c) => !(c.toNodeId === toNode && c.toSocketId === toSocket));
+            return [
+              ...filtered,
+              {
+                id: `conn-${Date.now()}`,
+                fromNodeId: fromNode,
+                fromSocketId: fromSocket,
+                toNodeId: toNode,
+                toSocketId: toSocket
+              }
+            ];
+          });
+        }
+      }
+    }
+    setDragging(null);
+    setPendingConnection(null);
+  }, [dragging, pendingConnection, screenToCanvas, findSocketAt]);
+  const getSocketType = (nodeId, socketId) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node)
+      return "color";
+    const socket = [...node.inputs, ...node.outputs].find((s) => s.id === socketId);
+    return socket?.type ?? "color";
+  };
+  import_react2.useEffect(() => {
+    const container = containerRef.current;
+    if (!container)
+      return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (e.metaKey || e.ctrlKey) {
+        const delta = e.deltaY > 0 ? 0.99 : 1.01;
+        setZoom((prev) => Math.max(0.25, Math.min(2, prev * delta)));
+      } else {
+        setPan((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY
+        }));
+      }
+    };
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, []);
+  const handleAddNode = import_react2.useCallback((type) => {
+    if (!contextMenu)
+      return;
+    const canvasPos = screenToCanvas(contextMenu.x, contextMenu.y);
+    const newNode = createNode(type, canvasPos.x, canvasPos.y);
+    setNodes((prev) => [...prev, newNode]);
+    setContextMenu(null);
+    setSelectedNodeId(newNode.id);
+  }, [contextMenu, screenToCanvas]);
+  const handleDeleteNode = import_react2.useCallback(() => {
+    if (!selectedNodeId)
+      return;
+    const node = nodes.find((n) => n.id === selectedNodeId);
+    if (node?.type === "output")
+      return;
+    setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+    setConnections((prev) => prev.filter((c) => c.fromNodeId !== selectedNodeId && c.toNodeId !== selectedNodeId));
+    setSelectedNodeId(null);
+  }, [selectedNodeId, nodes]);
+  import_react2.useEffect(() => {
+    const handleKeyDown2 = (e) => {
+      if (e.key === "Escape") {
+        setContextMenu(null);
+        return;
+      }
+      if (!isMouseOverRef.current)
+        return;
+      if (e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({
+          x: mousePositionRef.current.x,
+          y: mousePositionRef.current.y
+        });
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "x") && !contextMenu) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDeleteNode();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown2);
+    return () => window.removeEventListener("keydown", handleKeyDown2);
+  }, [handleDeleteNode, contextMenu]);
+  import_react2.useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container)
+      return;
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+      return;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
+    const gridSize = 20;
+    const gridExtent = 2000;
+    ctx.strokeStyle = "#252525";
+    ctx.lineWidth = 1 / zoom;
+    for (let x = -gridExtent;x <= gridExtent; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, -gridExtent);
+      ctx.lineTo(x, gridExtent);
+      ctx.stroke();
+    }
+    for (let y = -gridExtent;y <= gridExtent; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(-gridExtent, y);
+      ctx.lineTo(gridExtent, y);
+      ctx.stroke();
+    }
+    for (const conn of connections) {
+      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
+      const toNode = nodes.find((n) => n.id === conn.toNodeId);
+      if (!fromNode || !toNode)
+        continue;
+      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
+      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
+      if (!fromSocket || !toSocket)
+        continue;
+      const fromPos = getSocketPosition(fromNode, fromSocket);
+      const toPos = getSocketPosition(toNode, toSocket);
+      drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[fromSocket.type], zoom);
+    }
+    if (pendingConnection) {
+      const node = nodes.find((n) => n.id === pendingConnection.fromNodeId);
+      if (node) {
+        const socket = [...node.inputs, ...node.outputs].find((s) => s.id === pendingConnection.fromSocketId);
+        if (socket) {
+          const pos = getSocketPosition(node, socket);
+          const mousePos = {
+            x: pendingConnection.mouseX,
+            y: pendingConnection.mouseY
+          };
+          const fromPos = pendingConnection.isInput ? mousePos : pos;
+          const toPos = pendingConnection.isInput ? pos : mousePos;
+          drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[socket.type], zoom, true);
+        }
+      }
+    }
+    for (const node of nodes) {
+      drawNode(ctx, node, node.id === selectedNodeId, zoom);
+    }
+    ctx.restore();
+  }, [
+    nodes,
+    connections,
+    selectedNodeId,
+    pan,
+    zoom,
+    pendingConnection,
+    getSocketPosition
+  ]);
+  return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+    ref: containerRef,
+    className: "node-editor",
+    onMouseDown: (e) => {
+      if (contextMenu) {
+        const target = e.target;
+        if (!target.closest(".node-context-menu")) {
+          setContextMenu(null);
+        }
+      }
+      handleMouseDown2(e);
+    },
+    onMouseMove: (e) => {
+      mousePositionRef.current = { x: e.clientX, y: e.clientY };
+      handleMouseMove(e);
+    },
+    onMouseUp: handleMouseUp,
+    onMouseEnter: () => {
+      isMouseOverRef.current = true;
+    },
+    onMouseLeave: () => {
+      isMouseOverRef.current = false;
+      if (dragging?.type !== "socket") {
+        setDragging(null);
+      }
+    },
+    onContextMenu: (e) => e.preventDefault(),
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("canvas", {
+        ref: canvasRef
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+        className: "node-editor-header",
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+            children: "Shader Editor"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+            className: "material-selector",
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("select", {
+                value: selectedMaterialId || "",
+                onChange: (e) => onSelectMaterial(e.target.value),
+                children: materials.map((mat) => /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("option", {
+                  value: mat.id,
+                  children: mat.name
+                }, mat.id, false, undefined, this))
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+                className: "new-material-btn",
+                onClick: onNewMaterial,
+                title: "New Material",
+                children: "+"
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      contextMenu && /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+        className: "node-context-menu",
+        style: { left: contextMenu.x, top: contextMenu.y },
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+            className: "menu-header",
+            children: "Add Node"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+            onClick: () => handleAddNode("flat-color"),
+            children: "Flat Color"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
+            onClick: () => handleAddNode("texture"),
+            children: "Texture"
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      nodes.filter((n) => n.type === "flat-color").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const rect = container.getBoundingClientRect();
+        const screenX = node.x * zoom + pan.x + 12;
+        const screenY = node.y * zoom + pan.y + 24 + 36;
+        const swatchW = (node.width - 24) * zoom;
+        const swatchH = 24 * zoom;
+        return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
+          type: "color",
+          className: "node-color-picker",
+          value: node.data.color || "#808080",
+          onChange: (e) => {
+            setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, color: e.target.value } } : n));
+          },
+          style: {
+            left: screenX,
+            top: screenY,
+            width: swatchW,
+            height: swatchH
+          }
+        }, node.id, false, undefined, this);
+      })
+    ]
+  }, undefined, true, undefined, this);
+}
+function drawConnection(ctx, from, to, color, zoom, dashed = false) {
+  const dx = Math.abs(to.x - from.x);
+  const controlDist = Math.max(50, dx * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.bezierCurveTo(from.x + controlDist, from.y, to.x - controlDist, to.y, to.x, to.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 / zoom;
+  if (dashed) {
+    ctx.setLineDash([5 / zoom, 5 / zoom]);
+  } else {
+    ctx.setLineDash([]);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+function drawNode(ctx, node, selected, zoom) {
+  const { x, y, width, height, type } = node;
+  const headerHeight = 24;
+  const borderRadius = 6;
+  const socketRadius = 6;
+  const socketSpacing = 22;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+  roundRect(ctx, x + 3, y + 3, width, height, borderRadius);
+  ctx.fill();
+  ctx.fillStyle = "#3d3d3d";
+  roundRect(ctx, x, y, width, height, borderRadius);
+  ctx.fill();
+  ctx.fillStyle = NODE_COLORS[type];
+  roundRectTop(ctx, x, y, width, headerHeight, borderRadius);
+  ctx.fill();
+  if (selected) {
+    ctx.strokeStyle = "#ff9500";
+    ctx.lineWidth = 2 / zoom;
+    roundRect(ctx, x, y, width, height, borderRadius);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px 'Pixelify Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(getNodeTitle(type), x + width / 2, y + 16);
+  ctx.textAlign = "left";
+  ctx.font = "11px 'Pixelify Sans', sans-serif";
+  for (let i = 0;i < node.inputs.length; i++) {
+    const socket = node.inputs[i];
+    const sy = y + headerHeight + 16 + i * socketSpacing;
+    ctx.beginPath();
+    ctx.arc(x, sy, socketRadius, 0, Math.PI * 2);
+    ctx.fillStyle = SOCKET_COLORS[socket.type];
+    ctx.fill();
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.stroke();
+    ctx.fillStyle = "#cccccc";
+    ctx.fillText(socket.name, x + socketRadius + 6, sy + 4);
+  }
+  ctx.textAlign = "right";
+  for (let i = 0;i < node.outputs.length; i++) {
+    const socket = node.outputs[i];
+    const sy = y + headerHeight + 16 + i * socketSpacing;
+    ctx.beginPath();
+    ctx.arc(x + width, sy, socketRadius, 0, Math.PI * 2);
+    ctx.fillStyle = SOCKET_COLORS[socket.type];
+    ctx.fill();
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.stroke();
+    ctx.fillStyle = "#cccccc";
+    ctx.fillText(socket.name, x + width - socketRadius - 6, sy + 4);
+  }
+  if (type === "flat-color" && node.data.color) {
+    const swatchX = x + 12;
+    const swatchY = y + headerHeight + 36;
+    const swatchW = width - 24;
+    const swatchH = 24;
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
+    ctx.fillStyle = node.data.color;
+    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
+  }
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function roundRectTop(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// src/components/SceneTree.tsx
+var import_react3 = __toESM(require_react(), 1);
 
 // src/icons/hide_on.svg
 var hide_on_default = "./hide_on-sbmkbsw2.svg";
@@ -24147,7 +25480,7 @@ var hide_on_default = "./hide_on-sbmkbsw2.svg";
 var hide_off_default = "./hide_off-afbwcne5.svg";
 
 // src/components/SceneTree.tsx
-var jsx_dev_runtime3 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime5 = __toESM(require_jsx_dev_runtime(), 1);
 function TreeItem({
   obj,
   objects,
@@ -24160,27 +25493,30 @@ function TreeItem({
   const children = objects.filter((o) => o.parentName === obj.name);
   const hasChildren = children.length > 0;
   const isCollapsed = collapsedItems.has(obj.name);
-  return /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(jsx_dev_runtime3.Fragment, {
+  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(jsx_dev_runtime5.Fragment, {
     children: [
-      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
         className: `tree-item object-item ${obj.selected ? "selected" : ""}`,
-        onClick: () => onSelectObject(obj.name),
+        onClick: (e) => onSelectObject(obj.name, {
+          shiftKey: e.shiftKey,
+          ctrlKey: e.ctrlKey || e.metaKey
+        }),
         children: [
-          Array.from({ length: depth }).map((_, i) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+          Array.from({ length: depth }).map((_, i) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
             className: "tree-indent"
           }, i, false, undefined, this)),
-          hasChildren ? /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+          hasChildren ? /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
             className: "tree-collapse",
             onClick: (e) => {
               e.stopPropagation();
               toggleCollapsed(obj.name);
             },
             children: isCollapsed ? "▶" : "▼"
-          }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+          }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
             className: "tree-icon",
             children: "◆"
           }, undefined, false, undefined, this),
-          obj.inEditMode && /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("img", {
+          obj.inEditMode && /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("img", {
             src: editmode_hlt_default,
             className: "icon edit-mode-icon",
             width: 14,
@@ -24188,18 +25524,18 @@ function TreeItem({
             alt: "Edit Mode",
             title: "Edit Mode"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
             className: "tree-label",
             children: obj.name
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("button", {
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
             className: `visibility-btn ${obj.visible ? "visible" : "hidden"}`,
             onClick: (e) => {
               e.stopPropagation();
               onToggleVisibility(obj.name);
             },
             title: obj.visible ? "Hide" : "Show",
-            children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("img", {
+            children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("img", {
               src: obj.visible ? hide_off_default : hide_on_default,
               className: "icon",
               width: 18,
@@ -24209,7 +25545,7 @@ function TreeItem({
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      !isCollapsed && children.map((child) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(TreeItem, {
+      !isCollapsed && children.map((child) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(TreeItem, {
         obj: child,
         objects,
         depth: depth + 1,
@@ -24226,7 +25562,7 @@ function SceneTree({
   onSelectObject,
   onToggleVisibility
 }) {
-  const [collapsedItems, setCollapsedItems] = import_react2.useState(new Set);
+  const [collapsedItems, setCollapsedItems] = import_react3.useState(new Set);
   const toggleCollapsed = (name) => {
     setCollapsedItems((prev) => {
       const next = new Set(prev);
@@ -24239,33 +25575,33 @@ function SceneTree({
     });
   };
   const rootObjects = objects.filter((obj) => obj.parentName === null);
-  return /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
     className: "panel scene-tree",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
         className: "panel-header",
-        children: /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
           className: "panel-title",
           children: "Scene"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
         className: "panel-content",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
             className: "tree-item scene-root",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
                 className: "tree-icon",
                 children: "▼"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
                 className: "tree-label",
                 children: "Scene Collection"
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          rootObjects.map((obj) => /* @__PURE__ */ jsx_dev_runtime3.jsxDEV(TreeItem, {
+          rootObjects.map((obj) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(TreeItem, {
             obj,
             objects,
             depth: 1,
@@ -24274,7 +25610,7 @@ function SceneTree({
             collapsedItems,
             toggleCollapsed
           }, obj.name, false, undefined, this)),
-          objects.length === 0 && /* @__PURE__ */ jsx_dev_runtime3.jsxDEV("div", {
+          objects.length === 0 && /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
             className: "tree-empty",
             children: "No objects in scene"
           }, undefined, false, undefined, this)
@@ -24285,24 +25621,27 @@ function SceneTree({
 }
 
 // src/components/PropertiesPanel.tsx
-var import_react3 = __toESM(require_react(), 1);
-var jsx_dev_runtime4 = __toESM(require_jsx_dev_runtime(), 1);
+var import_react4 = __toESM(require_react(), 1);
+var jsx_dev_runtime6 = __toESM(require_jsx_dev_runtime(), 1);
 function VectorInput({
   label,
   value,
   onChange,
+  onEditStart,
+  onEditEnd,
   step = 0.1,
   precision = 3
 }) {
-  const [localX, setLocalX] = import_react3.useState(value.x.toFixed(precision));
-  const [localY, setLocalY] = import_react3.useState(value.y.toFixed(precision));
-  const [localZ, setLocalZ] = import_react3.useState(value.z.toFixed(precision));
-  import_react3.useEffect(() => {
+  const [localX, setLocalX] = import_react4.useState(value.x.toFixed(precision));
+  const [localY, setLocalY] = import_react4.useState(value.y.toFixed(precision));
+  const [localZ, setLocalZ] = import_react4.useState(value.z.toFixed(precision));
+  const dragRef = import_react4.useRef(null);
+  import_react4.useEffect(() => {
     setLocalX(value.x.toFixed(precision));
     setLocalY(value.y.toFixed(precision));
     setLocalZ(value.z.toFixed(precision));
   }, [value.x, value.y, value.z, precision]);
-  const handleChange = import_react3.useCallback((axis, newValue) => {
+  const handleChange = import_react4.useCallback((axis, newValue) => {
     if (axis === "x")
       setLocalX(newValue);
     else if (axis === "y")
@@ -24310,9 +25649,31 @@ function VectorInput({
     else
       setLocalZ(newValue);
   }, []);
-  const handleBlur = import_react3.useCallback((axis) => {
-    const parsed = axis === "x" ? parseFloat(localX) : axis === "y" ? parseFloat(localY) : parseFloat(localZ);
-    if (!isNaN(parsed)) {
+  const evaluateInput = import_react4.useCallback((input) => {
+    const trimmed = input.trim();
+    if (!trimmed)
+      return null;
+    const hasMathOps = /[+\-*/]/.test(trimmed.replace(/^-/, ""));
+    if (hasMathOps) {
+      try {
+        if (!/^[\d\s+\-*/().]+$/.test(trimmed))
+          return null;
+        const result = eval(trimmed);
+        if (typeof result === "number" && !isNaN(result) && isFinite(result)) {
+          return result;
+        }
+      } catch {}
+      return null;
+    }
+    const simple = parseFloat(trimmed);
+    if (!isNaN(simple) && isFinite(simple))
+      return simple;
+    return null;
+  }, []);
+  const handleBlur = import_react4.useCallback((axis) => {
+    const inputStr = axis === "x" ? localX : axis === "y" ? localY : localZ;
+    const parsed = evaluateInput(inputStr);
+    if (parsed !== null) {
       const newValue = new Vector3(axis === "x" ? parsed : value.x, axis === "y" ? parsed : value.y, axis === "z" ? parsed : value.z);
       onChange(newValue);
     } else {
@@ -24323,66 +25684,117 @@ function VectorInput({
       else
         setLocalZ(value.z.toFixed(precision));
     }
-  }, [localX, localY, localZ, value, onChange, precision]);
-  const handleKeyDown = import_react3.useCallback((e, axis) => {
+    onEditEnd?.();
+  }, [
+    localX,
+    localY,
+    localZ,
+    value,
+    onChange,
+    precision,
+    onEditEnd,
+    evaluateInput
+  ]);
+  const handleKeyDown = import_react4.useCallback((e, axis) => {
     if (e.key === "Enter") {
       handleBlur(axis);
       e.target.blur();
     }
   }, [handleBlur]);
-  return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+  const handleMouseDown = import_react4.useCallback((e, axis) => {
+    if (e.button !== 0)
+      return;
+    const target = e.target;
+    if (target.tagName === "INPUT")
+      return;
+    e.preventDefault();
+    const startValue = axis === "x" ? value.x : axis === "y" ? value.y : value.z;
+    dragRef.current = {
+      axis,
+      startX: e.clientX,
+      startValue
+    };
+    onEditStart?.();
+    document.body.style.cursor = "ew-resize";
+    const handleMouseMove = (moveEvent) => {
+      if (!dragRef.current)
+        return;
+      const deltaX = moveEvent.clientX - dragRef.current.startX;
+      const sensitivity = moveEvent.shiftKey ? 0.01 : 0.1;
+      const delta = deltaX * step * sensitivity;
+      const newAxisValue = dragRef.current.startValue + delta;
+      const newValue = new Vector3(dragRef.current.axis === "x" ? newAxisValue : value.x, dragRef.current.axis === "y" ? newAxisValue : value.y, dragRef.current.axis === "z" ? newAxisValue : value.z);
+      onChange(newValue);
+    };
+    const handleMouseUp = () => {
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      onEditEnd?.();
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [value, onChange, step, onEditStart, onEditEnd]);
+  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
     className: "vector-input",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
         className: "vector-label",
         children: label
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
         className: "vector-fields",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
             className: "vector-field",
+            onMouseDown: (e) => handleMouseDown(e, "x"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
                 className: "axis-label x",
                 children: "X"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
                 type: "text",
                 value: localX,
                 onChange: (e) => handleChange("x", e.target.value),
+                onFocus: () => onEditStart?.(),
                 onBlur: () => handleBlur("x"),
                 onKeyDown: (e) => handleKeyDown(e, "x")
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
             className: "vector-field",
+            onMouseDown: (e) => handleMouseDown(e, "y"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
                 className: "axis-label y",
                 children: "Y"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
                 type: "text",
                 value: localY,
                 onChange: (e) => handleChange("y", e.target.value),
+                onFocus: () => onEditStart?.(),
                 onBlur: () => handleBlur("y"),
                 onKeyDown: (e) => handleKeyDown(e, "y")
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
             className: "vector-field",
+            onMouseDown: (e) => handleMouseDown(e, "z"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
                 className: "axis-label z",
                 children: "Z"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
                 type: "text",
                 value: localZ,
                 onChange: (e) => handleChange("z", e.target.value),
+                onFocus: () => onEditStart?.(),
                 onBlur: () => handleBlur("z"),
                 onKeyDown: (e) => handleKeyDown(e, "z")
               }, undefined, false, undefined, this)
@@ -24398,90 +25810,164 @@ function PropertiesPanel({
   position,
   rotation,
   scale,
+  dimensions,
   onPositionChange,
   onRotationChange,
-  onScaleChange
+  onScaleChange,
+  onEditStart: onEditStart2,
+  onEditEnd: onEditEnd2
 }) {
   const rotationDeg = new Vector3(rotation.x * 180 / Math.PI, rotation.y * 180 / Math.PI, rotation.z * 180 / Math.PI);
-  const handleRotationChange = import_react3.useCallback((degValue) => {
+  const handleRotationChange = import_react4.useCallback((degValue) => {
     onRotationChange(new Vector3(degValue.x * Math.PI / 180, degValue.y * Math.PI / 180, degValue.z * Math.PI / 180));
   }, [onRotationChange]);
-  return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
     className: "panel properties-panel",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
         className: "panel-header",
-        children: /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
           className: "panel-title",
           children: "Properties"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
         className: "panel-content",
-        children: objectName ? /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(jsx_dev_runtime4.Fragment, {
+        children: objectName ? /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
           children: [
-            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
               className: "property-section",
-              children: /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+              children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
                 className: "section-header",
                 children: [
-                  /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+                  /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
                     className: "section-icon",
                     children: "◆"
                   }, undefined, false, undefined, this),
-                  /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+                  /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
                     className: "section-title",
                     children: objectName
                   }, undefined, false, undefined, this)
                 ]
               }, undefined, true, undefined, this)
             }, undefined, false, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
               className: "property-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
                   className: "section-header",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
                       className: "section-icon",
                       children: "⊞"
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
                       className: "section-title",
                       children: "Transform"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
                   className: "section-content",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
                       label: "Location",
                       value: position,
                       onChange: onPositionChange,
+                      onEditStart: onEditStart2,
+                      onEditEnd: onEditEnd2,
                       step: 0.1,
                       precision: 3
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
                       label: "Rotation",
                       value: rotationDeg,
                       onChange: handleRotationChange,
+                      onEditStart: onEditStart2,
+                      onEditEnd: onEditEnd2,
                       step: 1,
                       precision: 1
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
                       label: "Scale",
                       value: scale,
                       onChange: onScaleChange,
+                      onEditStart: onEditStart2,
+                      onEditEnd: onEditEnd2,
                       step: 0.1,
                       precision: 3
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this)
               ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+              className: "property-section",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                  className: "section-header",
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                      className: "section-icon",
+                      children: "\uD83D\uDCD0"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                      className: "section-title",
+                      children: "Dimensions"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                  className: "section-content",
+                  children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                    className: "dimensions-display",
+                    children: [
+                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                        className: "dimension-row",
+                        children: [
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "axis-label x",
+                            children: "X"
+                          }, undefined, false, undefined, this),
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "dimension-value",
+                            children: dimensions.x.toFixed(3)
+                          }, undefined, false, undefined, this)
+                        ]
+                      }, undefined, true, undefined, this),
+                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                        className: "dimension-row",
+                        children: [
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "axis-label y",
+                            children: "Y"
+                          }, undefined, false, undefined, this),
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "dimension-value",
+                            children: dimensions.y.toFixed(3)
+                          }, undefined, false, undefined, this)
+                        ]
+                      }, undefined, true, undefined, this),
+                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                        className: "dimension-row",
+                        children: [
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "axis-label z",
+                            children: "Z"
+                          }, undefined, false, undefined, this),
+                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                            className: "dimension-value",
+                            children: dimensions.z.toFixed(3)
+                          }, undefined, false, undefined, this)
+                        ]
+                      }, undefined, true, undefined, this)
+                    ]
+                  }, undefined, true, undefined, this)
+                }, undefined, false, undefined, this)
+              ]
             }, undefined, true, undefined, this)
           ]
-        }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
+        }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
           className: "no-selection",
           children: "No object selected"
         }, undefined, false, undefined, this)
@@ -24491,7 +25977,7 @@ function PropertiesPanel({
 }
 
 // src/components/StatusBar.tsx
-var jsx_dev_runtime5 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime7 = __toESM(require_jsx_dev_runtime(), 1);
 function StatusBar({
   mode,
   selectionMode,
@@ -24539,30 +26025,30 @@ function StatusBar({
     }
     return selectedCount > 0 ? `${selectedCount} object${selectedCount > 1 ? "s" : ""} selected` : "No selection";
   };
-  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
     className: "status-bar",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
         className: "status-left",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-mode",
             children: getModeText()
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-divider",
             children: "|"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-selection",
             children: getSelectionText()
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
         className: "status-right",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-resolution",
             children: [
               renderWidth,
@@ -24570,11 +26056,11 @@ function StatusBar({
               renderHeight
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-divider",
             children: "|"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
             className: "status-fps",
             children: [
               fps,
@@ -24590,60 +26076,60 @@ function StatusBar({
 }
 
 // src/components/Instructions.tsx
-var jsx_dev_runtime6 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime8 = __toESM(require_jsx_dev_runtime(), 1);
 function Instructions() {
-  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
     className: "instructions",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "Tab"
       }, undefined, false, undefined, this),
       " Edit/Object | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "LMB"
       }, undefined, false, undefined, this),
       " Select | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "⇧A"
       }, undefined, false, undefined, this),
       " Add |",
       " ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "Scroll"
       }, undefined, false, undefined, this),
       " Orbit | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "⌘Scroll"
       }, undefined, false, undefined, this),
       " Zoom | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "⇧Scroll"
       }, undefined, false, undefined, this),
       " Pan | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "G"
       }, undefined, false, undefined, this),
       " Grab | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "R"
       }, undefined, false, undefined, this),
       " Rotate | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "S"
       }, undefined, false, undefined, this),
       " Scale |",
       " ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "1"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "3"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "7"
       }, undefined, false, undefined, this),
       " Views | ",
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("kbd", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
         children: "⌘Z"
       }, undefined, false, undefined, this),
       " Undo"
@@ -24652,7 +26138,7 @@ function Instructions() {
 }
 
 // src/components/AddMenu.tsx
-var import_react4 = __toESM(require_react(), 1);
+var import_react5 = __toESM(require_react(), 1);
 
 // src/icons/mesh_plane.svg
 var mesh_plane_default = "./mesh_plane-011tjaxx.svg";
@@ -24663,34 +26149,54 @@ var mesh_cube_default = "./mesh_cube-qjwwzm4v.svg";
 // src/icons/mesh_circle.svg
 var mesh_circle_default = "./mesh_circle-hhgm463m.svg";
 
+// src/icons/mesh_uvsphere.svg
+var mesh_uvsphere_default = "./mesh_uvsphere-0zjxbwqz.svg";
+
+// src/icons/mesh_icosphere.svg
+var mesh_icosphere_default = "./mesh_icosphere-jd42mbw2.svg";
+
+// src/icons/mesh_cylinder.svg
+var mesh_cylinder_default = "./mesh_cylinder-c832mekc.svg";
+
+// src/icons/mesh_cone.svg
+var mesh_cone_default = "./mesh_cone-qh3eewg3.svg";
+
+// src/icons/mesh_torus.svg
+var mesh_torus_default = "./mesh_torus-zrqq0fj4.svg";
+
 // src/components/AddMenu.tsx
-var jsx_dev_runtime7 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime9 = __toESM(require_jsx_dev_runtime(), 1);
 var PRIMITIVES = [
   { type: "plane", label: "Plane", icon: mesh_plane_default },
   { type: "cube", label: "Cube", icon: mesh_cube_default },
-  { type: "circle", label: "Circle", icon: mesh_circle_default }
+  { type: "circle", label: "Circle", icon: mesh_circle_default },
+  { type: "uvsphere", label: "UV Sphere", icon: mesh_uvsphere_default },
+  { type: "icosphere", label: "Ico Sphere", icon: mesh_icosphere_default },
+  { type: "cylinder", label: "Cylinder", icon: mesh_cylinder_default },
+  { type: "cone", label: "Cone", icon: mesh_cone_default },
+  { type: "torus", label: "Torus", icon: mesh_torus_default }
 ];
 function AddMenu({ x, y, onSelect, onClose }) {
-  const menuRef = import_react4.useRef(null);
-  import_react4.useEffect(() => {
+  const menuRef = import_react5.useRef(null);
+  import_react5.useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         onClose();
       }
     };
-    const handleKeyDown = (e) => {
+    const handleKeyDown2 = (e) => {
       if (e.key === "Escape") {
         onClose();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown2);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown2);
     };
   }, [onClose]);
-  return /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
     ref: menuRef,
     className: "add-menu",
     style: {
@@ -24698,25 +26204,25 @@ function AddMenu({ x, y, onSelect, onClose }) {
       top: y
     },
     children: [
-      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
         className: "add-menu-header",
         children: "Add Mesh"
       }, undefined, false, undefined, this),
-      PRIMITIVES.map((primitive) => /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("button", {
+      PRIMITIVES.map((primitive) => /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onSelect(primitive.type);
           onClose();
         },
         children: [
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("img", {
+          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("img", {
             src: primitive.icon,
             className: "add-menu-icon",
             width: 16,
             height: 16,
             alt: primitive.label
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
             className: "add-menu-label",
             children: primitive.label
           }, undefined, false, undefined, this)
@@ -24727,34 +26233,34 @@ function AddMenu({ x, y, onSelect, onClose }) {
 }
 
 // src/components/ShadingContextMenu.tsx
-var import_react5 = __toESM(require_react(), 1);
-var jsx_dev_runtime8 = __toESM(require_jsx_dev_runtime(), 1);
+var import_react6 = __toESM(require_react(), 1);
+var jsx_dev_runtime10 = __toESM(require_jsx_dev_runtime(), 1);
 function ObjectContextMenu({
   x,
   y,
   onAction,
   onClose
 }) {
-  const menuRef = import_react5.useRef(null);
-  import_react5.useEffect(() => {
+  const menuRef = import_react6.useRef(null);
+  import_react6.useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         onClose();
       }
     };
-    const handleKeyDown = (e) => {
+    const handleKeyDown2 = (e) => {
       if (e.key === "Escape") {
         onClose();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown2);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown2);
     };
   }, [onClose]);
-  return /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
     ref: menuRef,
     className: "add-menu",
     style: {
@@ -24762,42 +26268,42 @@ function ObjectContextMenu({
       top: y
     },
     children: [
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
         className: "add-menu-header",
         children: "Object"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("shade-smooth");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Shade Smooth"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("shade-flat");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Shade Flat"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
         className: "add-menu-separator"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("origin-to-center");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Origin to Center of Mass"
         }, undefined, false, undefined, this)
@@ -24808,80 +26314,80 @@ function ObjectContextMenu({
 var ShadingContextMenu = ObjectContextMenu;
 
 // src/components/ViewportGizmo.tsx
-var jsx_dev_runtime9 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime11 = __toESM(require_jsx_dev_runtime(), 1);
 function ViewportGizmo({
   onViewpointChange,
   onToggleOrtho,
   isOrtho
 }) {
-  return /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
     className: "viewport-gizmo",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
         className: "viewport-gizmo-cube",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
             className: "gizmo-face gizmo-top",
             onClick: () => onViewpointChange("top"),
             title: "Top (Numpad 7)",
-            children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+            children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
               className: "gizmo-label gizmo-z",
               children: "Z"
             }, undefined, false, undefined, this)
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
             className: "gizmo-middle-row",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
                 className: "gizmo-face gizmo-left",
                 onClick: () => onViewpointChange("left"),
                 title: "Left (Ctrl+Numpad 3)",
-                children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
                   className: "gizmo-label gizmo-x-neg",
                   children: "−X"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
                 className: "gizmo-face gizmo-front",
                 onClick: () => onViewpointChange("front"),
                 title: "Front (Numpad 1)",
-                children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
                   className: "gizmo-label gizmo-y-neg",
                   children: "−Y"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
                 className: "gizmo-face gizmo-right",
                 onClick: () => onViewpointChange("right"),
                 title: "Right (Numpad 3)",
-                children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
                   className: "gizmo-label gizmo-x",
                   children: "X"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
                 className: "gizmo-face gizmo-back",
                 onClick: () => onViewpointChange("back"),
                 title: "Back (Ctrl+Numpad 1)",
-                children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
                   className: "gizmo-label gizmo-y",
                   children: "Y"
                 }, undefined, false, undefined, this)
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
             className: "gizmo-face gizmo-bottom",
             onClick: () => onViewpointChange("bottom"),
             title: "Bottom (Ctrl+Numpad 7)",
-            children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
+            children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
               className: "gizmo-label gizmo-z-neg",
               children: "−Z"
             }, undefined, false, undefined, this)
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
         className: `gizmo-ortho-toggle ${isOrtho ? "ortho" : "persp"}`,
         onClick: onToggleOrtho,
         title: "Toggle Orthographic/Perspective (Numpad 5)",
@@ -24891,24 +26397,599 @@ function ViewportGizmo({
   }, undefined, true, undefined, this);
 }
 
+// src/components/WelcomeModal.tsx
+var import_react7 = __toESM(require_react(), 1);
+var jsx_dev_runtime12 = __toESM(require_jsx_dev_runtime(), 1);
+var STORAGE_KEY = "ps1ender_welcome_shown";
+function WelcomeModal({ onClose }) {
+  const [dontShowAgain, setDontShowAgain] = import_react7.useState(false);
+  const handleClose = () => {
+    if (dontShowAgain) {
+      localStorage.setItem(STORAGE_KEY, "true");
+    }
+    onClose();
+  };
+  return /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+    className: "modal-overlay",
+    onClick: handleClose,
+    children: /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+      className: "modal-content welcome-modal",
+      onClick: (e) => e.stopPropagation(),
+      children: [
+        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+          className: "welcome-header",
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h1", {
+              children: "Welcome to PS1ender"
+            }, undefined, false, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("p", {
+              className: "welcome-subtitle",
+              children: "A retro-style 3D editor with PS1 aesthetics"
+            }, undefined, false, undefined, this)
+          ]
+        }, undefined, true, undefined, this),
+        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+          className: "welcome-sections",
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+              className: "welcome-section",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                  children: "\uD83C\uDFAE Navigation"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "Scroll"
+                        }, undefined, false, undefined, this),
+                        " Orbit camera around object"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "⌘ + Scroll"
+                        }, undefined, false, undefined, this),
+                        " Zoom in/out"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "⇧ + Scroll"
+                        }, undefined, false, undefined, this),
+                        " Pan camera"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "1"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "3"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "7"
+                        }, undefined, false, undefined, this),
+                        " Snap to front/side/top views"
+                      ]
+                    }, undefined, true, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+              className: "welcome-section",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                  children: "\uD83D\uDD27 Object Mode"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "LMB"
+                        }, undefined, false, undefined, this),
+                        " Select object"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "⇧ + A"
+                        }, undefined, false, undefined, this),
+                        " Add primitive (cube, plane, etc.)"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "G"
+                        }, undefined, false, undefined, this),
+                        " Grab/Move selected object"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "R"
+                        }, undefined, false, undefined, this),
+                        " Rotate selected object"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "S"
+                        }, undefined, false, undefined, this),
+                        " Scale selected object"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "X"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "Y"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "Z"
+                        }, undefined, false, undefined, this),
+                        " Constrain to axis"
+                      ]
+                    }, undefined, true, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+              className: "welcome-section",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                  children: "✏️ Edit Mode"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "Tab"
+                        }, undefined, false, undefined, this),
+                        " Toggle Edit/Object mode"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "1"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "2"
+                        }, undefined, false, undefined, this),
+                        " ",
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "3"
+                        }, undefined, false, undefined, this),
+                        " Vertex/Edge/Face selection"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "A"
+                        }, undefined, false, undefined, this),
+                        " Select all"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "B"
+                        }, undefined, false, undefined, this),
+                        " Box select"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: "Same G/R/S transforms work on selection"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+              className: "welcome-section",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                  children: "\uD83D\uDCBE General"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "⌘ + Z"
+                        }, undefined, false, undefined, this),
+                        " Undo"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "⌘ + ⇧ + Z"
+                        }, undefined, false, undefined, this),
+                        " Redo"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: [
+                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                          children: "Delete"
+                        }, undefined, false, undefined, this),
+                        " Delete selected"
+                      ]
+                    }, undefined, true, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                      children: "Drag & drop .OBJ files to import"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, undefined, true, undefined, this),
+        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+          className: "welcome-footer",
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("p", {
+              className: "welcome-note",
+              children: "\uD83E\uDD16 This project was entirely written by AI (Claude) under human supervision. Total cost: ~$50 in tokens."
+            }, undefined, false, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+              className: "welcome-footer-actions",
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("label", {
+                  className: "welcome-checkbox",
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("input", {
+                      type: "checkbox",
+                      checked: dontShowAgain,
+                      onChange: (e) => setDontShowAgain(e.target.checked)
+                    }, undefined, false, undefined, this),
+                    "Don't show this again"
+                  ]
+                }, undefined, true, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("button", {
+                  className: "welcome-btn",
+                  onClick: handleClose,
+                  children: "Get Started"
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, undefined, true, undefined, this)
+      ]
+    }, undefined, true, undefined, this)
+  }, undefined, false, undefined, this);
+}
+function shouldShowWelcome() {
+  return localStorage.getItem(STORAGE_KEY) !== "true";
+}
+
+// src/components/PrimitiveSettings.tsx
+var import_react8 = __toESM(require_react(), 1);
+var jsx_dev_runtime13 = __toESM(require_jsx_dev_runtime(), 1);
+function NumberInput({
+  label: label2,
+  value: value2,
+  onChange: onChange2,
+  onSubmit,
+  min,
+  max,
+  step: step2 = 0.1,
+  integer = false
+}) {
+  const [localValue, setLocalValue] = import_react8.useState(value2.toString());
+  import_react8.useEffect(() => {
+    setLocalValue(integer ? value2.toString() : value2.toFixed(3));
+  }, [value2, integer]);
+  const handleChange2 = import_react8.useCallback((newValue) => {
+    setLocalValue(newValue);
+    let parsed = integer ? parseInt(newValue) : parseFloat(newValue);
+    if (isNaN(parsed))
+      return;
+    if (min !== undefined)
+      parsed = Math.max(min, parsed);
+    if (max !== undefined)
+      parsed = Math.min(max, parsed);
+    onChange2(parsed);
+  }, [onChange2, min, max, integer]);
+  const handleBlur2 = import_react8.useCallback(() => {
+    let parsed = integer ? parseInt(localValue) : parseFloat(localValue);
+    if (isNaN(parsed)) {
+      setLocalValue(integer ? value2.toString() : value2.toFixed(3));
+      return;
+    }
+    if (min !== undefined)
+      parsed = Math.max(min, parsed);
+    if (max !== undefined)
+      parsed = Math.min(max, parsed);
+    setLocalValue(integer ? parsed.toString() : parsed.toFixed(3));
+  }, [localValue, value2, min, max, integer]);
+  const handleKeyDown2 = import_react8.useCallback((e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      handleBlur2();
+      onSubmit();
+    }
+  }, [handleBlur2, onSubmit]);
+  return /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
+    className: "primitive-setting",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("label", {
+        children: label2
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("input", {
+        type: "text",
+        value: localValue,
+        onChange: (e) => handleChange2(e.target.value),
+        onBlur: handleBlur2,
+        onKeyDown: handleKeyDown2
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+function PrimitiveSettings({
+  params,
+  onChange: onChange2,
+  onSubmit
+}) {
+  const titles = {
+    plane: "Add Plane",
+    cube: "Add Cube",
+    circle: "Add Circle",
+    uvsphere: "Add UV Sphere",
+    icosphere: "Add Ico Sphere",
+    cylinder: "Add Cylinder",
+    cone: "Add Cone",
+    torus: "Add Torus"
+  };
+  const title = titles[params.type];
+  return /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
+    className: "primitive-settings-modal",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
+        className: "primitive-settings-header",
+        children: title
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
+        className: "primitive-settings-content",
+        children: [
+          params.type === "plane" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+            label: "Size",
+            value: params.planeSize ?? 2,
+            onChange: (v) => onChange2({ ...params, planeSize: v }),
+            onSubmit,
+            min: 0.01,
+            step: 0.1
+          }, undefined, false, undefined, this),
+          params.type === "cube" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+            label: "Size",
+            value: params.cubeSize ?? 2,
+            onChange: (v) => onChange2({ ...params, cubeSize: v }),
+            onSubmit,
+            min: 0.01,
+            step: 0.1
+          }, undefined, false, undefined, this),
+          params.type === "circle" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.circleVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, circleVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 128,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.circleRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, circleRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "uvsphere" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Segments",
+                value: params.uvSphereSegments ?? 32,
+                onChange: (v) => onChange2({ ...params, uvSphereSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Rings",
+                value: params.uvSphereRings ?? 16,
+                onChange: (v) => onChange2({ ...params, uvSphereRings: v }),
+                onSubmit,
+                min: 2,
+                max: 32,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.uvSphereRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, uvSphereRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "icosphere" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Subdivisions",
+                value: params.icoSphereSubdivisions ?? 2,
+                onChange: (v) => onChange2({ ...params, icoSphereSubdivisions: v }),
+                onSubmit,
+                min: 1,
+                max: 5,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.icoSphereRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, icoSphereRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "cylinder" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.cylinderVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, cylinderVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.cylinderRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, cylinderRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Depth",
+                value: params.cylinderDepth ?? 2,
+                onChange: (v) => onChange2({ ...params, cylinderDepth: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "cone" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.coneVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, coneVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius 1",
+                value: params.coneRadius1 ?? 1,
+                onChange: (v) => onChange2({ ...params, coneRadius1: v }),
+                onSubmit,
+                min: 0,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Radius 2",
+                value: params.coneRadius2 ?? 0,
+                onChange: (v) => onChange2({ ...params, coneRadius2: v }),
+                onSubmit,
+                min: 0,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Depth",
+                value: params.coneDepth ?? 2,
+                onChange: (v) => onChange2({ ...params, coneDepth: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "torus" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Major Segments",
+                value: params.torusMajorSegments ?? 48,
+                onChange: (v) => onChange2({ ...params, torusMajorSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Minor Segments",
+                value: params.torusMinorSegments ?? 12,
+                onChange: (v) => onChange2({ ...params, torusMinorSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 32,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Major Radius",
+                value: params.torusMajorRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, torusMajorRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
+                label: "Minor Radius",
+                value: params.torusMinorRadius ?? 0.25,
+                onChange: (v) => onChange2({ ...params, torusMinorRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.05
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        ]
+      }, undefined, true, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+
 // src/App.tsx
-var jsx_dev_runtime10 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime14 = __toESM(require_jsx_dev_runtime(), 1);
 function App() {
-  const canvasRef = import_react6.useRef(null);
-  const viewportRef = import_react6.useRef(null);
-  const workerClientRef = import_react6.useRef(null);
-  const sceneRef = import_react6.useRef(new Scene);
-  const editorRef = import_react6.useRef(null);
-  const gridDataRef = import_react6.useRef(null);
-  const renderLoopIdRef = import_react6.useRef(0);
-  const renderDimensionsRef = import_react6.useRef({
+  const canvasRef = import_react9.useRef(null);
+  const viewportRef = import_react9.useRef(null);
+  const workerClientRef = import_react9.useRef(null);
+  const sceneRef = import_react9.useRef(new Scene);
+  const editorRef = import_react9.useRef(null);
+  const gridDataRef = import_react9.useRef(null);
+  const renderLoopIdRef = import_react9.useRef(0);
+  const renderDimensionsRef = import_react9.useRef({
     displayWidth: 640,
     displayHeight: 480,
     renderWidth: 640,
     renderHeight: 480
   });
-  const textureRef = import_react6.useRef(null);
-  const textureChangedRef = import_react6.useRef(false);
+  const textureRef = import_react9.useRef(null);
+  const textureChangedRef = import_react9.useRef(false);
   const {
     state: uiState,
     setters,
@@ -24929,6 +27010,7 @@ function App() {
     selectedPosition,
     selectedRotation,
     selectedScale,
+    selectedDimensions,
     selectedVertexCount,
     selectedEdgeCount,
     selectedFaceCount,
@@ -24941,11 +27023,42 @@ function App() {
     handleViewModeChange,
     handleSelectionModeChange
   } = actions;
-  const inputManagerRef = import_react6.useRef(new InputManager);
-  const [addMenuPos, setAddMenuPos] = import_react6.useState(null);
-  const [contextMenuPos, setContextMenuPos] = import_react6.useState(null);
-  const [isOrtho, setIsOrtho] = import_react6.useState(false);
-  const resizeCanvas = import_react6.useCallback(() => {
+  const inputManagerRef = import_react9.useRef(new InputManager);
+  const [addMenuPos, setAddMenuPos] = import_react9.useState(null);
+  const [contextMenuPos, setContextMenuPos] = import_react9.useState(null);
+  const [isOrtho, setIsOrtho] = import_react9.useState(false);
+  const [showWelcome, setShowWelcome] = import_react9.useState(shouldShowWelcome);
+  const [workspace, setWorkspace] = import_react9.useState("modeling");
+  const [selectedMaterialId, setSelectedMaterialId] = import_react9.useState(null);
+  const [materialList, setMaterialList] = import_react9.useState([]);
+  const [primitiveParams, setPrimitiveParams] = import_react9.useState(null);
+  const newPrimitiveRef = import_react9.useRef(null);
+  const [boxSelection, setBoxSelection] = import_react9.useState(null);
+  const boxSelectionStartRef = import_react9.useRef(null);
+  const BOX_SELECT_THRESHOLD = 5;
+  import_react9.useEffect(() => {
+    if (primitiveParams && newPrimitiveRef.current) {
+      const newObj = newPrimitiveRef.current;
+      if (selectedObjectName !== newObj.name) {
+        const editor = editorRef.current;
+        if (editor) {
+          editor.recordObjectAdd(newObj);
+        }
+        newPrimitiveRef.current = null;
+        setPrimitiveParams(null);
+      }
+    }
+  }, [selectedObjectName, primitiveParams]);
+  import_react9.useEffect(() => {
+    if (workspace === "shading" && selectedObjectName) {
+      const scene = sceneRef.current;
+      const obj = scene.objects.find((o) => o.name === selectedObjectName);
+      if (obj && obj.materialId) {
+        setSelectedMaterialId(obj.materialId);
+      }
+    }
+  }, [selectedObjectName, workspace]);
+  const resizeCanvas = import_react9.useCallback(() => {
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
     const workerClient = workerClientRef.current;
@@ -24969,12 +27082,22 @@ function App() {
       workerClient.setRenderResolution(baseWidth, baseHeight);
     }
   }, []);
-  const loadOBJ = import_react6.useCallback(async (url, name) => {
+  const loadOBJ = import_react9.useCallback(async (url, name) => {
     const scene = sceneRef.current;
     try {
       console.log(`Loading OBJ: ${url}`);
-      const result = await OBJLoader.load(url, new Color(200, 200, 200));
-      const meshEntries = Array.from(result.meshes.entries());
+      const result2 = await OBJLoader.load(url, new Color(200, 200, 200));
+      const mtlToShaderMaterial = new Map;
+      for (const [mtlName, mtlMat] of result2.materials) {
+        const shaderMat = scene.materials.createFromMTL({
+          name: mtlName,
+          diffuseColor: mtlMat.diffuseColor,
+          diffuseTexturePath: mtlMat.diffuseTexturePath
+        });
+        mtlToShaderMaterial.set(mtlName, shaderMat.id);
+        console.log(`Created shader material "${mtlName}" from MTL`);
+      }
+      const meshEntries = Array.from(result2.meshes.entries());
       let firstObj = null;
       let overallCenter = Vector3.zero();
       let meshCount = 0;
@@ -24986,11 +27109,19 @@ function App() {
       if (meshCount > 0) {
         overallCenter = overallCenter.mul(1 / meshCount);
       }
+      const createdObjects = [];
       for (const [meshName, mesh] of meshEntries) {
         const objectName = meshName !== "default" ? meshName : name;
         const obj = new SceneObject(objectName, mesh);
         obj.position = new Vector3(-overallCenter.x, -overallCenter.y, -overallCenter.z);
+        const mtlMaterialName = result2.groupMaterials.get(meshName);
+        if (mtlMaterialName && mtlToShaderMaterial.has(mtlMaterialName)) {
+          obj.materialId = mtlToShaderMaterial.get(mtlMaterialName);
+        } else if (mtlToShaderMaterial.size > 0) {
+          obj.materialId = mtlToShaderMaterial.values().next().value;
+        }
         scene.addObject(obj);
+        createdObjects.push(obj);
         if (!firstObj) {
           firstObj = obj;
         }
@@ -24999,12 +27130,19 @@ function App() {
       if (firstObj) {
         scene.selectObject(firstObj);
       }
-      if (result.defaultTexture) {
-        console.log("Loaded texture, enabling texturing");
-        textureRef.current = result.defaultTexture;
+      if (result2.defaultTexture) {
+        console.log("Loaded texture, assigning to loaded objects");
+        for (const obj of createdObjects) {
+          obj.texture = result2.defaultTexture;
+        }
+        textureRef.current = result2.defaultTexture;
         textureChangedRef.current = true;
       }
-      const size = result.defaultMesh.getSize();
+      setMaterialList([...scene.materials.getAll()]);
+      if (firstObj && firstObj.materialId) {
+        setSelectedMaterialId(firstObj.materialId);
+      }
+      const size = result2.defaultMesh.getSize();
       const maxDim = Math.max(size.x, size.y, size.z);
       scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
       scene.camera.target = Vector3.zero();
@@ -25013,15 +27151,39 @@ function App() {
       console.warn(`Could not load OBJ file: ${error}`);
     }
   }, []);
-  const handleSelectObject = import_react6.useCallback((name) => {
+  const lastSelectedRef = import_react9.useRef(null);
+  const handleSelectObject = import_react9.useCallback((name, modifiers) => {
     const scene = sceneRef.current;
     const obj = scene.objects.find((o) => o.name === name);
-    if (obj) {
+    if (!obj)
+      return;
+    if (modifiers.shiftKey && lastSelectedRef.current) {
+      const lastIdx = scene.objects.findIndex((o) => o.name === lastSelectedRef.current);
+      const currentIdx = scene.objects.findIndex((o) => o.name === name);
+      if (lastIdx !== -1 && currentIdx !== -1) {
+        const startIdx = Math.min(lastIdx, currentIdx);
+        const endIdx = Math.max(lastIdx, currentIdx);
+        for (let i = startIdx;i <= endIdx; i++) {
+          scene.objects[i].selected = true;
+        }
+        scene.activeObject = obj;
+      }
+    } else if (modifiers.ctrlKey) {
+      obj.selected = !obj.selected;
+      if (obj.selected) {
+        scene.activeObject = obj;
+      } else if (scene.activeObject === obj) {
+        const otherSelected = scene.objects.find((o) => o.selected && o !== obj);
+        scene.activeObject = otherSelected || null;
+      }
+      lastSelectedRef.current = name;
+    } else {
       scene.selectObject(obj);
-      updateUIState(true);
+      lastSelectedRef.current = name;
     }
+    updateUIState(true);
   }, [updateUIState]);
-  const handleToggleVisibility = import_react6.useCallback((name) => {
+  const handleToggleVisibility = import_react9.useCallback((name) => {
     const scene = sceneRef.current;
     const obj = scene.objects.find((o) => o.name === name);
     if (obj) {
@@ -25029,39 +27191,148 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleAddPrimitive = import_react6.useCallback((type) => {
+  const handleAddPrimitive = import_react9.useCallback((type) => {
     const scene = sceneRef.current;
-    const editor = editorRef.current;
-    const baseName = type.charAt(0).toUpperCase() + type.slice(1);
+    const typeNames = {
+      plane: "Plane",
+      cube: "Cube",
+      circle: "Circle",
+      uvsphere: "UVSphere",
+      icosphere: "IcoSphere",
+      cylinder: "Cylinder",
+      cone: "Cone",
+      torus: "Torus"
+    };
+    const baseName = typeNames[type];
     let name = baseName;
     let counter = 1;
     while (scene.objects.some((o) => o.name === name)) {
       name = `${baseName}.${String(counter).padStart(3, "0")}`;
       counter++;
     }
-    let mesh;
-    switch (type) {
-      case "plane":
-        mesh = createPlaneMesh(2);
-        break;
-      case "circle":
-        mesh = createCircleMesh(1, 32);
-        break;
-      case "cube":
-      default:
-        mesh = createCubeMesh(2);
-        break;
-    }
+    const defaultParams = (() => {
+      switch (type) {
+        case "plane":
+          return { type: "plane", planeSize: 2 };
+        case "circle":
+          return { type: "circle", circleRadius: 1, circleVertices: 32 };
+        case "cube":
+          return { type: "cube", cubeSize: 2 };
+        case "uvsphere":
+          return {
+            type: "uvsphere",
+            uvSphereSegments: 32,
+            uvSphereRings: 16,
+            uvSphereRadius: 1
+          };
+        case "icosphere":
+          return {
+            type: "icosphere",
+            icoSphereSubdivisions: 2,
+            icoSphereRadius: 1
+          };
+        case "cylinder":
+          return {
+            type: "cylinder",
+            cylinderVertices: 32,
+            cylinderRadius: 1,
+            cylinderDepth: 2
+          };
+        case "cone":
+          return {
+            type: "cone",
+            coneVertices: 32,
+            coneRadius1: 1,
+            coneRadius2: 0,
+            coneDepth: 2
+          };
+        case "torus":
+          return {
+            type: "torus",
+            torusMajorSegments: 48,
+            torusMinorSegments: 12,
+            torusMajorRadius: 1,
+            torusMinorRadius: 0.25
+          };
+      }
+    })();
+    const mesh = createPrimitiveMesh(defaultParams);
     const obj = new SceneObject(name, mesh);
     scene.addObject(obj);
     scene.selectObject(obj);
-    if (editor) {
-      editor.recordObjectAdd(obj);
-    }
+    newPrimitiveRef.current = obj;
+    setPrimitiveParams(defaultParams);
     updateUIState(true);
     setAddMenuPos(null);
   }, [updateUIState]);
-  const handlePositionChange = import_react6.useCallback((position) => {
+  const createPrimitiveMesh = (params) => {
+    switch (params.type) {
+      case "plane":
+        return createPlaneMesh(params.planeSize ?? 2);
+      case "circle":
+        return createCircleMesh(params.circleRadius ?? 1, params.circleVertices ?? 32);
+      case "cube":
+        return createCubeMesh(params.cubeSize ?? 2);
+      case "uvsphere":
+        return createUVSphereMesh(params.uvSphereRadius ?? 1, params.uvSphereSegments ?? 32, params.uvSphereRings ?? 16);
+      case "icosphere":
+        return createIcoSphereMesh(params.icoSphereRadius ?? 1, params.icoSphereSubdivisions ?? 2);
+      case "cylinder":
+        return createCylinderMesh(params.cylinderRadius ?? 1, params.cylinderDepth ?? 2, params.cylinderVertices ?? 32);
+      case "cone":
+        return createConeMesh(params.coneRadius1 ?? 1, params.coneRadius2 ?? 0, params.coneDepth ?? 2, params.coneVertices ?? 32);
+      case "torus":
+        return createTorusMesh(params.torusMajorRadius ?? 1, params.torusMinorRadius ?? 0.25, params.torusMajorSegments ?? 48, params.torusMinorSegments ?? 12);
+    }
+  };
+  const handlePrimitiveParamsChange = import_react9.useCallback((params) => {
+    const obj = newPrimitiveRef.current;
+    if (!obj)
+      return;
+    const mesh = createPrimitiveMesh(params);
+    obj.mesh = mesh;
+    setPrimitiveParams(params);
+  }, []);
+  const handlePrimitiveSubmit = import_react9.useCallback(() => {
+    const obj = newPrimitiveRef.current;
+    const editor = editorRef.current;
+    if (obj && editor) {
+      editor.recordObjectAdd(obj);
+    }
+    newPrimitiveRef.current = null;
+    setPrimitiveParams(null);
+  }, []);
+  const beforeTransformRef = import_react9.useRef(null);
+  const handleEditStart = import_react9.useCallback(() => {
+    const scene = sceneRef.current;
+    const selected = scene.getSelectedObjects();
+    if (selected.length > 0) {
+      const obj = selected[0];
+      beforeTransformRef.current = {
+        position: obj.position.clone(),
+        rotation: obj.rotation.clone(),
+        scale: obj.scale.clone(),
+        objectName: obj.name
+      };
+    }
+  }, []);
+  const handleEditEnd = import_react9.useCallback(() => {
+    const scene = sceneRef.current;
+    const editor = editorRef.current;
+    const selected = scene.getSelectedObjects();
+    const before = beforeTransformRef.current;
+    if (selected.length > 0 && before && editor) {
+      const obj = selected[0];
+      const posChanged = obj.position.x !== before.position.x || obj.position.y !== before.position.y || obj.position.z !== before.position.z;
+      const rotChanged = obj.rotation.x !== before.rotation.x || obj.rotation.y !== before.rotation.y || obj.rotation.z !== before.rotation.z;
+      const scaleChanged = obj.scale.x !== before.scale.x || obj.scale.y !== before.scale.y || obj.scale.z !== before.scale.z;
+      if (posChanged || rotChanged || scaleChanged) {
+        editor.pushTransformToHistory(before.objectName, before.position, before.rotation, before.scale, obj.position.clone(), obj.rotation.clone(), obj.scale.clone());
+      }
+    }
+    beforeTransformRef.current = null;
+  }, []);
+  const handlePositionChange = import_react9.useCallback((position) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -25069,7 +27340,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleRotationChange = import_react6.useCallback((rotation) => {
+  const handleRotationChange = import_react9.useCallback((rotation) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -25077,7 +27348,7 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleScaleChange = import_react6.useCallback((scale) => {
+  const handleScaleChange = import_react9.useCallback((scale) => {
     const scene = sceneRef.current;
     const selected = scene.getSelectedObjects();
     if (selected.length > 0) {
@@ -25085,30 +27356,30 @@ function App() {
       updateUIState(true);
     }
   }, [updateUIState]);
-  const handleViewpointChange = import_react6.useCallback((viewpoint) => {
+  const handleViewpointChange = import_react9.useCallback((viewpoint) => {
     const scene = sceneRef.current;
     scene.camera.setViewpoint(viewpoint);
     setIsOrtho(scene.camera.orthographic);
   }, []);
-  const handleToggleOrtho = import_react6.useCallback(() => {
+  const handleToggleOrtho = import_react9.useCallback(() => {
     const scene = sceneRef.current;
     scene.camera.orthographic = !scene.camera.orthographic;
     setIsOrtho(scene.camera.orthographic);
   }, []);
-  import_react6.useEffect(() => {
+  import_react9.useEffect(() => {
     const workerClient = workerClientRef.current;
     const editor = editorRef.current;
     if (!workerClient || !editor)
       return;
     workerClient.setSettings(buildRenderSettings(settings, editor.viewMode));
   }, [settings]);
-  import_react6.useEffect(() => {
+  import_react9.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas)
       return;
-    let handleKeyDown;
+    let handleKeyDown2;
     let handleKeyUp;
-    let handleMouseDown;
+    let handleMouseDown2;
     let handleMouseUp;
     let handleMouseMove;
     let handleWheel;
@@ -25129,9 +27400,11 @@ function App() {
       workerClient.setSettings(buildRenderSettings(settings, editorRef.current.viewMode));
       workerClient.start();
       loadOBJ("roman_head.obj", "Monkey");
+      setMaterialList(scene.materials.getAll());
+      setSelectedMaterialId(scene.materials.getDefault().id);
       window.addEventListener("resize", resizeCanvas);
       const inputManager = inputManagerRef.current;
-      handleKeyDown = (e) => {
+      handleKeyDown2 = (e) => {
         const editor = editorRef.current;
         const scene2 = sceneRef.current;
         inputManager.setTransformActive(editor?.transformMode !== "none");
@@ -25196,25 +27469,59 @@ function App() {
       };
       handleKeyUp = (e) => {};
       inputManager.init();
-      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keydown", handleKeyDown2);
       window.addEventListener("keyup", handleKeyUp);
-      handleMouseDown = (e) => {
+      handleMouseDown2 = (e) => {
         const editor = editorRef.current;
         const canvas2 = canvasRef.current;
-        const dims = renderDimensionsRef.current;
         inputManager.setMouseDragging(true, e.button);
         inputManager.updateMousePosition(e.clientX, e.clientY);
         if (e.button === 0 && editor && canvas2) {
           const rect = canvas2.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
-          const scaleX = dims.renderWidth / rect.width;
-          const scaleY = dims.renderHeight / rect.height;
-          editor.handleClick(x * scaleX, y * scaleY, dims.renderWidth, dims.renderHeight, e.shiftKey, e.altKey, e.ctrlKey || e.metaKey);
+          boxSelectionStartRef.current = { x, y };
         }
       };
-      handleMouseUp = () => {
+      handleMouseUp = (e) => {
+        const editor = editorRef.current;
+        const canvas2 = canvasRef.current;
+        const dims = renderDimensionsRef.current;
         inputManager.setMouseDragging(false);
+        if (e.button === 0 && editor && canvas2) {
+          const rect = canvas2.getBoundingClientRect();
+          const scaleX = dims.renderWidth / rect.width;
+          const scaleY = dims.renderHeight / rect.height;
+          if (boxSelectionStartRef.current) {
+            const startX = boxSelectionStartRef.current.x;
+            const startY = boxSelectionStartRef.current.y;
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            const deltaX = Math.abs(endX - startX);
+            const deltaY = Math.abs(endY - startY);
+            if (deltaX > BOX_SELECT_THRESHOLD || deltaY > BOX_SELECT_THRESHOLD) {
+              if (editor.mode === "object") {
+                const boxMinX = Math.min(startX, endX) * scaleX;
+                const boxMinY = Math.min(startY, endY) * scaleY;
+                const boxMaxX = Math.max(startX, endX) * scaleX;
+                const boxMaxY = Math.max(startY, endY) * scaleY;
+                const selectedObjects = editor.boxSelectObjects(boxMinX, boxMinY, boxMaxX, boxMaxY, dims.renderWidth, dims.renderHeight);
+                if (!e.shiftKey) {
+                  sceneRef.current.deselectAll();
+                }
+                for (const obj of selectedObjects) {
+                  obj.selected = true;
+                  sceneRef.current.activeObject = obj;
+                }
+                updateUIState(true);
+              }
+            } else {
+              editor.handleClick(endX * scaleX, endY * scaleY, dims.renderWidth, dims.renderHeight, e.shiftKey, e.altKey, e.ctrlKey || e.metaKey);
+            }
+          }
+        }
+        boxSelectionStartRef.current = null;
+        setBoxSelection(null);
       };
       handleMouseMove = (e) => {
         const editor = editorRef.current;
@@ -25231,6 +27538,24 @@ function App() {
           const scaleX = dims.renderWidth / rect.width;
           const scaleY = dims.renderHeight / rect.height;
           editor.updateTransform(deltaX, deltaY, x * scaleX, y * scaleY, dims.renderWidth, dims.renderHeight, e.ctrlKey || e.metaKey);
+        }
+        if (boxSelectionStartRef.current && mouseState.isDragging && mouseState.button === 0 && editor && editor.mode === "object" && editor.transformMode === "none" && canvas2) {
+          const rect = canvas2.getBoundingClientRect();
+          const currentX = e.clientX - rect.left;
+          const currentY = e.clientY - rect.top;
+          const startX = boxSelectionStartRef.current.x;
+          const startY = boxSelectionStartRef.current.y;
+          const deltaBoxX = Math.abs(currentX - startX);
+          const deltaBoxY = Math.abs(currentY - startY);
+          if (deltaBoxX > BOX_SELECT_THRESHOLD || deltaBoxY > BOX_SELECT_THRESHOLD) {
+            setBoxSelection({
+              startX,
+              startY,
+              currentX,
+              currentY,
+              active: true
+            });
+          }
         }
       };
       handleWheel = (e) => {
@@ -25271,7 +27596,7 @@ function App() {
       handleViewportLeave = () => {
         inputManager.setPointerOverViewport(false);
       };
-      canvas.addEventListener("mousedown", handleMouseDown);
+      canvas.addEventListener("mousedown", handleMouseDown2);
       window.addEventListener("mouseup", handleMouseUp);
       window.addEventListener("mousemove", handleMouseMove);
       canvas.addEventListener("wheel", handleWheel, { passive: false });
@@ -25323,16 +27648,16 @@ function App() {
       }
       workerClient.terminate();
       window.removeEventListener("resize", resizeCanvas);
-      if (handleKeyDown)
-        window.removeEventListener("keydown", handleKeyDown);
+      if (handleKeyDown2)
+        window.removeEventListener("keydown", handleKeyDown2);
       if (handleKeyUp)
         window.removeEventListener("keyup", handleKeyUp);
       if (handleMouseUp)
         window.removeEventListener("mouseup", handleMouseUp);
       if (handleMouseMove)
         window.removeEventListener("mousemove", handleMouseMove);
-      if (handleMouseDown)
-        canvas.removeEventListener("mousedown", handleMouseDown);
+      if (handleMouseDown2)
+        canvas.removeEventListener("mousedown", handleMouseDown2);
       if (handleWheel)
         canvas.removeEventListener("wheel", handleWheel);
       if (handleContextMenu)
@@ -25343,49 +27668,104 @@ function App() {
         canvas.removeEventListener("mouseleave", handleViewportLeave);
     };
   }, [resizeCanvas, loadOBJ, updateUIState]);
-  return /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
-    className: "app-layout",
+  return /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
+    className: `app-layout ${workspace === "shading" ? "shading-workspace" : ""}`,
     children: [
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(Toolbar, {
+      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(Toolbar, {
         mode: editorMode,
         transformMode,
         viewMode,
         selectionMode,
+        workspace,
         onModeChange: handleModeChange,
         onViewModeChange: handleViewModeChange,
-        onSelectionModeChange: handleSelectionModeChange
+        onSelectionModeChange: handleSelectionModeChange,
+        onWorkspaceChange: setWorkspace
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(SceneTree, {
-        objects: sceneObjects,
-        onSelectObject: handleSelectObject,
-        onToggleVisibility: handleToggleVisibility
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
         className: "viewport",
         ref: viewportRef,
         children: [
-          /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("canvas", {
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("canvas", {
             id: "canvas",
             ref: canvasRef
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(Instructions, {}, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(ViewportGizmo, {
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(Instructions, {}, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(ViewportGizmo, {
             onViewpointChange: handleViewpointChange,
             onToggleOrtho: handleToggleOrtho,
             isOrtho
+          }, undefined, false, undefined, this),
+          primitiveParams && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(PrimitiveSettings, {
+            params: primitiveParams,
+            onChange: handlePrimitiveParamsChange,
+            onSubmit: handlePrimitiveSubmit
+          }, undefined, false, undefined, this),
+          boxSelection && boxSelection.active && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
+            className: "box-selection",
+            style: {
+              left: Math.min(boxSelection.startX, boxSelection.currentX),
+              top: Math.min(boxSelection.startY, boxSelection.currentY),
+              width: Math.abs(boxSelection.currentX - boxSelection.startX),
+              height: Math.abs(boxSelection.currentY - boxSelection.startY)
+            }
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(PropertiesPanel, {
-        objectName: selectedObjectName,
-        position: selectedPosition,
-        rotation: selectedRotation,
-        scale: selectedScale,
-        onPositionChange: handlePositionChange,
-        onRotationChange: handleRotationChange,
-        onScaleChange: handleScaleChange
+      workspace === "shading" && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(NodeEditor, {
+        materials: materialList,
+        selectedMaterialId,
+        onSelectMaterial: (id) => {
+          setSelectedMaterialId(id);
+          const scene = sceneRef.current;
+          const selectedObjs = scene.getSelectedObjects();
+          if (selectedObjs.length > 0) {
+            for (const obj of selectedObjs) {
+              obj.materialId = id;
+            }
+          }
+        },
+        onMaterialChange: (newMaterial) => {
+          const scene = sceneRef.current;
+          scene.materials.update(newMaterial);
+          setMaterialList([...scene.materials.getAll()]);
+        },
+        onNewMaterial: () => {
+          const scene = sceneRef.current;
+          const newMat = scene.materials.createMaterial("Material");
+          setMaterialList([...scene.materials.getAll()]);
+          setSelectedMaterialId(newMat.id);
+          const selectedObjs = scene.getSelectedObjects();
+          if (selectedObjs.length > 0) {
+            for (const obj of selectedObjs) {
+              obj.materialId = newMat.id;
+            }
+          }
+        }
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(StatusBar, {
+      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
+        className: "sidebar",
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(SceneTree, {
+            objects: sceneObjects,
+            onSelectObject: handleSelectObject,
+            onToggleVisibility: handleToggleVisibility
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(PropertiesPanel, {
+            objectName: selectedObjectName,
+            position: selectedPosition,
+            rotation: selectedRotation,
+            scale: selectedScale,
+            dimensions: selectedDimensions,
+            onPositionChange: handlePositionChange,
+            onRotationChange: handleRotationChange,
+            onScaleChange: handleScaleChange,
+            onEditStart: handleEditStart,
+            onEditEnd: handleEditEnd
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(StatusBar, {
         mode: editorMode,
         selectionMode,
         transformMode,
@@ -25399,13 +27779,13 @@ function App() {
         renderWidth,
         renderHeight
       }, undefined, false, undefined, this),
-      addMenuPos && /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(AddMenu, {
+      addMenuPos && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(AddMenu, {
         x: addMenuPos.x,
         y: addMenuPos.y,
         onSelect: handleAddPrimitive,
         onClose: () => setAddMenuPos(null)
       }, undefined, false, undefined, this),
-      contextMenuPos && /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(ShadingContextMenu, {
+      contextMenuPos && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(ShadingContextMenu, {
         x: contextMenuPos.x,
         y: contextMenuPos.y,
         onAction: (action) => {
@@ -25429,6 +27809,9 @@ function App() {
           }
         },
         onClose: () => setContextMenuPos(null)
+      }, undefined, false, undefined, this),
+      showWelcome && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(WelcomeModal, {
+        onClose: () => setShowWelcome(false)
       }, undefined, false, undefined, this)
     ]
   }, undefined, true, undefined, this);
@@ -25436,5 +27819,5 @@ function App() {
 var container = document.getElementById("root");
 if (container) {
   const root = import_client.createRoot(container);
-  root.render(/* @__PURE__ */ jsx_dev_runtime10.jsxDEV(App, {}, undefined, false, undefined, this));
+  root.render(/* @__PURE__ */ jsx_dev_runtime14.jsxDEV(App, {}, undefined, false, undefined, this));
 }

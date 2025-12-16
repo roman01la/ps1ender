@@ -21,6 +21,12 @@ import {
   SerializedMesh,
 } from "../render-worker";
 import { Texture } from "../texture";
+import {
+  Material,
+  evaluateMaterial,
+  materialUsesTexture,
+  RGBA,
+} from "../material";
 
 /**
  * Grid data for rendering
@@ -51,13 +57,20 @@ function serializeMatrix(m: Matrix4): Float32Array {
   return new Float32Array(m.data);
 }
 
-function serializeMesh(mesh: Mesh): SerializedMesh {
+function serializeMesh(mesh: Mesh, material?: Material): SerializedMesh {
   const vertexCount = mesh.vertices.length;
 
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Uint8Array(vertexCount * 4);
+
+  // Pre-evaluate material if provided (for flat color, we only need one evaluation)
+  let materialColor: RGBA | null = null;
+  if (material) {
+    // For now, evaluate at UV 0,0 - flat color doesn't use UVs anyway
+    materialColor = evaluateMaterial(material, { u: 0, v: 0 });
+  }
 
   for (let i = 0; i < vertexCount; i++) {
     const v = mesh.vertices[i];
@@ -76,10 +89,18 @@ function serializeMesh(mesh: Mesh): SerializedMesh {
     uvs[uv] = v.u;
     uvs[uv + 1] = v.v;
 
-    colors[c] = v.color.r;
-    colors[c + 1] = v.color.g;
-    colors[c + 2] = v.color.b;
-    colors[c + 3] = v.color.a;
+    // Apply material color if available, otherwise use vertex color
+    if (materialColor) {
+      colors[c] = materialColor.r;
+      colors[c + 1] = materialColor.g;
+      colors[c + 2] = materialColor.b;
+      colors[c + 3] = materialColor.a;
+    } else {
+      colors[c] = v.color.r;
+      colors[c + 1] = v.color.g;
+      colors[c + 2] = v.color.b;
+      colors[c + 3] = v.color.a;
+    }
   }
 
   return {
@@ -379,17 +400,28 @@ export function buildRenderFrame(
 
     const modelMatrix = obj.getModelMatrix();
 
+    // Get object's material from registry
+    const material = obj.materialId
+      ? scene.materials.get(obj.materialId)
+      : undefined;
+
     if (isEdgeOnlyMesh(obj.mesh)) {
       frame.sceneLines.push(buildEdgeOnlyLines(obj, modelMatrix));
     } else if (isWireframeMode) {
       // In wireframe mode, render as lines instead of solid triangles
       frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
+      // Check if material uses texture (texture node connected to output)
+      const useTexture = material
+        ? materialUsesTexture(material) && !!obj.texture
+        : false;
+
       frame.objects.push({
-        mesh: serializeMesh(obj.mesh),
+        mesh: serializeMesh(obj.mesh, material),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,
         smoothShading: obj.mesh.smoothShading,
+        hasTexture: useTexture,
       });
     }
   }

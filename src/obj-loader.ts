@@ -21,6 +21,8 @@ export interface OBJLoadResult {
   materials: Map<string, Material>;
   defaultTexture: Texture | null;
   mtlFile: string | null;
+  /** Maps mesh/group name to its MTL material name */
+  groupMaterials: Map<string, string>;
 }
 
 export class OBJLoader {
@@ -221,6 +223,7 @@ export class OBJLoader {
 
     // Create meshes from groups
     const meshes = new Map<string, Mesh>();
+    const groupMaterials = new Map<string, string>();
     let defaultMesh: Mesh | null = null;
 
     for (const [name, data] of groups) {
@@ -237,6 +240,12 @@ export class OBJLoader {
         OBJLoader.calculateNormalsIfMissing(mesh);
 
         meshes.set(name, mesh);
+
+        // Track which material this group uses
+        if (data.material) {
+          groupMaterials.set(name, data.material);
+        }
+
         if (!defaultMesh) {
           defaultMesh = mesh;
         }
@@ -254,6 +263,7 @@ export class OBJLoader {
       materials: new Map(),
       defaultTexture: null,
       mtlFile,
+      groupMaterials,
     };
   }
 
