@@ -34,6 +34,9 @@ bun test
 
 # Run specific test file
 bun test src/systems/history.test.ts
+
+# Run headless renderer test (requires Node.js for SIMD WASM support)
+bun run test:headless
 ```
 
 ---
@@ -51,6 +54,7 @@ src/
 ├── primitives.ts        # Mesh, Vertex, Triangle, Face types + factories
 ├── render-worker.ts     # Software renderer web worker
 ├── wasm-rasterizer.ts   # WASM rasterizer wrapper
+├── headless-rasterizer.ts # Headless rendering for tests/MCP
 ├── material.ts          # Material system + WASM baking
 ├── obj-loader.ts        # OBJ/MTL file parser
 ├── texture.ts           # Texture loading
@@ -296,6 +300,28 @@ interface PickContext {
 - Located in `wasm/` directory
 - Build with `make` in `wasm/` folder
 - SIMD-optimized for 3-4× performance improvement
+
+### Headless Rendering
+
+The project includes a headless rendering module (`src/headless-rasterizer.ts`) for:
+- Screenshot tests
+- Visual debugging
+- MCP service integration for AI visual debugging
+
+**Usage:**
+```typescript
+import { HeadlessRenderer } from "./headless-rasterizer";
+import { createCubeMesh } from "./primitives";
+import { SceneObject, Camera } from "./scene";
+
+const renderer = await HeadlessRenderer.create(640, 480);
+const cube = new SceneObject("Cube", createCubeMesh());
+const camera = new Camera();
+renderer.renderScene([cube], camera);
+await renderer.savePNG("output.png");
+```
+
+**Note:** Requires Node.js (not Bun) for SIMD WASM support. Run with `npx tsx` or `bun run test:headless`.
 
 ---
 
