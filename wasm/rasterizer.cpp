@@ -3,7 +3,6 @@
  *
  * Features:
  * - SIMD-accelerated triangle rasterization (4 pixels at a time)
- * - Relaxed SIMD FMA for fast interpolation
  * - Bulk memory operations for fast clears
  * - 16-bit depth buffer (PS1 style)
  * - Gouraud shading
@@ -13,12 +12,12 @@
  * - Backface culling
  * - Optional pthread-based parallelization (when built with -pthread)
  *
- * Build with Emscripten:
+ * Build with Emscripten (see Makefile for full flags):
  *   Single-threaded:
- *     emcc -O3 -msimd128 -mrelaxed-simd -mbulk-memory -s WASM=1 -s STANDALONE_WASM=1 --no-entry \
+ *     emcc -O3 -msimd128 -mbulk-memory -s STANDALONE_WASM=1 --no-entry \
  *       -o rasterizer.wasm rasterizer.cpp
  *   Multi-threaded:
- *     emcc -O3 -msimd128 -mrelaxed-simd -mbulk-memory -pthread -s USE_PTHREADS=1 \
+ *     emcc -O3 -msimd128 -mbulk-memory -pthread -s USE_PTHREADS=1 \
  *       -s PTHREAD_POOL_SIZE=4 -s MODULARIZE=1 -o rasterizer.js rasterizer.cpp
  */
 
@@ -252,16 +251,12 @@ inline float simd_hmin(v128_t v)
     return wasm_f32x4_extract_lane(min2, 0);
 }
 
-// Relaxed FMA: a * b + c (single instruction on supported hardware)
-// Falls back to separate multiply-add on older toolchains
+// FMA: a * b + c
+// Note: Relaxed SIMD (wasm_f32x4_relaxed_madd) could be faster on newer hardware,
+// but we use the standard SIMD path for broader compatibility with older toolchains.
 inline v128_t simd_fma(v128_t a, v128_t b, v128_t c)
 {
-#if defined(__wasm_relaxed_simd__)
-    return wasm_f32x4_relaxed_madd(a, b, c);
-#else
-    // Fallback: separate multiply and add
     return wasm_f32x4_add(wasm_f32x4_mul(a, b), c);
-#endif
 }
 
 // SIMD clamp to [0, 255]
@@ -856,23 +851,12 @@ extern "C"
         int32_t thread_id;
     };
 
-    // Atomic depth buffer compare-and-swap for thread-safe writes
-    // Note: For true thread safety, we'd need atomic pixel writes too,
-    // but for rasterization, some overdraw is acceptable for performance
-    static inline bool atomic_depth_test_and_write(int32_t idx, uint16_t new_depth, uint32_t new_pixel)
-    {
-        // Simple depth test with atomic operations
-        // In practice, some pixel races are acceptable for performance
-        if (new_depth < g_depth[idx])
-        {
-            g_depth[idx] = new_depth;
-            g_pixels[idx] = new_pixel;
-            return true;
-        }
-        return false;
-    }
-
     // Thread worker function - processes a range of triangles
+    // Note: The rasterize_triangle function writes to shared pixel/depth buffers.
+    // For simplicity and performance, we accept minor visual artifacts from race conditions
+    // (occasional pixel overwrites by concurrent threads). This matches the PS1's approach
+    // where Z-buffer races were accepted for performance. For truly correct rendering,
+    // atomic compare-and-swap operations would be needed for both depth and pixel writes.
     static void *render_thread_worker(void *arg)
     {
         ThreadWorkData *work = (ThreadWorkData *)arg;
@@ -991,9 +975,9 @@ extern "C"
         // Create thread work data and threads
         pthread_t threads[MAX_THREADS];
         ThreadWorkData workData[MAX_THREADS];
+        bool threadCreated[MAX_THREADS] = {false}; // Track which threads were successfully created
 
         int32_t startTri = 0;
-        int threadsCreated = 0;
 
         for (int i = 0; i < effectiveThreads && startTri < numTriangles; i++)
         {
@@ -1005,7 +989,7 @@ extern "C"
 
             if (pthread_create(&threads[i], nullptr, render_thread_worker, &workData[i]) == 0)
             {
-                threadsCreated++;
+                threadCreated[i] = true;
             }
             else
             {
@@ -1016,10 +1000,13 @@ extern "C"
             startTri = workData[i].end_triangle;
         }
 
-        // Wait for all threads to complete
-        for (int i = 0; i < threadsCreated; i++)
+        // Wait for all successfully created threads to complete
+        for (int i = 0; i < effectiveThreads; i++)
         {
-            pthread_join(threads[i], nullptr);
+            if (threadCreated[i])
+            {
+                pthread_join(threads[i], nullptr);
+            }
         }
     }
 

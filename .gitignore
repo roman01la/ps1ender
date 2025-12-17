@@ -3,3 +3,5 @@ public/*.js
 public/*.svg
 coverage
 test-output
+# WASM build artifacts (only rasterizer.wasm should be committed)
+wasm/*.js
