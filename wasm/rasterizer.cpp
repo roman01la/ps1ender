@@ -1153,6 +1153,8 @@ extern "C"
         BAKE_OP_MIX_LERP = 4,       // Pop 2 colors, push result (linear interp)
         BAKE_OP_COLOR_RAMP = 5,     // Evaluate color ramp with factor
         BAKE_OP_VORONOI = 6,        // Generate Voronoi texture (scale in data)
+        BAKE_OP_ALPHA_CUTOFF = 7,   // Binary alpha cutoff (threshold in data)
+        BAKE_OP_NOISE = 8,          // Procedural noise (scale, octaves, mode in data)
         BAKE_OP_END = 255           // End of program
     };
 
@@ -1510,7 +1512,24 @@ extern "C"
 
                     case BAKE_OP_COLOR_RAMP:
                     {
-                        if (stackPtr >= 1)
+                        // Read inline color ramp data from bytecode
+                        // Format: [stopCount, ...stops(pos, r, g, b, a)]
+                        int stopCount = *pc++;
+                        if (stopCount > 16)
+                            stopCount = 16;
+
+                        // Read stop data into local array
+                        uint8_t rampData[16 * 5];
+                        for (int s = 0; s < stopCount; s++)
+                        {
+                            rampData[s * 5] = *pc++;     // position
+                            rampData[s * 5 + 1] = *pc++; // r
+                            rampData[s * 5 + 2] = *pc++; // g
+                            rampData[s * 5 + 3] = *pc++; // b
+                            rampData[s * 5 + 4] = *pc++; // a
+                        }
+
+                        if (stackPtr >= 1 && stopCount > 0)
                         {
                             // Extract red channel as factor for each pixel
                             alignas(16) int32_t fac[4];
@@ -1519,12 +1538,53 @@ extern "C"
                             alignas(16) int32_t r[4], g[4], b[4], a[4];
                             for (int i = 0; i < 4; i++)
                             {
-                                uint8_t rr, gg, bb, aa;
-                                eval_color_ramp(fac[i], rr, gg, bb, aa);
-                                r[i] = rr;
-                                g[i] = gg;
-                                b[i] = bb;
-                                a[i] = aa;
+                                int pos = fac[i];
+
+                                // Find surrounding stops
+                                int lowIdx = 0;
+                                int highIdx = stopCount - 1;
+                                for (int s = 0; s < stopCount - 1; s++)
+                                {
+                                    int stopPos = rampData[s * 5];
+                                    int nextPos = rampData[(s + 1) * 5];
+                                    if (pos >= stopPos && pos <= nextPos)
+                                    {
+                                        lowIdx = s;
+                                        highIdx = s + 1;
+                                        break;
+                                    }
+                                }
+
+                                uint8_t *low = &rampData[lowIdx * 5];
+                                uint8_t *high = &rampData[highIdx * 5];
+                                int lowPos = low[0];
+                                int highPos = high[0];
+
+                                if (pos <= lowPos)
+                                {
+                                    r[i] = low[1];
+                                    g[i] = low[2];
+                                    b[i] = low[3];
+                                    a[i] = low[4];
+                                }
+                                else if (pos >= highPos)
+                                {
+                                    r[i] = high[1];
+                                    g[i] = high[2];
+                                    b[i] = high[3];
+                                    a[i] = high[4];
+                                }
+                                else
+                                {
+                                    // Interpolate
+                                    int range = highPos - lowPos;
+                                    int t = ((pos - lowPos) * 255) / range;
+                                    int invT = 255 - t;
+                                    r[i] = (low[1] * invT + high[1] * t) >> 8;
+                                    g[i] = (low[2] * invT + high[2] * t) >> 8;
+                                    b[i] = (low[3] * invT + high[3] * t) >> 8;
+                                    a[i] = (low[4] * invT + high[4] * t) >> 8;
+                                }
                             }
 
                             stack_r[stackPtr - 1] = wasm_v128_load(r);
@@ -1635,6 +1695,165 @@ extern "C"
                         stack_r[stackPtr] = wasm_v128_load(dist);
                         stack_g[stackPtr] = wasm_v128_load(dist);
                         stack_b[stackPtr] = wasm_v128_load(dist);
+                        stack_a[stackPtr] = v_255;
+                        stackPtr++;
+                        break;
+                    }
+
+                    case BAKE_OP_ALPHA_CUTOFF:
+                    {
+                        // Alpha cutoff - threshold is next byte (0-255)
+                        uint8_t threshold = *pc++;
+
+                        if (stackPtr > 0)
+                        {
+                            // Pop color and apply alpha cutoff
+                            stackPtr--;
+                            alignas(16) int32_t a_arr[4];
+                            wasm_v128_store(a_arr, stack_a[stackPtr]);
+
+                            // Binary cutoff: alpha >= threshold -> 255, else 0
+                            for (int i = 0; i < 4; i++)
+                            {
+                                a_arr[i] = (a_arr[i] >= threshold) ? 255 : 0;
+                            }
+
+                            // Push back with modified alpha
+                            stack_r[stackPtr] = stack_r[stackPtr]; // unchanged
+                            stack_g[stackPtr] = stack_g[stackPtr]; // unchanged
+                            stack_b[stackPtr] = stack_b[stackPtr]; // unchanged
+                            stack_a[stackPtr] = wasm_v128_load(a_arr);
+                            stackPtr++;
+                        }
+                        break;
+                    }
+
+                    case BAKE_OP_NOISE:
+                    {
+                        // Noise texture - scale (1-255), octaves (1-8), mode (0=value, 1=simplex)
+                        float scale = (float)*pc++;
+                        if (scale < 1.0f)
+                            scale = 1.0f;
+                        int octaves = *pc++;
+                        if (octaves < 1)
+                            octaves = 1;
+                        if (octaves > 8)
+                            octaves = 8;
+                        uint8_t mode = *pc++; // 0 = value noise, 1 = simplex
+
+                        // Process 4 pixels
+                        alignas(16) float u_arr[4];
+                        wasm_v128_store(u_arr, v_u);
+                        float v_val = 1.0f - ((float)y + 0.5f) / (float)height;
+
+                        alignas(16) int32_t noise_out[4];
+                        for (int i = 0; i < 4; i++)
+                        {
+                            float px = u_arr[i] * scale;
+                            float py = v_val * scale;
+
+                            float noiseVal = 0.0f;
+                            float amplitude = 1.0f;
+                            float frequency = 1.0f;
+                            float maxValue = 0.0f;
+
+                            // Fractal noise with octaves
+                            for (int o = 0; o < octaves; o++)
+                            {
+                                float nx = px * frequency;
+                                float ny = py * frequency;
+
+                                if (mode == 1)
+                                {
+                                    // Simplex-like noise using gradient method
+                                    int ix = (int)floorf(nx);
+                                    int iy = (int)floorf(ny);
+                                    float fx = nx - (float)ix;
+                                    float fy = ny - (float)iy;
+
+                                    // Smooth interpolation
+                                    float u_interp = fx * fx * (3.0f - 2.0f * fx);
+                                    float v_interp = fy * fy * (3.0f - 2.0f * fy);
+
+                                    // Gradient hash at corners
+                                    auto grad = [](int hash, float x, float y) -> float
+                                    {
+                                        int h = hash & 7;
+                                        float u_g = h < 4 ? x : y;
+                                        float v_g = h < 4 ? y : x;
+                                        return ((h & 1) ? -u_g : u_g) + ((h & 2) ? -2.0f * v_g : 2.0f * v_g);
+                                    };
+
+                                    auto hash2 = [](int x, int y) -> int
+                                    {
+                                        uint32_t h = (uint32_t)(x * 374761393 + y * 668265263);
+                                        h = (h ^ (h >> 13)) * 1274126177;
+                                        return (int)(h & 0xFF);
+                                    };
+
+                                    float n00 = grad(hash2(ix, iy), fx, fy);
+                                    float n10 = grad(hash2(ix + 1, iy), fx - 1.0f, fy);
+                                    float n01 = grad(hash2(ix, iy + 1), fx, fy - 1.0f);
+                                    float n11 = grad(hash2(ix + 1, iy + 1), fx - 1.0f, fy - 1.0f);
+
+                                    float nx0 = n00 + u_interp * (n10 - n00);
+                                    float nx1 = n01 + u_interp * (n11 - n01);
+                                    float octaveNoise = nx0 + v_interp * (nx1 - nx0);
+
+                                    noiseVal += (octaveNoise * 0.5f + 0.5f) * amplitude;
+                                }
+                                else
+                                {
+                                    // Value noise
+                                    int ix = (int)floorf(nx);
+                                    int iy = (int)floorf(ny);
+                                    float fx = nx - (float)ix;
+                                    float fy = ny - (float)iy;
+
+                                    // Smooth interpolation
+                                    float u_interp = fx * fx * (3.0f - 2.0f * fx);
+                                    float v_interp = fy * fy * (3.0f - 2.0f * fy);
+
+                                    // Hash at corners
+                                    auto hash2 = [](int x, int y) -> float
+                                    {
+                                        uint32_t h = (uint32_t)(x * 374761393 + y * 668265263);
+                                        h = (h ^ (h >> 13)) * 1274126177;
+                                        return (float)(h & 0xFFFF) / 65535.0f;
+                                    };
+
+                                    float n00 = hash2(ix, iy);
+                                    float n10 = hash2(ix + 1, iy);
+                                    float n01 = hash2(ix, iy + 1);
+                                    float n11 = hash2(ix + 1, iy + 1);
+
+                                    float nx0 = n00 + u_interp * (n10 - n00);
+                                    float nx1 = n01 + u_interp * (n11 - n01);
+                                    float octaveNoise = nx0 + v_interp * (nx1 - nx0);
+
+                                    noiseVal += octaveNoise * amplitude;
+                                }
+
+                                maxValue += amplitude;
+                                amplitude *= 0.5f;
+                                frequency *= 2.0f;
+                            }
+
+                            // Normalize
+                            noiseVal /= maxValue;
+
+                            int val = (int)(noiseVal * 255.0f);
+                            if (val > 255)
+                                val = 255;
+                            if (val < 0)
+                                val = 0;
+                            noise_out[i] = val;
+                        }
+
+                        // Push grayscale result
+                        stack_r[stackPtr] = wasm_v128_load(noise_out);
+                        stack_g[stackPtr] = wasm_v128_load(noise_out);
+                        stack_b[stackPtr] = wasm_v128_load(noise_out);
                         stack_a[stackPtr] = v_255;
                         stackPtr++;
                         break;

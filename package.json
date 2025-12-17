@@ -4,6 +4,7 @@
   "main": "main.js",
   "scripts": {
     "build": "bun build --outdir=public --target=browser --format=esm --splitting src/App.tsx src/render-worker.ts",
+    "build:wasm": "cd wasm && make clean && make && make install",
     "prod": "bun build --outdir=public --target=browser --format=esm --splitting --minify src/App.tsx src/render-worker.ts",
     "watch": "bun build --outdir=public --target=browser --format=esm --splitting --watch src/App.tsx src/render-worker.ts",
     "dev": "bun run build && bunx serve public",

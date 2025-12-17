@@ -43,6 +43,8 @@ const NODE_COLORS: Record<NodeType, string> = {
   mix: "#3a5a6b",
   "color-ramp": "#3a6b5a",
   voronoi: "#4a4a6b",
+  "alpha-cutoff": "#6b4a4a",
+  noise: "#4a6b4a",
 };
 
 const SOCKET_COLORS: Record<SocketType, string> = {
@@ -110,7 +112,7 @@ function createNode(type: NodeType, x: number, y: number): ShaderNode {
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false },
         ],
-        data: { blendMode: "multiply", factor: 1.0 },
+        data: { blendMode: "mix", factor: 0.5 },
       };
     case "color-ramp":
       return {
@@ -145,6 +147,34 @@ function createNode(type: NodeType, x: number, y: number): ShaderNode {
         ],
         data: { scale: 5, mode: 0 }, // mode: 0=F1 (distance to point), 1=edge (F2-F1)
       };
+    case "alpha-cutoff":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 110,
+        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false },
+        ],
+        data: { threshold: 0.5 }, // 0-1 threshold
+      };
+    case "noise":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 150,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Value", type: "float", isInput: false },
+        ],
+        data: { scale: 5, octaves: 1, mode: 0 }, // mode: 0=value noise, 1=simplex
+      };
     default:
       throw new Error(`Unknown node type: ${type}`);
   }
@@ -165,6 +195,10 @@ function getNodeTitle(type: NodeType): string {
       return "Color Ramp";
     case "voronoi":
       return "Voronoi";
+    case "alpha-cutoff":
+      return "Alpha Cutoff";
+    case "noise":
+      return "Noise";
     default:
       return type;
   }
@@ -1283,6 +1317,10 @@ export function NodeEditor({
             Color Ramp
           </button>
           <button onClick={() => handleAddNode("voronoi")}>Voronoi</button>
+          <button onClick={() => handleAddNode("noise")}>Noise</button>
+          <button onClick={() => handleAddNode("alpha-cutoff")}>
+            Alpha Cutoff
+          </button>
         </div>
       )}
       {/* Color picker for flat-color nodes */}
@@ -1492,6 +1530,136 @@ export function NodeEditor({
             </React.Fragment>
           );
         })}
+      {/* Mix blend mode selector */}
+      {nodes
+        .filter((n) => n.type === "mix")
+        .map((node) => {
+          const container = containerRef.current;
+          if (!container) return null;
+          const controlX = node.x * zoom + pan.x + 8 * zoom;
+          const controlY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+          const controlW = (node.width - 16) * zoom;
+          const blendMode = (node.data.blendMode as string) || "mix";
+          const factor = (node.data.factor as number) ?? 0.5;
+
+          return (
+            <div
+              key={node.id}
+              className="mix-control"
+              style={{
+                position: "absolute",
+                left: controlX,
+                top: controlY,
+                width: controlW,
+                zIndex: 10,
+              }}
+            >
+              {/* Blend mode selector */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                  marginBottom: 6 * zoom,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Mode
+                </span>
+                <select
+                  value={blendMode}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newMode = e.target.value;
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, blendMode: newMode } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value="mix">Mix</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="add">Add</option>
+                </select>
+              </div>
+              {/* Factor slider */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Factor
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={factor}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newFactor = parseFloat(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, factor: newFactor } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 24 * zoom,
+                    textAlign: "right",
+                  }}
+                >
+                  {factor.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       {/* Voronoi scale slider */}
       {nodes
         .filter((n) => n.type === "voronoi")
@@ -1616,6 +1784,273 @@ export function NodeEditor({
                   }}
                 >
                   {scale}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      {/* Alpha Cutoff threshold slider */}
+      {nodes
+        .filter((n) => n.type === "alpha-cutoff")
+        .map((node) => {
+          const container = containerRef.current;
+          if (!container) return null;
+          const controlX = node.x * zoom + pan.x + 8 * zoom;
+          const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+          const controlW = (node.width - 16) * zoom;
+          const threshold = (node.data.threshold as number) ?? 0.5;
+
+          return (
+            <div
+              key={node.id}
+              className="alpha-cutoff-control"
+              style={{
+                position: "absolute",
+                left: controlX,
+                top: sliderY,
+                width: controlW,
+                zIndex: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Threshold
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={threshold}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newThreshold = parseFloat(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? {
+                              ...n,
+                              data: { ...n.data, threshold: newThreshold },
+                            }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 24 * zoom,
+                    textAlign: "right",
+                  }}
+                >
+                  {threshold.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      {/* Noise controls */}
+      {nodes
+        .filter((n) => n.type === "noise")
+        .map((node) => {
+          const container = containerRef.current;
+          if (!container) return null;
+          const controlX = node.x * zoom + pan.x + 8 * zoom;
+          const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+          const controlW = (node.width - 16) * zoom;
+          const scale = (node.data.scale as number) || 5;
+          const octaves = (node.data.octaves as number) || 1;
+          const mode = (node.data.mode as number) || 0;
+
+          return (
+            <div
+              key={node.id}
+              className="noise-control"
+              style={{
+                position: "absolute",
+                left: controlX,
+                top: sliderY,
+                width: controlW,
+                zIndex: 10,
+              }}
+            >
+              {/* Mode selector */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                  marginBottom: 6 * zoom,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Type
+                </span>
+                <select
+                  value={mode}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newMode = parseInt(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, mode: newMode } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <option value={0}>Value</option>
+                  <option value={1}>Simplex</option>
+                </select>
+              </div>
+              {/* Scale slider */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                  marginBottom: 6 * zoom,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Scale
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  step="1"
+                  value={scale}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newScale = parseInt(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, scale: newScale } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right",
+                  }}
+                >
+                  {scale}
+                </span>
+              </div>
+              {/* Octaves slider */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4 * zoom,
+                  width: "100%",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0,
+                  }}
+                >
+                  Octaves
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="8"
+                  step="1"
+                  value={octaves}
+                  onMouseDown={() => pushUndo()}
+                  onChange={(e) => {
+                    const newOctaves = parseInt(e.target.value);
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === node.id
+                          ? { ...n, data: { ...n.data, octaves: newOctaves } }
+                          : n
+                      )
+                    );
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right",
+                  }}
+                >
+                  {octaves}
                 </span>
               </div>
             </div>

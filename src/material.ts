@@ -9,7 +9,9 @@ export type NodeType =
   | "flat-color"
   | "mix"
   | "color-ramp"
-  | "voronoi";
+  | "voronoi"
+  | "alpha-cutoff"
+  | "noise";
 
 export type SocketType = "color" | "float";
 
@@ -146,6 +148,8 @@ import {
   BAKE_OP_MIX_LERP,
   BAKE_OP_COLOR_RAMP,
   BAKE_OP_VORONOI,
+  BAKE_OP_ALPHA_CUTOFF,
+  BAKE_OP_NOISE,
   BAKE_OP_END,
 } from "./wasm-rasterizer";
 
@@ -285,23 +289,11 @@ function compileNodeToWasm(
         { position: 1, color: "#ffffff" },
       ];
 
-      // Upload color ramp data to WASM
-      const rampBuffer = wasm.getColorRampBuffer();
+      // Sort stops by position
       const sortedStops = [...stops].sort((a, b) => a.position - b.position);
-      wasm.setColorRampCount(sortedStops.length);
+      const stopCount = Math.min(sortedStops.length, 16);
 
-      for (let i = 0; i < sortedStops.length && i < 16; i++) {
-        const stop = sortedStops[i];
-        const rgba = hexToRGBA(stop.color);
-        const offset = i * 5;
-        rampBuffer[offset] = Math.round(stop.position * 255);
-        rampBuffer[offset + 1] = rgba.r;
-        rampBuffer[offset + 2] = rgba.g;
-        rampBuffer[offset + 3] = rgba.b;
-        rampBuffer[offset + 4] = rgba.a;
-      }
-
-      // Compile factor input
+      // Compile factor input first (pushes value onto stack)
       const facConn = material.connections.find(
         (c) => c.toNodeId === node.id && c.toSocketId === "fac"
       );
@@ -318,7 +310,20 @@ function compileNodeToWasm(
         program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
       }
 
-      program.push(BAKE_OP_COLOR_RAMP);
+      // Emit color ramp opcode with inline data:
+      // [BAKE_OP_COLOR_RAMP, stopCount, ...stops(pos, r, g, b, a)]
+      program.push(BAKE_OP_COLOR_RAMP, stopCount);
+      for (let i = 0; i < stopCount; i++) {
+        const stop = sortedStops[i];
+        const rgba = hexToRGBA(stop.color);
+        program.push(
+          Math.round(stop.position * 255),
+          rgba.r,
+          rgba.g,
+          rgba.b,
+          rgba.a
+        );
+      }
       break;
     }
 
@@ -489,22 +494,11 @@ function compileNodeForWorker(
         { position: 1, color: "#ffffff" },
       ];
 
-      // Store color ramp data in context
+      // Sort stops by position
       const sortedStops = [...stops].sort((a, b) => a.position - b.position);
-      ctx.colorRampCount = sortedStops.length;
+      const stopCount = Math.min(sortedStops.length, 16);
 
-      for (let i = 0; i < sortedStops.length && i < 16; i++) {
-        const stop = sortedStops[i];
-        const rgba = hexToRGBA(stop.color);
-        const offset = i * 5;
-        ctx.colorRampData[offset] = Math.round(stop.position * 255);
-        ctx.colorRampData[offset + 1] = rgba.r;
-        ctx.colorRampData[offset + 2] = rgba.g;
-        ctx.colorRampData[offset + 3] = rgba.b;
-        ctx.colorRampData[offset + 4] = rgba.a;
-      }
-
-      // Compile factor input
+      // Compile factor input first (pushes value onto stack)
       const facConn = material.connections.find(
         (c) => c.toNodeId === node.id && c.toSocketId === "fac"
       );
@@ -521,7 +515,20 @@ function compileNodeForWorker(
         program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
       }
 
-      program.push(BAKE_OP_COLOR_RAMP);
+      // Emit color ramp opcode with inline data:
+      // [BAKE_OP_COLOR_RAMP, stopCount, ...stops(pos, r, g, b, a)]
+      program.push(BAKE_OP_COLOR_RAMP, stopCount);
+      for (let i = 0; i < stopCount; i++) {
+        const stop = sortedStops[i];
+        const rgba = hexToRGBA(stop.color);
+        program.push(
+          Math.round(stop.position * 255),
+          rgba.r,
+          rgba.g,
+          rgba.b,
+          rgba.a
+        );
+      }
       break;
     }
 
@@ -534,6 +541,51 @@ function compileNodeForWorker(
         Math.max(0, Math.min(1, (node.data.mode as number) || 0))
       );
       program.push(BAKE_OP_VORONOI, scale, mode);
+      break;
+    }
+
+    case "alpha-cutoff": {
+      // Alpha cutoff - threshold parameter (0-255)
+      const threshold = Math.round(
+        Math.max(
+          0,
+          Math.min(255, ((node.data.threshold as number) ?? 0.5) * 255)
+        )
+      );
+
+      // Compile input color
+      const colorConn = material.connections.find(
+        (c) => c.toNodeId === node.id && c.toSocketId === "color"
+      );
+      if (colorConn) {
+        hasTexture =
+          compileNodeForWorker(
+            material,
+            colorConn.fromNodeId,
+            colorConn.fromSocketId,
+            program,
+            ctx
+          ) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+
+      program.push(BAKE_OP_ALPHA_CUTOFF, threshold);
+      break;
+    }
+
+    case "noise": {
+      // Noise texture - scale (1-255), octaves (1-8), mode (0=value, 1=simplex)
+      const scale = Math.round(
+        Math.max(1, Math.min(255, (node.data.scale as number) || 5))
+      );
+      const octaves = Math.round(
+        Math.max(1, Math.min(8, (node.data.octaves as number) || 1))
+      );
+      const mode = Math.round(
+        Math.max(0, Math.min(1, (node.data.mode as number) || 0))
+      );
+      program.push(BAKE_OP_NOISE, scale, octaves, mode);
       break;
     }
 
@@ -657,12 +709,19 @@ function evaluateNode(
       return blendColors(color1, color2, blendMode, factor);
     }
 
-    // Texture, voronoi, color-ramp, and other procedural nodes
+    // Texture, voronoi, color-ramp, noise, and other procedural nodes
     // return neutral gray - these need WASM baking for proper results
     case "texture":
     case "voronoi":
     case "color-ramp":
+    case "noise":
       return { r: 128, g: 128, b: 128, a: 255 };
+
+    case "alpha-cutoff": {
+      // Pass through the input color (alpha cutoff is applied at render time)
+      const inputColor = evaluateSocket(material, node.id, "color", ctx);
+      return inputColor;
+    }
 
     case "output":
       return { r: 128, g: 128, b: 128, a: 255 };

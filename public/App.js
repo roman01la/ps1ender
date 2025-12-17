@@ -1,15 +1,17 @@
 import {
+  BAKE_OP_ALPHA_CUTOFF,
   BAKE_OP_COLOR_RAMP,
   BAKE_OP_END,
   BAKE_OP_FLAT_COLOR,
   BAKE_OP_MIX_ADD,
   BAKE_OP_MIX_LERP,
   BAKE_OP_MIX_MULTIPLY,
+  BAKE_OP_NOISE,
   BAKE_OP_SAMPLE_TEXTURE,
   BAKE_OP_VORONOI,
   __commonJS,
   __toESM
-} from "./App-2php57b7.js";
+} from "./App-xncxg7s8.js";
 
 // node_modules/react/cjs/react.development.js
 var require_react_development = __commonJS((exports, module) => {
@@ -18496,30 +18498,43 @@ function compileNodeForWorker(material, nodeId, socketId, program, ctx) {
         { position: 1, color: "#ffffff" }
       ];
       const sortedStops = [...stops].sort((a, b) => a.position - b.position);
-      ctx.colorRampCount = sortedStops.length;
-      for (let i = 0;i < sortedStops.length && i < 16; i++) {
-        const stop = sortedStops[i];
-        const rgba = hexToRGBA(stop.color);
-        const offset = i * 5;
-        ctx.colorRampData[offset] = Math.round(stop.position * 255);
-        ctx.colorRampData[offset + 1] = rgba.r;
-        ctx.colorRampData[offset + 2] = rgba.g;
-        ctx.colorRampData[offset + 3] = rgba.b;
-        ctx.colorRampData[offset + 4] = rgba.a;
-      }
+      const stopCount = Math.min(sortedStops.length, 16);
       const facConn = material.connections.find((c) => c.toNodeId === node.id && c.toSocketId === "fac");
       if (facConn) {
         hasTexture = compileNodeForWorker(material, facConn.fromNodeId, facConn.fromSocketId, program, ctx) || hasTexture;
       } else {
         program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
       }
-      program.push(BAKE_OP_COLOR_RAMP);
+      program.push(BAKE_OP_COLOR_RAMP, stopCount);
+      for (let i = 0;i < stopCount; i++) {
+        const stop = sortedStops[i];
+        const rgba = hexToRGBA(stop.color);
+        program.push(Math.round(stop.position * 255), rgba.r, rgba.g, rgba.b, rgba.a);
+      }
       break;
     }
     case "voronoi": {
       const scale = Math.round(Math.max(1, Math.min(255, node.data.scale || 5)));
       const mode = Math.round(Math.max(0, Math.min(1, node.data.mode || 0)));
       program.push(BAKE_OP_VORONOI, scale, mode);
+      break;
+    }
+    case "alpha-cutoff": {
+      const threshold = Math.round(Math.max(0, Math.min(255, (node.data.threshold ?? 0.5) * 255)));
+      const colorConn = material.connections.find((c) => c.toNodeId === node.id && c.toSocketId === "color");
+      if (colorConn) {
+        hasTexture = compileNodeForWorker(material, colorConn.fromNodeId, colorConn.fromSocketId, program, ctx) || hasTexture;
+      } else {
+        program.push(BAKE_OP_FLAT_COLOR, 128, 128, 128, 255);
+      }
+      program.push(BAKE_OP_ALPHA_CUTOFF, threshold);
+      break;
+    }
+    case "noise": {
+      const scale = Math.round(Math.max(1, Math.min(255, node.data.scale || 5)));
+      const octaves = Math.round(Math.max(1, Math.min(8, node.data.octaves || 1)));
+      const mode = Math.round(Math.max(0, Math.min(1, node.data.mode || 0)));
+      program.push(BAKE_OP_NOISE, scale, octaves, mode);
       break;
     }
     default:
@@ -18571,7 +18586,12 @@ function evaluateNode(material, node, ctx) {
     case "texture":
     case "voronoi":
     case "color-ramp":
+    case "noise":
       return { r: 128, g: 128, b: 128, a: 255 };
+    case "alpha-cutoff": {
+      const inputColor = evaluateSocket(material, node.id, "color", ctx);
+      return inputColor;
+    }
     case "output":
       return { r: 128, g: 128, b: 128, a: 255 };
     default:
@@ -27615,7 +27635,9 @@ var NODE_COLORS = {
   "flat-color": "#5a3a6b",
   mix: "#3a5a6b",
   "color-ramp": "#3a6b5a",
-  voronoi: "#4a4a6b"
+  voronoi: "#4a4a6b",
+  "alpha-cutoff": "#6b4a4a",
+  noise: "#4a6b4a"
 };
 var SOCKET_COLORS = {
   color: "#c7c729",
@@ -27679,7 +27701,7 @@ function createNode(type, x, y) {
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false }
         ],
-        data: { blendMode: "multiply", factor: 1 }
+        data: { blendMode: "mix", factor: 0.5 }
       };
     case "color-ramp":
       return {
@@ -27714,6 +27736,34 @@ function createNode(type, x, y) {
         ],
         data: { scale: 5, mode: 0 }
       };
+    case "alpha-cutoff":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 110,
+        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { threshold: 0.5 }
+      };
+    case "noise":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 150,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Value", type: "float", isInput: false }
+        ],
+        data: { scale: 5, octaves: 1, mode: 0 }
+      };
     default:
       throw new Error(`Unknown node type: ${type}`);
   }
@@ -27732,6 +27782,10 @@ function getNodeTitle(type) {
       return "Color Ramp";
     case "voronoi":
       return "Voronoi";
+    case "alpha-cutoff":
+      return "Alpha Cutoff";
+    case "noise":
+      return "Noise";
     default:
       return type;
   }
@@ -28487,6 +28541,14 @@ function NodeEditor({
           /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
             onClick: () => handleAddNode("voronoi"),
             children: "Voronoi"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("noise"),
+            children: "Noise"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("alpha-cutoff"),
+            children: "Alpha Cutoff"
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
@@ -28645,6 +28707,126 @@ function NodeEditor({
           ]
         }, node.id, true, undefined, this);
       }),
+      nodes.filter((n) => n.type === "mix").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const controlX = node.x * zoom + pan.x + 8 * zoom;
+        const controlY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const controlW = (node.width - 16) * zoom;
+        const blendMode = node.data.blendMode || "mix";
+        const factor = node.data.factor ?? 0.5;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+          className: "mix-control",
+          style: {
+            position: "absolute",
+            left: controlX,
+            top: controlY,
+            width: controlW,
+            zIndex: 10
+          },
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%",
+                marginBottom: 6 * zoom
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Mode"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("select", {
+                  value: blendMode,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newMode = e.target.value;
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, blendMode: newMode } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer"
+                  },
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: "mix",
+                      children: "Mix"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: "multiply",
+                      children: "Multiply"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: "add",
+                      children: "Add"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%"
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Factor"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                  type: "range",
+                  min: "0",
+                  max: "1",
+                  step: "0.01",
+                  value: factor,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newFactor = parseFloat(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, factor: newFactor } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer"
+                  }
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 24 * zoom,
+                    textAlign: "right"
+                  },
+                  children: factor.toFixed(2)
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, node.id, true, undefined, this);
+      }),
       nodes.filter((n) => n.type === "voronoi").map((node) => {
         const container = containerRef.current;
         if (!container)
@@ -28755,6 +28937,238 @@ function NodeEditor({
                     textAlign: "right"
                   },
                   children: scale
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, node.id, true, undefined, this);
+      }),
+      nodes.filter((n) => n.type === "alpha-cutoff").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const controlX = node.x * zoom + pan.x + 8 * zoom;
+        const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const controlW = (node.width - 16) * zoom;
+        const threshold = node.data.threshold ?? 0.5;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+          className: "alpha-cutoff-control",
+          style: {
+            position: "absolute",
+            left: controlX,
+            top: sliderY,
+            width: controlW,
+            zIndex: 10
+          },
+          children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 4 * zoom,
+              width: "100%"
+            },
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                style: {
+                  fontSize: 10 * zoom,
+                  color: "#aaa",
+                  flexShrink: 0
+                },
+                children: "Threshold"
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                type: "range",
+                min: "0",
+                max: "1",
+                step: "0.01",
+                value: threshold,
+                onMouseDown: () => pushUndo(),
+                onChange: (e) => {
+                  const newThreshold = parseFloat(e.target.value);
+                  setNodes((prev) => prev.map((n) => n.id === node.id ? {
+                    ...n,
+                    data: { ...n.data, threshold: newThreshold }
+                  } : n));
+                },
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  height: 12 * zoom,
+                  cursor: "pointer"
+                }
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                style: {
+                  fontSize: 10 * zoom,
+                  color: "#fff",
+                  flexShrink: 0,
+                  minWidth: 24 * zoom,
+                  textAlign: "right"
+                },
+                children: threshold.toFixed(2)
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        }, node.id, false, undefined, this);
+      }),
+      nodes.filter((n) => n.type === "noise").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const controlX = node.x * zoom + pan.x + 8 * zoom;
+        const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const controlW = (node.width - 16) * zoom;
+        const scale = node.data.scale || 5;
+        const octaves = node.data.octaves || 1;
+        const mode = node.data.mode || 0;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+          className: "noise-control",
+          style: {
+            position: "absolute",
+            left: controlX,
+            top: sliderY,
+            width: controlW,
+            zIndex: 10
+          },
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%",
+                marginBottom: 6 * zoom
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Type"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("select", {
+                  value: mode,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newMode = parseInt(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, mode: newMode } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer"
+                  },
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: 0,
+                      children: "Value"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: 1,
+                      children: "Simplex"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%",
+                marginBottom: 6 * zoom
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Scale"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                  type: "range",
+                  min: "1",
+                  max: "50",
+                  step: "1",
+                  value: scale,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newScale = parseInt(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, scale: newScale } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer"
+                  }
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right"
+                  },
+                  children: scale
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%"
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Octaves"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                  type: "range",
+                  min: "1",
+                  max: "8",
+                  step: "1",
+                  value: octaves,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newOctaves = parseInt(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, octaves: newOctaves } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer"
+                  }
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right"
+                  },
+                  children: octaves
                 }, undefined, false, undefined, this)
               ]
             }, undefined, true, undefined, this)
@@ -29695,15 +30109,22 @@ function App() {
       return;
     renderDimensionsRef.current.displayWidth = width;
     renderDimensionsRef.current.displayHeight = height;
-    const baseWidth = 640;
     const aspectRatio = width / height;
-    const baseHeight = Math.max(400, Math.floor(baseWidth / aspectRatio));
-    renderDimensionsRef.current.renderWidth = baseWidth;
-    renderDimensionsRef.current.renderHeight = baseHeight;
-    setRenderResolution(baseWidth, baseHeight);
+    let renderW;
+    let renderH;
+    renderW = 640;
+    renderH = Math.floor(renderW / aspectRatio);
+    const minHeight = 400;
+    if (renderH < minHeight) {
+      renderH = minHeight;
+      renderW = Math.floor(renderH * aspectRatio);
+    }
+    renderDimensionsRef.current.renderWidth = renderW;
+    renderDimensionsRef.current.renderHeight = renderH;
+    setRenderResolution(renderW, renderH);
     if (workerClient) {
       workerClient.resize(width, height);
-      workerClient.setRenderResolution(baseWidth, baseHeight);
+      workerClient.setRenderResolution(renderW, renderH);
     }
   }, []);
   const loadOBJ = import_react9.useCallback(async (url) => {
@@ -30024,6 +30445,7 @@ function App() {
   }, [settings]);
   import_react9.useEffect(() => {
     const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
     if (!canvas)
       return;
     let handleKeyDown2;
@@ -30035,6 +30457,7 @@ function App() {
     let handleContextMenu;
     let handleViewportEnter;
     let handleViewportLeave;
+    let resizeObserver = null;
     const workerClient = new RenderWorkerClient("render-worker.js");
     workerClientRef.current = workerClient;
     workerClient.onFrameStats = (fps2, frameTimeMs) => {
@@ -30051,6 +30474,12 @@ function App() {
       loadOBJ("roman_head.obj");
       setMaterialList(scene.materials.getAll());
       setSelectedMaterialId(scene.materials.getDefault().id);
+      if (viewport) {
+        resizeObserver = new ResizeObserver(() => {
+          resizeCanvas();
+        });
+        resizeObserver.observe(viewport);
+      }
       window.addEventListener("resize", resizeCanvas);
       const inputManager = inputManagerRef.current;
       handleKeyDown2 = (e) => {
@@ -30300,6 +30729,7 @@ function App() {
         renderLoopIdRef.current = 0;
       }
       workerClient.terminate();
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", resizeCanvas);
       if (handleKeyDown2)
         window.removeEventListener("keydown", handleKeyDown2);

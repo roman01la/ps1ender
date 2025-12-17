@@ -190,19 +190,31 @@ function App() {
     renderDimensionsRef.current.displayHeight = height;
 
     // Update render resolution to match aspect ratio (PS1-style low res)
-    // Use fixed base width, calculate height from aspect ratio
-    const baseWidth = 640;
+    // Calculate dimensions that preserve aspect ratio
     const aspectRatio = width / height;
-    const baseHeight = Math.max(400, Math.floor(baseWidth / aspectRatio));
 
-    renderDimensionsRef.current.renderWidth = baseWidth;
-    renderDimensionsRef.current.renderHeight = baseHeight;
-    setRenderResolution(baseWidth, baseHeight);
+    let renderW: number;
+    let renderH: number;
+
+    // Start with base width of 640, calculate height
+    renderW = 640;
+    renderH = Math.floor(renderW / aspectRatio);
+
+    // If height would be too small, use minimum height and adjust width
+    const minHeight = 400;
+    if (renderH < minHeight) {
+      renderH = minHeight;
+      renderW = Math.floor(renderH * aspectRatio);
+    }
+
+    renderDimensionsRef.current.renderWidth = renderW;
+    renderDimensionsRef.current.renderHeight = renderH;
+    setRenderResolution(renderW, renderH);
 
     if (workerClient) {
       // Resize display canvas and render resolution in worker
       workerClient.resize(width, height);
-      workerClient.setRenderResolution(baseWidth, baseHeight);
+      workerClient.setRenderResolution(renderW, renderH);
     }
   }, []);
 
@@ -703,6 +715,7 @@ function App() {
   // Main render loop
   useEffect(() => {
     const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
     if (!canvas) return;
 
     // Store references for cleanup
@@ -715,6 +728,7 @@ function App() {
     let handleContextMenu: (e: MouseEvent) => void;
     let handleViewportEnter: () => void;
     let handleViewportLeave: () => void;
+    let resizeObserver: ResizeObserver | null = null;
 
     // Initialize render worker
     const workerClient = new RenderWorkerClient("render-worker.js");
@@ -750,7 +764,13 @@ function App() {
       setMaterialList(scene.materials.getAll());
       setSelectedMaterialId(scene.materials.getDefault().id);
 
-      // Handle resize
+      // Handle resize - use ResizeObserver for viewport element size changes
+      if (viewport) {
+        resizeObserver = new ResizeObserver(() => {
+          resizeCanvas();
+        });
+        resizeObserver.observe(viewport);
+      }
       window.addEventListener("resize", resizeCanvas);
 
       // Handle keyboard
@@ -1167,6 +1187,7 @@ function App() {
         renderLoopIdRef.current = 0;
       }
       workerClient.terminate();
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", resizeCanvas);
       if (handleKeyDown) window.removeEventListener("keydown", handleKeyDown);
       if (handleKeyUp) window.removeEventListener("keyup", handleKeyUp);

@@ -26,6 +26,8 @@ export const BAKE_OP_MIX_ADD = 3;
 export const BAKE_OP_MIX_LERP = 4;
 export const BAKE_OP_COLOR_RAMP = 5;
 export const BAKE_OP_VORONOI = 6;
+export const BAKE_OP_ALPHA_CUTOFF = 7;
+export const BAKE_OP_NOISE = 8;
 export const BAKE_OP_END = 255;
 
 // Vertex format: x, y, z, nx, ny, nz, u, v, r, g, b, a (12 floats)

@@ -44,6 +44,23 @@ bun run mcp
 
 ---
 
+## After Making Changes
+
+**Always verify changes by:**
+
+1. **Check TypeScript errors** - Use `get_errors` tool to catch type errors
+2. **Run tests** - Execute `bun test` to ensure no regressions
+3. **Rebuild WASM** (if editing `wasm/rasterizer.cpp`) - Run `bun run build:wasm`
+
+Common issues to watch for:
+
+- Variable scope issues (especially in React useEffect cleanup)
+- Missing imports after refactoring
+- Type mismatches when extracting components
+- Aspect ratio / dimension calculations that break on edge cases
+
+---
+
 ## Architecture
 
 ### Directory Structure
@@ -233,12 +250,56 @@ function makeEdgeKey(a: number, b: number): string {
 }
 ```
 
+### Position Keys (Co-located Vertex Handling)
+
+**CRITICAL:** The epsilon value (0.0001) must be consistent across ALL position comparisons:
+
+```typescript
+const epsilon = 0.0001;
+const getPositionKey = (pos) =>
+  `${Math.round(pos.x / epsilon)},${Math.round(pos.y / epsilon)},${Math.round(
+    pos.z / epsilon
+  )}`;
+```
+
 ### Face-Based Topology (BMesh-style)
 
 - `Face` interface: `{ vertices: number[], material?: number }`
 - `mesh.faceData: Face[]` is the primary topology storage
 - Supports quads, tris, and n-gons
 - `rebuildFromFaces()` generates triangle indices via fan triangulation
+- Fan triangulation: Quad `[v0, v1, v2, v3]` → triangles `[v0, v1, v2]` and `[v0, v2, v3]`
+
+### Per-Face Vertex Duplication
+
+Meshes use **per-face vertex duplication** for smooth normals:
+
+- Each triangle has its own set of 3 vertex indices
+- A cube has 24 vertices (4 per face × 6 faces), not 8
+- Use `mesh.indices[]` for editing, NOT `mesh.triangles[]` (triangles are cloned copies)
+
+```typescript
+// CORRECT: Use indices for editing
+const i0 = mesh.indices[faceIdx * 3];
+const pos = mesh.vertices[i0].position;
+
+// WRONG: triangles contains cloned data
+const pos = mesh.triangles[faceIdx].v0.position; // This is a copy!
+```
+
+### Co-located Vertex Strategies
+
+Due to per-face vertex duplication, multiple indices exist at the same position:
+
+| Mode      | Strategy                  | Method                               |
+| --------- | ------------------------- | ------------------------------------ |
+| Vertex    | Direct edge adjacency     | `getConnectedColocatedVertices()`    |
+| Edge/Face | Full component flood-fill | `getColocatedVerticesForPositions()` |
+
+**Why different strategies?**
+
+- Vertex mode: Only immediately adjacent duplicates should move
+- Edge/Face mode: ALL co-located vertices in the connected component must move
 
 ### Transform Results
 
@@ -301,8 +362,26 @@ interface PickContext {
 ### WASM Rasterizer
 
 - Located in `wasm/` directory
-- Build with `make` in `wasm/` folder
-- SIMD-optimized for 3-4× performance improvement
+- Build with `bun run build:wasm`
+- SIMD-optimized (v128 registers) for 3-4× performance improvement
+- 16-bit fixed-point Z-buffer (PS1 style)
+
+### Material System Bytecode
+
+Materials compile to bytecode executed in WASM. Opcodes use a stack-based VM:
+
+| Opcode                   | Value | Description                             |
+| ------------------------ | ----- | --------------------------------------- |
+| `BAKE_OP_FLAT_COLOR`     | 0     | Push RGBA color (4 bytes follow)        |
+| `BAKE_OP_SAMPLE_TEXTURE` | 1     | Sample texture at UV                    |
+| `BAKE_OP_MIX_MULTIPLY`   | 2     | Pop 2 colors, push multiplied result    |
+| `BAKE_OP_MIX_ADD`        | 3     | Pop 2 colors, push added result         |
+| `BAKE_OP_MIX_LERP`       | 4     | Pop 2 colors, push lerped result        |
+| `BAKE_OP_COLOR_RAMP`     | 5     | Evaluate gradient with factor           |
+| `BAKE_OP_VORONOI`        | 6     | Generate cell noise (scale, mode bytes) |
+| `BAKE_OP_ALPHA_CUTOFF`   | 7     | Binary alpha threshold                  |
+| `BAKE_OP_NOISE`          | 8     | Procedural noise (scale, octaves, mode) |
+| `BAKE_OP_END`            | 255   | End of program                          |
 
 ### Headless Rendering
 
@@ -414,6 +493,33 @@ const result = await client.callTool("render_scene", {
 2. Add to `AddMenu.tsx` component
 3. Optionally add settings to `PrimitiveSettings.tsx`
 
+### Adding a New Shader Node Type
+
+When adding a new node to the material/shader editor:
+
+**TypeScript Side:**
+
+1. **Add NodeType** - Add type name to `NodeType` union in `src/material.ts`
+2. **Add BAKE_OP constant** - Add `BAKE_OP_YOUR_NODE = N` in `src/wasm-rasterizer.ts`
+3. **Add compilation case** - Add case in `compileNode()` function in `src/material.ts`
+4. **Add evaluateNode case** - Add case in `evaluateNode()` for JS fallback in `src/material.ts`
+5. **Add node color** - Add entry to `NODE_COLORS` record in `src/components/NodeEditor.tsx`
+6. **Add createNode factory** - Add case in `createNode()` with width, height, inputs, outputs, and default data
+7. **Add getNodeTitle** - Add case in `getNodeTitle()` for display name
+8. **Add context menu button** - Add button in the appropriate category (Generator, Converter, etc.)
+9. **Add UI controls** - Add sliders/dropdowns for node parameters (follow Voronoi/Noise pattern)
+
+**WASM Side:**
+
+10. **Add enum value** - Add `BAKE_OP_YOUR_NODE = N` to `BakeOp` enum in `wasm/rasterizer.cpp`
+11. **Add case handler** - Add `case BAKE_OP_YOUR_NODE:` in `bake_material()` switch statement
+12. **Rebuild WASM** - Run `bun run build:wasm`
+
+**Verify:**
+
+13. Check for TypeScript errors with `get_errors` tool
+14. Run `bun test` to ensure no regressions
+
 ### Adding a Test File
 
 1. Create `module.test.ts` next to source file
@@ -426,3 +532,32 @@ const result = await client.callTool("render_scene", {
 - Check browser console for runtime errors
 - Use `console.log` in render-worker for rasterizer debugging
 - WASM errors logged to console with stack traces
+
+### Common Issues & Solutions
+
+**"Geometry is tearing/stretching"**
+
+- Check if co-located vertices are being handled correctly
+- For vertex mode: use `getConnectedColocatedVertices()` (adjacent only)
+- For edge/face mode: use `getColocatedVerticesForPositions()` (full component)
+
+**"Transform affects unexpected vertices"**
+
+- Verify the correct expansion strategy for current selection mode
+- Print selected vertex indices to debug
+- Check component filtering for disconnected geometry (e.g., Suzanne's eyes)
+
+**"Deletion leaves orphan vertices"**
+
+- Mesh rebuild should handle this - check index remapping
+- Verify triangles array is rebuilt from indices
+
+**"Select Linked selects wrong geometry"**
+
+- Verify geometric edge detection uses position-based keys
+- Check epsilon value consistency (must be 0.0001 everywhere)
+
+**"Quad diagonals showing in edge mode"**
+
+- `getQuadDiagonalEdges()` must return position-based edge keys
+- Diagonal key format: `[posKey0, posKey1].sort().join("|")`
