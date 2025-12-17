@@ -419,6 +419,36 @@ When creating a new face adjacent to existing faces, `ensureConsistentWinding()`
 
 ---
 
+## File Format Handling
+
+### OBJ Format
+
+OBJ files store faces as n-gons (quads, triangles, or higher). The `OBJLoader`:
+
+1. Parses face commands (`f`) and stores original face vertex counts in `faceData`
+2. Triangulates faces for rendering (fan triangulation)
+3. **Preserves quads/n-gons** - faceData contains the original topology
+
+### GLTF Format
+
+GLTF files store **only triangulated geometry** (no quads/n-gons). The `GLTFLoader`:
+
+1. Parses triangulated indices from GLTF
+2. **Relies on Mesh constructor** to detect quads via `buildFacesFromIndices()`
+3. Does NOT manually build faceData - lets quad detection reconstruct topology
+
+**Key insight:** GLTF stores triangulated data, but consecutive triangle pairs that share exactly 2 vertex positions (the diagonal) and are coplanar are reconstructed as quads.
+
+### Primitive Creation
+
+Primitive creation functions (`createCubeMesh()`, etc.):
+
+1. Build vertices and triangulated indices
+2. Pass to `Mesh(vertices, indices)` constructor
+3. Constructor calls `buildFacesFromIndices()` to detect quads
+
+---
+
 ### Architecture
 
 Selection is managed by `SelectionManager` class in `src/systems/selection.ts`. The Editor class delegates all selection operations to this manager.
