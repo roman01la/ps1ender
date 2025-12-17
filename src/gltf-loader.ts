@@ -15,7 +15,7 @@
  */
 
 import { Vector3, Color, Matrix4 } from "./math";
-import { Vertex, Mesh, Face } from "./primitives";
+import { Vertex, Mesh } from "./primitives";
 import { Texture } from "./texture";
 import { SceneObject, Scene } from "./scene";
 import { ShaderNode, NodeConnection } from "./material";
@@ -1079,25 +1079,18 @@ export class GLTFLoader {
       // (PS1ender doesn't support sub-meshes)
       const allVertices: Vertex[] = [];
       const allIndices: number[] = [];
-      const allFaces: Face[] = [];
       let primaryMaterial: string | null = null;
 
       for (const primitive of gltfMesh.primitives) {
         const baseVertexIndex = allVertices.length;
 
-        // Parse primitive
-        const { vertices, indices, faces } = this.parsePrimitive(primitive);
+        // Parse primitive - GLTF stores triangles, we only need vertices and indices
+        // The Mesh constructor will automatically detect and reconstruct quads from triangle pairs
+        const { vertices, indices } = this.parsePrimitive(primitive);
 
         // Offset indices
         for (const index of indices) {
           allIndices.push(index + baseVertexIndex);
-        }
-
-        // Offset face indices
-        for (const face of faces) {
-          allFaces.push({
-            vertices: face.vertices.map((v) => v + baseVertexIndex),
-          });
         }
 
         allVertices.push(...vertices);
@@ -1110,8 +1103,8 @@ export class GLTFLoader {
       }
 
       if (allVertices.length > 0) {
+        // Let the Mesh constructor automatically detect quads from triangle pairs
         const mesh = new Mesh(allVertices, allIndices);
-        mesh.faceData = allFaces;
 
         // Calculate normals if not provided
         this.calculateNormalsIfMissing(mesh);
@@ -1129,15 +1122,15 @@ export class GLTFLoader {
 
   /**
    * Parse a single primitive
+   * Note: GLTF stores triangulated geometry. The Mesh constructor will automatically
+   * detect and reconstruct quads from consecutive triangle pairs.
    */
   private parsePrimitive(primitive: GLTFPrimitive): {
     vertices: Vertex[];
     indices: number[];
-    faces: Face[];
   } {
     const vertices: Vertex[] = [];
     const indices: number[] = [];
-    const faces: Face[] = [];
 
     // Get attribute data
     const positions =
@@ -1158,7 +1151,7 @@ export class GLTFLoader {
         : null;
 
     if (!positions) {
-      return { vertices, indices, faces };
+      return { vertices, indices };
     }
 
     // Get position accessor for count
@@ -1227,7 +1220,8 @@ export class GLTFLoader {
       vertices.push(new Vertex(position, color, normal, u, v));
     }
 
-    // Get indices
+    // Get indices - GLTF stores triangulated geometry
+    // The Mesh constructor will detect quads via buildFacesFromIndices()
     const mode = primitive.mode ?? 4; // Default to TRIANGLES
 
     if (primitive.indices !== undefined) {
@@ -1240,34 +1234,19 @@ export class GLTFLoader {
         for (let i = 0; i < indexAccessor.count; i++) {
           indices.push(indexData[i]);
         }
-        // Create faces (triangles)
-        for (let i = 0; i < indexAccessor.count; i += 3) {
-          faces.push({
-            vertices: [indexData[i], indexData[i + 1], indexData[i + 2]],
-          });
-        }
       } else if (mode === 5) {
         // TRIANGLE_STRIP
         for (let i = 0; i < indexAccessor.count - 2; i++) {
           if (i % 2 === 0) {
             indices.push(indexData[i], indexData[i + 1], indexData[i + 2]);
-            faces.push({
-              vertices: [indexData[i], indexData[i + 1], indexData[i + 2]],
-            });
           } else {
             indices.push(indexData[i], indexData[i + 2], indexData[i + 1]);
-            faces.push({
-              vertices: [indexData[i], indexData[i + 2], indexData[i + 1]],
-            });
           }
         }
       } else if (mode === 6) {
         // TRIANGLE_FAN
         for (let i = 1; i < indexAccessor.count - 1; i++) {
           indices.push(indexData[0], indexData[i], indexData[i + 1]);
-          faces.push({
-            vertices: [indexData[0], indexData[i], indexData[i + 1]],
-          });
         }
       }
     } else {
@@ -1277,32 +1256,24 @@ export class GLTFLoader {
         for (let i = 0; i < vertexCount; i++) {
           indices.push(i);
         }
-        for (let i = 0; i < vertexCount; i += 3) {
-          faces.push({
-            vertices: [i, i + 1, i + 2],
-          });
-        }
       } else if (mode === 5) {
         // TRIANGLE_STRIP
         for (let i = 0; i < vertexCount - 2; i++) {
           if (i % 2 === 0) {
             indices.push(i, i + 1, i + 2);
-            faces.push({ vertices: [i, i + 1, i + 2] });
           } else {
             indices.push(i, i + 2, i + 1);
-            faces.push({ vertices: [i, i + 2, i + 1] });
           }
         }
       } else if (mode === 6) {
         // TRIANGLE_FAN
         for (let i = 1; i < vertexCount - 1; i++) {
           indices.push(0, i, i + 1);
-          faces.push({ vertices: [0, i, i + 1] });
         }
       }
     }
 
-    return { vertices, indices, faces };
+    return { vertices, indices };
   }
 
   /**
