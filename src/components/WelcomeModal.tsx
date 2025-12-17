@@ -119,7 +119,7 @@ export function WelcomeModal({ onClose }: WelcomeModalProps) {
               <li>
                 <kbd>X</kbd> Delete selected
               </li>
-              <li>Drag & drop .OBJ files to import</li>
+              <li>Drag & drop .OBJ, .GLTF, .GLB files to import</li>
             </ul>
           </div>
         </div>
@@ -127,7 +127,7 @@ export function WelcomeModal({ onClose }: WelcomeModalProps) {
         <div className="welcome-footer">
           <p className="welcome-note">
             🤖 This project was entirely written by AI (Claude) under human
-            supervision. Total cost: ~$60 in tokens.
+            supervision. Total cost: ~$100 in tokens.
           </p>
           <div className="welcome-footer-actions">
             <label className="welcome-checkbox">

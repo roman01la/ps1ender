@@ -8,6 +8,7 @@ import {
   Socket,
   ColorStop,
 } from "../material";
+import { Texture } from "../texture";
 import { historyManager, GenericHistoryStack } from "../systems/history";
 
 // Re-export types for convenience
@@ -30,6 +31,8 @@ interface NodeEditorProps {
   onSelectMaterial: (id: string) => void;
   onMaterialChange?: (material: Material) => void;
   onNewMaterial?: () => void;
+  /** Map of texture names/paths to Texture objects for previews */
+  textureMap?: Map<string, Texture>;
 }
 
 // Node color scheme (PS1-style simplified)
@@ -173,9 +176,13 @@ export function NodeEditor({
   onSelectMaterial,
   onMaterialChange,
   onNewMaterial,
+  textureMap,
 }: NodeEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Cache for texture preview ImageBitmaps (keyed by texture path)
+  const texturePreviewCache = useRef<Map<string, ImageBitmap>>(new Map());
 
   // Get active material from list
   const material = materials.find((m) => m.id === selectedMaterialId) || null;
@@ -276,6 +283,42 @@ export function NodeEditor({
       }
     }
   }, [nodes, connections, material, onMaterialChange]);
+
+  // Create ImageBitmap previews from textureMap
+  useEffect(() => {
+    if (!textureMap) return;
+
+    const cache = texturePreviewCache.current;
+
+    // Create ImageBitmaps for any new textures
+    textureMap.forEach((texture, key) => {
+      if (cache.has(key)) return; // Already cached
+
+      if (texture.loaded && texture.width > 0 && texture.height > 0) {
+        // Create ImageData from texture
+        const imageData = new ImageData(
+          new Uint8ClampedArray(texture.getData()),
+          texture.width,
+          texture.height
+        );
+
+        // Create ImageBitmap asynchronously
+        createImageBitmap(imageData).then((bitmap) => {
+          cache.set(key, bitmap);
+          // Force re-render to show the preview
+          setNodes((n) => [...n]);
+        });
+      }
+    });
+
+    // Cleanup: remove cached bitmaps for textures no longer in map
+    cache.forEach((_, key) => {
+      if (!textureMap.has(key)) {
+        cache.get(key)?.close();
+        cache.delete(key);
+      }
+    });
+  }, [textureMap, nodes]);
 
   // Interaction state
   const [dragging, setDragging] = useState<{
@@ -1094,7 +1137,13 @@ export function NodeEditor({
 
     // Draw nodes
     for (const node of nodes) {
-      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom);
+      drawNode(
+        ctx,
+        node,
+        selectedNodeIds.has(node.id),
+        zoom,
+        texturePreviewCache.current
+      );
     }
 
     // Draw box selection
@@ -1615,7 +1664,8 @@ function drawNode(
   ctx: CanvasRenderingContext2D,
   node: ShaderNode,
   selected: boolean,
-  zoom: number
+  zoom: number,
+  texturePreviewCache?: Map<string, ImageBitmap>
 ) {
   const { x, y, width, height, type } = node;
   const headerHeight = 24;
@@ -1714,31 +1764,86 @@ function drawNode(
     ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
   }
 
-  // Draw texture info for texture node
+  // Draw texture info and preview for texture node
   if (type === "texture") {
-    const infoY = y + headerHeight + 36;
-    ctx.font = "10px 'Pixelify Sans', sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#888888";
-
-    // Display filename (truncated if too long)
     const imagePath = (node.data.imagePath as string) || "";
-    const filename = imagePath
-      ? imagePath.split("/").pop() || imagePath
-      : "No texture";
-    const maxChars = 20;
-    const displayName =
-      filename.length > maxChars
-        ? filename.substring(0, maxChars - 2) + ".."
-        : filename;
-    ctx.fillText(displayName, x + 8, infoY);
-
-    // Display dimensions if available
     const texW = (node.data.textureWidth as number) || 0;
     const texH = (node.data.textureHeight as number) || 0;
-    if (texW > 0 && texH > 0) {
-      ctx.fillStyle = "#666666";
-      ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+
+    // Try to draw texture preview if available
+    const preview = texturePreviewCache?.get(imagePath);
+    if (preview) {
+      const previewX = x + 8;
+      const previewY = y + headerHeight + 8;
+      const previewSize = Math.min(width - 16, 48); // Square preview, max 48px
+
+      // Draw checkerboard background for transparency
+      const checkSize = 6;
+      for (let cy = 0; cy < previewSize; cy += checkSize) {
+        for (let cx = 0; cx < previewSize; cx += checkSize) {
+          const isLight = (cx / checkSize + cy / checkSize) % 2 === 0;
+          ctx.fillStyle = isLight ? "#4a4a4a" : "#3a3a3a";
+          ctx.fillRect(
+            previewX + cx,
+            previewY + cy,
+            Math.min(checkSize, previewSize - cx),
+            Math.min(checkSize, previewSize - cy)
+          );
+        }
+      }
+
+      // Draw the texture preview (fit to square)
+      ctx.drawImage(preview, previewX, previewY, previewSize, previewSize);
+
+      // Draw preview border
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = 1 / zoom;
+      ctx.strokeRect(previewX, previewY, previewSize, previewSize);
+
+      // Draw filename next to preview
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+      const filename = imagePath.split("/").pop() || imagePath || "No texture";
+      const maxChars = 12;
+      const displayName =
+        filename.length > maxChars
+          ? filename.substring(0, maxChars - 2) + ".."
+          : filename;
+      ctx.fillText(displayName, previewX + previewSize + 6, previewY + 14);
+
+      // Display dimensions
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(
+          `${texW}×${texH}`,
+          previewX + previewSize + 6,
+          previewY + 28
+        );
+      }
+    } else {
+      // No preview available - show text only
+      const infoY = y + headerHeight + 36;
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+
+      // Display filename (truncated if too long)
+      const filename = imagePath
+        ? imagePath.split("/").pop() || imagePath
+        : "No texture";
+      const maxChars = 20;
+      const displayName =
+        filename.length > maxChars
+          ? filename.substring(0, maxChars - 2) + ".."
+          : filename;
+      ctx.fillText(displayName, x + 8, infoY);
+
+      // Display dimensions if available
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+      }
     }
   }
 

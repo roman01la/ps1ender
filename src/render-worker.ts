@@ -99,6 +99,16 @@ export interface RenderObject {
   hasTexture: boolean; // Whether this object has a texture assigned
   // Material baking (if present, worker will bake before rendering)
   materialBake?: MaterialBakeRequest;
+  // Texture ID for per-object texturing (references textures in frame.textures)
+  textureId?: string;
+}
+
+/** Texture data to upload to worker cache */
+export interface TextureUpload {
+  id: string;
+  width: number;
+  height: number;
+  data: Uint8Array;
 }
 
 /** Line data for grid/wireframe/gizmo */
@@ -172,13 +182,16 @@ export interface RenderFrame {
     originPoint: RenderPointNoDepth | null;
   };
 
-  // Texture data (only sent when changed)
+  // Legacy global texture (for backwards compatibility)
   texture: {
     slot: number;
     width: number;
     height: number;
     data: Uint8Array;
   } | null;
+
+  // New textures to upload to cache (only sent once per texture)
+  textures: TextureUpload[];
 
   // Per-frame flags (to avoid settings race conditions)
   enableTexturing: boolean;
@@ -226,6 +239,15 @@ interface BakedTextureCache {
   programHash: string; // Hash of program bytes to detect changes
 }
 const bakedTextureCache = new Map<string, BakedTextureCache>();
+
+// Per-object texture cache (keyed by texture ID from main thread)
+// Stores texture data to avoid re-uploading every frame
+interface TextureCache {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}
+const textureCache = new Map<string, TextureCache>();
 
 // Slot dedicated for baked textures (we use slot 1, slot 0 is for source textures)
 const BAKED_TEXTURE_SLOT = 1;
@@ -886,7 +908,16 @@ function renderFullFrame(frame: RenderFrame): void {
   // Clear
   wasm.clear(frame.clearColor[0], frame.clearColor[1], frame.clearColor[2]);
 
-  // Upload texture if provided
+  // Upload new textures to cache
+  for (const tex of frame.textures) {
+    textureCache.set(tex.id, {
+      data: tex.data,
+      width: tex.width,
+      height: tex.height,
+    });
+  }
+
+  // Upload legacy global texture if provided
   if (frame.texture) {
     const texBuf = wasm.getTextureBuffer(frame.texture.slot);
     texBuf.set(frame.texture.data);
@@ -913,6 +944,17 @@ function renderFullFrame(frame: RenderFrame): void {
     if (obj.isEdgeOnly) {
       // Edge-only objects rendered as lines (handled in main thread serialization)
       continue;
+    }
+
+    // Upload per-object texture from cache if textureId is set
+    if (obj.textureId && wasmInstance && !obj.materialBake) {
+      const cached = textureCache.get(obj.textureId);
+      if (cached) {
+        const texBuf = wasmInstance.getTextureBuffer(0);
+        texBuf.set(cached.data);
+        wasmInstance.setTextureSize(0, cached.width, cached.height);
+        wasmInstance.setCurrentTexture(0);
+      }
     }
 
     // Handle material baking if needed

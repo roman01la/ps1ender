@@ -836,7 +836,7 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
 
 // node_modules/react/index.js
 var require_react = __commonJS((exports, module) => {
-  var react_development = __toESM(require_react_development());
+  var react_development = __toESM(require_react_development(), 1);
   if (false) {} else {
     module.exports = react_development;
   }
@@ -1099,7 +1099,7 @@ var require_scheduler_development = __commonJS((exports) => {
 
 // node_modules/scheduler/index.js
 var require_scheduler = __commonJS((exports, module) => {
-  var scheduler_development = __toESM(require_scheduler_development());
+  var scheduler_development = __toESM(require_scheduler_development(), 1);
   if (false) {} else {
     module.exports = scheduler_development;
   }
@@ -1107,7 +1107,7 @@ var require_scheduler = __commonJS((exports, module) => {
 
 // node_modules/react-dom/cjs/react-dom.development.js
 var require_react_dom_development = __commonJS((exports) => {
-  var React = __toESM(require_react());
+  var React = __toESM(require_react(), 1);
   (function() {
     function noop() {}
     function testStringCoercion(value2) {
@@ -1290,7 +1290,7 @@ See https://react.dev/link/invalid-hook-call for tips about how to debug and fix
 
 // node_modules/react-dom/index.js
 var require_react_dom = __commonJS((exports, module) => {
-  var react_dom_development = __toESM(require_react_dom_development());
+  var react_dom_development = __toESM(require_react_dom_development(), 1);
   if (false) {} else {
     module.exports = react_dom_development;
   }
@@ -1298,9 +1298,9 @@ var require_react_dom = __commonJS((exports, module) => {
 
 // node_modules/react-dom/cjs/react-dom-client.development.js
 var require_react_dom_client_development = __commonJS((exports) => {
-  var Scheduler = __toESM(require_scheduler());
-  var React = __toESM(require_react());
-  var ReactDOM = __toESM(require_react_dom());
+  var Scheduler = __toESM(require_scheduler(), 1);
+  var React = __toESM(require_react(), 1);
+  var ReactDOM = __toESM(require_react_dom(), 1);
   (function() {
     function findHook(fiber, id) {
       for (fiber = fiber.memoizedState;fiber !== null && 0 < id; )
@@ -16866,7 +16866,7 @@ You might need to use a local HTTP server (instead of file://): https://react.de
 
 // node_modules/react-dom/client.js
 var require_client = __commonJS((exports, module) => {
-  var react_dom_client_development = __toESM(require_react_dom_client_development());
+  var react_dom_client_development = __toESM(require_react_dom_client_development(), 1);
   if (false) {} else {
     module.exports = react_dom_client_development;
   }
@@ -16874,7 +16874,7 @@ var require_client = __commonJS((exports, module) => {
 
 // node_modules/react/cjs/react-jsx-dev-runtime.development.js
 var require_react_jsx_dev_runtime_development = __commonJS((exports) => {
-  var React = __toESM(require_react());
+  var React = __toESM(require_react(), 1);
   (function() {
     function getComponentNameFromType(type) {
       if (type == null)
@@ -17089,7 +17089,7 @@ React keys must be passed directly to JSX without using spread:
 
 // node_modules/react/jsx-dev-runtime.js
 var require_jsx_dev_runtime = __commonJS((exports, module) => {
-  var react_jsx_dev_runtime_development = __toESM(require_react_jsx_dev_runtime_development());
+  var react_jsx_dev_runtime_development = __toESM(require_react_jsx_dev_runtime_development(), 1);
   if (false) {} else {
     module.exports = react_jsx_dev_runtime_development;
   }
@@ -19348,6 +19348,626 @@ class Scene {
       vertexIndex += 2;
     }
     return { vertices, lineIndices };
+  }
+}
+
+// src/gltf-loader.ts
+var COMPONENT_TYPE_SIZE = {
+  5120: 1,
+  5121: 1,
+  5122: 2,
+  5123: 2,
+  5125: 4,
+  5126: 4
+};
+var TYPE_COMPONENTS = {
+  SCALAR: 1,
+  VEC2: 2,
+  VEC3: 3,
+  VEC4: 4,
+  MAT2: 4,
+  MAT3: 9,
+  MAT4: 16
+};
+
+class GLTFLoader {
+  json;
+  buffers = [];
+  baseUrl = "";
+  constructor(json) {
+    this.json = json;
+  }
+  static async load(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load GLTF: ${response.statusText}`);
+    }
+    const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+    const arrayBuffer = await response.arrayBuffer();
+    const magic = new Uint32Array(arrayBuffer, 0, 1)[0];
+    const isGLB = magic === 1179937895;
+    if (isGLB) {
+      return GLTFLoader.parseGLB(arrayBuffer, baseUrl);
+    } else {
+      const decoder = new TextDecoder("utf-8");
+      const text = decoder.decode(arrayBuffer);
+      const json = JSON.parse(text);
+      const loader = new GLTFLoader(json);
+      loader.baseUrl = baseUrl;
+      return loader.parse();
+    }
+  }
+  static async loadFromArrayBuffer(data, baseUrl = "") {
+    const magic = new Uint32Array(data, 0, 1)[0];
+    if (magic === 1179937895) {
+      return GLTFLoader.parseGLB(data, baseUrl);
+    } else {
+      const decoder = new TextDecoder;
+      const json = JSON.parse(decoder.decode(data));
+      const loader = new GLTFLoader(json);
+      loader.baseUrl = baseUrl;
+      return loader.parse();
+    }
+  }
+  static async parseGLB(data, baseUrl) {
+    const dataView = new DataView(data);
+    const magic = dataView.getUint32(0, true);
+    if (magic !== 1179937895) {
+      throw new Error("Invalid GLB magic number");
+    }
+    const version = dataView.getUint32(4, true);
+    if (version !== 2) {
+      throw new Error(`Unsupported GLB version: ${version}`);
+    }
+    const length = dataView.getUint32(8, true);
+    if (length > data.byteLength) {
+      throw new Error("GLB length exceeds buffer size");
+    }
+    let offset = 12;
+    let json = null;
+    let binaryBuffer = null;
+    while (offset < length) {
+      const chunkLength = dataView.getUint32(offset, true);
+      const chunkType = dataView.getUint32(offset + 4, true);
+      const chunkData = data.slice(offset + 8, offset + 8 + chunkLength);
+      if (chunkType === 1313821514) {
+        const decoder = new TextDecoder;
+        json = JSON.parse(decoder.decode(chunkData));
+      } else if (chunkType === 5130562) {
+        binaryBuffer = chunkData;
+      }
+      offset += 8 + chunkLength;
+      offset = offset + 3 & ~3;
+    }
+    if (!json) {
+      throw new Error("GLB missing JSON chunk");
+    }
+    const loader = new GLTFLoader(json);
+    loader.baseUrl = baseUrl;
+    if (binaryBuffer) {
+      loader.buffers[0] = binaryBuffer;
+    }
+    return loader.parse();
+  }
+  async parse() {
+    await this.loadBuffers();
+    const { textures, textureNames } = await this.loadTextures();
+    const materials = this.parseMaterials(textures, textureNames);
+    const { meshes, meshMaterials } = this.parseMeshes(materials);
+    const { sceneObjects, rootObjects } = this.buildSceneHierarchy(meshes, meshMaterials, materials);
+    let defaultMesh = new Mesh([], []);
+    if (meshes.size > 0) {
+      defaultMesh = meshes.values().next().value;
+    }
+    return {
+      meshes,
+      defaultMesh,
+      materials,
+      textures,
+      meshMaterials,
+      sceneObjects,
+      rootObjects
+    };
+  }
+  buildSceneHierarchy(meshes, meshMaterials, materials) {
+    const sceneObjects = [];
+    const nodeToObject = new Map;
+    const gltfNodes = this.json.nodes || [];
+    const gltfMeshes = this.json.meshes || [];
+    for (let i = 0;i < gltfNodes.length; i++) {
+      const node = gltfNodes[i];
+      const nodeName = node.name || `Node_${i}`;
+      let mesh = null;
+      let materialName = null;
+      if (node.mesh !== undefined) {
+        const gltfMesh = gltfMeshes[node.mesh];
+        const meshName = gltfMesh?.name || `Mesh_${node.mesh}`;
+        mesh = meshes.get(meshName) || null;
+        materialName = meshMaterials.get(meshName) || null;
+      }
+      const objMesh = mesh || new Mesh([], []);
+      const obj = new SceneObject(nodeName, objMesh);
+      this.applyNodeTransform(obj, node);
+      nodeToObject.set(i, obj);
+      sceneObjects.push(obj);
+    }
+    for (let i = 0;i < gltfNodes.length; i++) {
+      const node = gltfNodes[i];
+      const parentObj = nodeToObject.get(i);
+      if (node.children) {
+        for (const childIndex of node.children) {
+          const childObj = nodeToObject.get(childIndex);
+          if (childObj) {
+            childObj.parent = parentObj;
+          }
+        }
+      }
+    }
+    const rootObjects = sceneObjects.filter((obj) => obj.parent === null);
+    const defaultScene = this.json.scene ?? 0;
+    const scenes = this.json.scenes || [];
+    if (scenes[defaultScene]?.nodes) {
+      const sceneRootIndices = scenes[defaultScene].nodes;
+      const sceneRoots = sceneRootIndices.map((i) => nodeToObject.get(i)).filter((obj) => obj !== undefined);
+      if (sceneRoots.length > 0) {
+        return { sceneObjects, rootObjects: sceneRoots };
+      }
+    }
+    return { sceneObjects, rootObjects };
+  }
+  applyNodeTransform(obj, node) {
+    if (node.matrix) {
+      const m = node.matrix;
+      obj.position = new Vector3(m[12], -m[14], m[13]);
+      const sx = Math.sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+      const sy = Math.sqrt(m[4] * m[4] + m[5] * m[5] + m[6] * m[6]);
+      const sz = Math.sqrt(m[8] * m[8] + m[9] * m[9] + m[10] * m[10]);
+      obj.scale = new Vector3(sx, sz, sy);
+      const rotY = Math.atan2(m[8] / sz, m[0] / sx);
+      const rotX = Math.atan2(-m[6] / sy, m[5] / sy);
+      const rotZ = Math.atan2(m[1] / sx, m[0] / sx);
+      obj.rotation = new Vector3(rotX, rotZ, rotY);
+    } else {
+      if (node.translation) {
+        obj.position = new Vector3(node.translation[0], -node.translation[2], node.translation[1]);
+      }
+      if (node.scale) {
+        obj.scale = new Vector3(node.scale[0], node.scale[2], node.scale[1]);
+      }
+      if (node.rotation) {
+        const euler = this.quaternionToEuler(node.rotation);
+        obj.rotation = new Vector3(euler.x, -euler.z, euler.y);
+      }
+    }
+  }
+  quaternionToEuler(q) {
+    const [x, y, z, w] = q;
+    const sinr_cosp = 2 * (w * x + y * z);
+    const cosr_cosp = 1 - 2 * (x * x + y * y);
+    const roll = Math.atan2(sinr_cosp, cosr_cosp);
+    const sinp = 2 * (w * y - z * x);
+    let pitch;
+    if (Math.abs(sinp) >= 1) {
+      pitch = Math.PI / 2 * Math.sign(sinp);
+    } else {
+      pitch = Math.asin(sinp);
+    }
+    const siny_cosp = 2 * (w * z + x * y);
+    const cosy_cosp = 1 - 2 * (y * y + z * z);
+    const yaw = Math.atan2(siny_cosp, cosy_cosp);
+    return new Vector3(roll, pitch, yaw);
+  }
+  async loadBuffers() {
+    const buffers = this.json.buffers || [];
+    for (let i = 0;i < buffers.length; i++) {
+      if (this.buffers[i])
+        continue;
+      const buffer = buffers[i];
+      if (buffer.uri) {
+        const data = await this.loadBufferURI(buffer.uri);
+        this.buffers[i] = data;
+      }
+    }
+  }
+  async loadBufferURI(uri) {
+    if (uri.startsWith("data:")) {
+      const base64Match = uri.match(/^data:[^;]*;base64,(.*)$/);
+      if (base64Match) {
+        return this.base64ToArrayBuffer(base64Match[1]);
+      }
+      throw new Error("Unsupported data URI format");
+    }
+    const url = this.baseUrl + uri;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load buffer: ${response.statusText}`);
+    }
+    return response.arrayBuffer();
+  }
+  base64ToArrayBuffer(base64) {
+    if (typeof atob === "function") {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0;i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    } else {
+      const buffer = Buffer.from(base64, "base64");
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    }
+  }
+  async loadTextures() {
+    const textures = new Map;
+    const textureNames = new Map;
+    const images = this.json.images || [];
+    const gltfTextures = this.json.textures || [];
+    for (let i = 0;i < gltfTextures.length; i++) {
+      const gltfTex = gltfTextures[i];
+      if (gltfTex.source === undefined)
+        continue;
+      const image = images[gltfTex.source];
+      if (!image)
+        continue;
+      let texName = gltfTex.name || image.name;
+      if (!texName && image.uri && !image.uri.startsWith("data:")) {
+        const parts = image.uri.split("/");
+        texName = parts[parts.length - 1].replace(/\.[^.]+$/, "");
+      }
+      if (!texName) {
+        texName = `Texture_${i}`;
+      }
+      textureNames.set(i, texName);
+      try {
+        const texture = await this.loadImage(image);
+        textures.set(i, texture);
+      } catch (e) {
+        console.warn(`Failed to load texture ${i}:`, e);
+        textures.set(i, this.createPlaceholderTexture());
+      }
+    }
+    return { textures, textureNames };
+  }
+  async loadImage(image) {
+    if (image.bufferView !== undefined) {
+      const data = this.getBufferViewData(image.bufferView);
+      return this.loadTextureFromBuffer(data, image.mimeType || "image/png");
+    }
+    if (image.uri) {
+      if (image.uri.startsWith("data:")) {
+        const match = image.uri.match(/^data:([^;]*);base64,(.*)$/);
+        if (match) {
+          const mimeType = match[1];
+          const base64Data = match[2];
+          const buffer = this.base64ToArrayBuffer(base64Data);
+          return this.loadTextureFromBuffer(new Uint8Array(buffer), mimeType || "image/png");
+        }
+      }
+      const url = this.baseUrl + image.uri;
+      return Texture.load(url);
+    }
+    throw new Error("Image has no valid source");
+  }
+  async loadTextureFromBuffer(data, mimeType) {
+    const copy = new Uint8Array(data);
+    const blob = new Blob([copy], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    try {
+      const texture = await Texture.load(url);
+      return texture;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  createPlaceholderTexture() {
+    const texture = new Texture(2, 2);
+    texture.setPixel(0, 0, new Color(255, 0, 255));
+    texture.setPixel(1, 0, new Color(0, 0, 0));
+    texture.setPixel(0, 1, new Color(0, 0, 0));
+    texture.setPixel(1, 1, new Color(255, 0, 255));
+    return texture;
+  }
+  getBufferViewData(bufferViewIndex) {
+    const bufferViews = this.json.bufferViews || [];
+    const bufferView = bufferViews[bufferViewIndex];
+    if (!bufferView) {
+      throw new Error(`Buffer view ${bufferViewIndex} not found`);
+    }
+    const buffer = this.buffers[bufferView.buffer];
+    if (!buffer) {
+      throw new Error(`Buffer ${bufferView.buffer} not loaded`);
+    }
+    const byteOffset = bufferView.byteOffset || 0;
+    return new Uint8Array(buffer, byteOffset, bufferView.byteLength);
+  }
+  parseMaterials(textures, textureNames) {
+    const materials = new Map;
+    const gltfMaterials = this.json.materials || [];
+    for (let i = 0;i < gltfMaterials.length; i++) {
+      const gltfMat = gltfMaterials[i];
+      const name = gltfMat.name || `Material_${i}`;
+      const pbr = gltfMat.pbrMetallicRoughness || {};
+      const baseColorFactor = pbr.baseColorFactor || [1, 1, 1, 1];
+      const baseColor = new Color(Math.floor(baseColorFactor[0] * 255), Math.floor(baseColorFactor[1] * 255), Math.floor(baseColorFactor[2] * 255), Math.floor(baseColorFactor[3] * 255));
+      let texture = null;
+      let textureName = null;
+      if (pbr.baseColorTexture) {
+        texture = textures.get(pbr.baseColorTexture.index) || null;
+        textureName = textureNames.get(pbr.baseColorTexture.index) || null;
+      }
+      materials.set(name, {
+        name,
+        baseColor,
+        texture,
+        textureName,
+        metallic: pbr.metallicFactor ?? 1,
+        roughness: pbr.roughnessFactor ?? 1,
+        doubleSided: gltfMat.doubleSided ?? false
+      });
+    }
+    if (materials.size === 0) {
+      materials.set("Default", {
+        name: "Default",
+        baseColor: Color.white(),
+        texture: null,
+        textureName: null,
+        metallic: 0,
+        roughness: 1,
+        doubleSided: false
+      });
+    }
+    return materials;
+  }
+  parseMeshes(materials) {
+    const meshes = new Map;
+    const meshMaterials = new Map;
+    const gltfMeshes = this.json.meshes || [];
+    const gltfMaterials = this.json.materials || [];
+    for (let i = 0;i < gltfMeshes.length; i++) {
+      const gltfMesh = gltfMeshes[i];
+      const meshName = gltfMesh.name || `Mesh_${i}`;
+      const allVertices = [];
+      const allIndices = [];
+      const allFaces = [];
+      let primaryMaterial = null;
+      for (const primitive of gltfMesh.primitives) {
+        const baseVertexIndex = allVertices.length;
+        const { vertices, indices, faces } = this.parsePrimitive(primitive);
+        for (const index of indices) {
+          allIndices.push(index + baseVertexIndex);
+        }
+        for (const face of faces) {
+          allFaces.push({
+            vertices: face.vertices.map((v) => v + baseVertexIndex)
+          });
+        }
+        allVertices.push(...vertices);
+        if (primitive.material !== undefined && !primaryMaterial) {
+          const matDef = gltfMaterials[primitive.material];
+          primaryMaterial = matDef?.name || `Material_${primitive.material}`;
+        }
+      }
+      if (allVertices.length > 0) {
+        const mesh = new Mesh(allVertices, allIndices);
+        mesh.faceData = allFaces;
+        this.calculateNormalsIfMissing(mesh);
+        meshes.set(meshName, mesh);
+        if (primaryMaterial) {
+          meshMaterials.set(meshName, primaryMaterial);
+        }
+      }
+    }
+    return { meshes, meshMaterials };
+  }
+  parsePrimitive(primitive) {
+    const vertices = [];
+    const indices = [];
+    const faces = [];
+    const positions = primitive.attributes.POSITION !== undefined ? this.getAccessorData(primitive.attributes.POSITION) : null;
+    const normals = primitive.attributes.NORMAL !== undefined ? this.getAccessorData(primitive.attributes.NORMAL) : null;
+    const texCoords = primitive.attributes.TEXCOORD_0 !== undefined ? this.getAccessorData(primitive.attributes.TEXCOORD_0) : null;
+    const colors = primitive.attributes.COLOR_0 !== undefined ? this.getAccessorData(primitive.attributes.COLOR_0) : null;
+    if (!positions) {
+      return { vertices, indices, faces };
+    }
+    const posAccessor = this.json.accessors[primitive.attributes.POSITION];
+    const vertexCount = posAccessor.count;
+    for (let i = 0;i < vertexCount; i++) {
+      const px = positions[i * 3 + 0];
+      const py = positions[i * 3 + 1];
+      const pz = positions[i * 3 + 2];
+      const position = new Vector3(px, -pz, py);
+      let normal = Vector3.zero();
+      if (normals) {
+        const nx = normals[i * 3 + 0];
+        const ny = normals[i * 3 + 1];
+        const nz = normals[i * 3 + 2];
+        normal = new Vector3(nx, -nz, ny);
+      }
+      let u = 0, v = 0;
+      if (texCoords) {
+        u = texCoords[i * 2 + 0];
+        v = 1 - texCoords[i * 2 + 1];
+      }
+      let color = Color.white();
+      if (colors) {
+        const colorAccessor = this.json.accessors[primitive.attributes.COLOR_0];
+        const components = TYPE_COMPONENTS[colorAccessor.type] || 3;
+        const normalized = colorAccessor.normalized ?? false;
+        const componentType = colorAccessor.componentType;
+        let r = colors[i * components + 0];
+        let g = colors[i * components + 1];
+        let b = colors[i * components + 2];
+        let a = components >= 4 ? colors[i * components + 3] : 1;
+        if (!normalized && componentType !== 5126) {
+          const maxVal = componentType === 5121 ? 255 : componentType === 5123 ? 65535 : 1;
+          r /= maxVal;
+          g /= maxVal;
+          b /= maxVal;
+          a /= maxVal;
+        }
+        color = new Color(Math.floor(r * 255), Math.floor(g * 255), Math.floor(b * 255), Math.floor(a * 255));
+      }
+      vertices.push(new Vertex(position, color, normal, u, v));
+    }
+    const mode = primitive.mode ?? 4;
+    if (primitive.indices !== undefined) {
+      const indexData = this.getAccessorData(primitive.indices);
+      const indexAccessor = this.json.accessors[primitive.indices];
+      if (mode === 4) {
+        for (let i = 0;i < indexAccessor.count; i++) {
+          indices.push(indexData[i]);
+        }
+        for (let i = 0;i < indexAccessor.count; i += 3) {
+          faces.push({
+            vertices: [indexData[i], indexData[i + 1], indexData[i + 2]]
+          });
+        }
+      } else if (mode === 5) {
+        for (let i = 0;i < indexAccessor.count - 2; i++) {
+          if (i % 2 === 0) {
+            indices.push(indexData[i], indexData[i + 1], indexData[i + 2]);
+            faces.push({
+              vertices: [indexData[i], indexData[i + 1], indexData[i + 2]]
+            });
+          } else {
+            indices.push(indexData[i], indexData[i + 2], indexData[i + 1]);
+            faces.push({
+              vertices: [indexData[i], indexData[i + 2], indexData[i + 1]]
+            });
+          }
+        }
+      } else if (mode === 6) {
+        for (let i = 1;i < indexAccessor.count - 1; i++) {
+          indices.push(indexData[0], indexData[i], indexData[i + 1]);
+          faces.push({
+            vertices: [indexData[0], indexData[i], indexData[i + 1]]
+          });
+        }
+      }
+    } else {
+      if (mode === 4) {
+        for (let i = 0;i < vertexCount; i++) {
+          indices.push(i);
+        }
+        for (let i = 0;i < vertexCount; i += 3) {
+          faces.push({
+            vertices: [i, i + 1, i + 2]
+          });
+        }
+      } else if (mode === 5) {
+        for (let i = 0;i < vertexCount - 2; i++) {
+          if (i % 2 === 0) {
+            indices.push(i, i + 1, i + 2);
+            faces.push({ vertices: [i, i + 1, i + 2] });
+          } else {
+            indices.push(i, i + 2, i + 1);
+            faces.push({ vertices: [i, i + 2, i + 1] });
+          }
+        }
+      } else if (mode === 6) {
+        for (let i = 1;i < vertexCount - 1; i++) {
+          indices.push(0, i, i + 1);
+          faces.push({ vertices: [0, i, i + 1] });
+        }
+      }
+    }
+    return { vertices, indices, faces };
+  }
+  getAccessorData(accessorIndex) {
+    const accessors = this.json.accessors || [];
+    const accessor = accessors[accessorIndex];
+    if (!accessor) {
+      throw new Error(`Accessor ${accessorIndex} not found`);
+    }
+    if (accessor.sparse) {
+      console.warn("Sparse accessors not supported");
+    }
+    if (accessor.bufferView === undefined) {
+      const count = accessor.count * (TYPE_COMPONENTS[accessor.type] || 1);
+      return new Float32Array(count);
+    }
+    const bufferViews = this.json.bufferViews || [];
+    const bufferView = bufferViews[accessor.bufferView];
+    if (!bufferView) {
+      throw new Error(`Buffer view ${accessor.bufferView} not found`);
+    }
+    const buffer = this.buffers[bufferView.buffer];
+    if (!buffer) {
+      throw new Error(`Buffer ${bufferView.buffer} not loaded`);
+    }
+    const byteOffset = (bufferView.byteOffset || 0) + (accessor.byteOffset || 0);
+    const componentSize = COMPONENT_TYPE_SIZE[accessor.componentType] || 4;
+    const componentCount = TYPE_COMPONENTS[accessor.type] || 1;
+    const byteStride = bufferView.byteStride || componentSize * componentCount;
+    const elementCount = accessor.count * componentCount;
+    const result2 = new Float32Array(elementCount);
+    const dataView = new DataView(buffer);
+    for (let i = 0;i < accessor.count; i++) {
+      const elementOffset = byteOffset + i * byteStride;
+      for (let j = 0;j < componentCount; j++) {
+        const offset = elementOffset + j * componentSize;
+        let value2;
+        switch (accessor.componentType) {
+          case 5120:
+            value2 = dataView.getInt8(offset);
+            if (accessor.normalized)
+              value2 /= 127;
+            break;
+          case 5121:
+            value2 = dataView.getUint8(offset);
+            if (accessor.normalized)
+              value2 /= 255;
+            break;
+          case 5122:
+            value2 = dataView.getInt16(offset, true);
+            if (accessor.normalized)
+              value2 /= 32767;
+            break;
+          case 5123:
+            value2 = dataView.getUint16(offset, true);
+            if (accessor.normalized)
+              value2 /= 65535;
+            break;
+          case 5125:
+            value2 = dataView.getUint32(offset, true);
+            break;
+          case 5126:
+            value2 = dataView.getFloat32(offset, true);
+            break;
+          default:
+            value2 = 0;
+        }
+        result2[i * componentCount + j] = value2;
+      }
+    }
+    return result2;
+  }
+  calculateNormalsIfMissing(mesh) {
+    let hasNormals = false;
+    for (const vertex of mesh.vertices) {
+      if (vertex.normal.lengthSquared() > 0.001) {
+        hasNormals = true;
+        break;
+      }
+    }
+    if (hasNormals)
+      return;
+    for (let i = 0;i < mesh.indices.length; i += 3) {
+      const i0 = mesh.indices[i];
+      const i1 = mesh.indices[i + 1];
+      const i2 = mesh.indices[i + 2];
+      const v0 = mesh.vertices[i0].position;
+      const v1 = mesh.vertices[i1].position;
+      const v2 = mesh.vertices[i2].position;
+      const edge1 = v1.sub(v0);
+      const edge2 = v2.sub(v0);
+      const faceNormal = edge1.cross(edge2).normalize();
+      mesh.vertices[i0].normal = faceNormal;
+      mesh.vertices[i1].normal = faceNormal;
+      mesh.vertices[i2].normal = faceNormal;
+    }
+    mesh.rebuildTriangles();
   }
 }
 
@@ -24850,6 +25470,10 @@ class RenderWorkerClient {
 }
 
 // src/systems/worker-render-loop.ts
+var sentTextureIds = new Set;
+function clearTextureCache() {
+  sentTextureIds.clear();
+}
 function hashMaterial(material) {
   const nodeData = material.nodes.map((n) => ({
     id: n.id,
@@ -24861,6 +25485,20 @@ function hashMaterial(material) {
     to: `${c.toNodeId}:${c.toSocketId}`
   })).sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   return JSON.stringify({ nodes: nodeData, connections });
+}
+function hashTexture(texture) {
+  if (!texture)
+    return "none";
+  const data = texture.getData();
+  const sample = [
+    data[0],
+    data[1],
+    data[2],
+    data[data.length - 3],
+    data[data.length - 2],
+    data[data.length - 1]
+  ];
+  return `${texture.width}x${texture.height}:${sample.join(",")}`;
 }
 function serializeMatrix(m) {
   return new Float32Array(m.data);
@@ -25098,6 +25736,7 @@ function buildRenderFrame(ctx, textureChanged = false) {
       originPoint: null
     },
     texture: null,
+    textures: [],
     enableTexturing: false
   };
   if (settings.showGrid && gridData) {
@@ -25155,13 +25794,27 @@ function buildRenderFrame(ctx, textureChanged = false) {
         };
         useTexture = true;
       }
+      let textureId;
+      if (useTexture && !needsBaking && obj.texture && obj.texture.loaded) {
+        textureId = hashTexture(obj.texture);
+        if (!sentTextureIds.has(textureId)) {
+          frame.textures.push({
+            id: textureId,
+            width: obj.texture.width,
+            height: obj.texture.height,
+            data: new Uint8Array(obj.texture.getData())
+          });
+          sentTextureIds.add(textureId);
+        }
+      }
       frame.objects.push({
         mesh: serializeMesh2(obj.mesh, material, textureSampler, useTexture),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,
         smoothShading: obj.mesh.smoothShading,
         hasTexture: useTexture,
-        materialBake
+        materialBake,
+        textureId
       });
     }
   }
@@ -25210,13 +25863,12 @@ function buildRenderFrame(ctx, textureChanged = false) {
     };
   }
   const texturingEnabled = editor.viewMode === "material";
-  const textureToSend = bakedTexture || objectTexture || ctx.currentTexture;
-  if (textureToSend && texturingEnabled && (textureChanged || bakedTexture)) {
+  if (ctx.currentTexture && texturingEnabled && !objectTexture) {
     frame.texture = {
       slot: 0,
-      width: textureToSend.width,
-      height: textureToSend.height,
-      data: new Uint8Array(textureToSend.getData())
+      width: ctx.currentTexture.width,
+      height: ctx.currentTexture.height,
+      data: new Uint8Array(ctx.currentTexture.getData())
     };
   }
   frame.enableTexturing = texturingEnabled;
@@ -25583,10 +26235,12 @@ function NodeEditor({
   selectedMaterialId,
   onSelectMaterial,
   onMaterialChange,
-  onNewMaterial
+  onNewMaterial,
+  textureMap
 }) {
   const canvasRef = import_react2.useRef(null);
   const containerRef = import_react2.useRef(null);
+  const texturePreviewCache = import_react2.useRef(new Map);
   const material = materials.find((m) => m.id === selectedMaterialId) || null;
   const [nodes, setNodes] = import_react2.useState(material?.nodes || []);
   const [connections, setConnections] = import_react2.useState(material?.connections || []);
@@ -25657,6 +26311,28 @@ function NodeEditor({
       }
     }
   }, [nodes, connections, material, onMaterialChange]);
+  import_react2.useEffect(() => {
+    if (!textureMap)
+      return;
+    const cache = texturePreviewCache.current;
+    textureMap.forEach((texture, key) => {
+      if (cache.has(key))
+        return;
+      if (texture.loaded && texture.width > 0 && texture.height > 0) {
+        const imageData = new ImageData(new Uint8ClampedArray(texture.getData()), texture.width, texture.height);
+        createImageBitmap(imageData).then((bitmap) => {
+          cache.set(key, bitmap);
+          setNodes((n) => [...n]);
+        });
+      }
+    });
+    cache.forEach((_, key) => {
+      if (!textureMap.has(key)) {
+        cache.get(key)?.close();
+        cache.delete(key);
+      }
+    });
+  }, [textureMap, nodes]);
   const [dragging, setDragging] = import_react2.useState(null);
   const [pendingConnection, setPendingConnection] = import_react2.useState(null);
   const [boxSelection, setBoxSelection] = import_react2.useState(null);
@@ -26164,7 +26840,7 @@ function NodeEditor({
       }
     }
     for (const node of nodes) {
-      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom);
+      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom, texturePreviewCache.current);
     }
     if (boxSelection) {
       ctx.strokeStyle = "#4a90d9";
@@ -26598,7 +27274,7 @@ function drawConnection(ctx, from, to, color, zoom, dashed = false) {
   ctx.stroke();
   ctx.setLineDash([]);
 }
-function drawNode(ctx, node, selected, zoom) {
+function drawNode(ctx, node, selected, zoom, texturePreviewCache) {
   const { x, y, width, height, type } = node;
   const headerHeight = 24;
   const borderRadius = 6;
@@ -26666,20 +27342,50 @@ function drawNode(ctx, node, selected, zoom) {
     ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
   }
   if (type === "texture") {
-    const infoY = y + headerHeight + 36;
-    ctx.font = "10px 'Pixelify Sans', sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#888888";
     const imagePath = node.data.imagePath || "";
-    const filename = imagePath ? imagePath.split("/").pop() || imagePath : "No texture";
-    const maxChars = 20;
-    const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
-    ctx.fillText(displayName, x + 8, infoY);
     const texW = node.data.textureWidth || 0;
     const texH = node.data.textureHeight || 0;
-    if (texW > 0 && texH > 0) {
-      ctx.fillStyle = "#666666";
-      ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+    const preview = texturePreviewCache?.get(imagePath);
+    if (preview) {
+      const previewX = x + 8;
+      const previewY = y + headerHeight + 8;
+      const previewSize = Math.min(width - 16, 48);
+      const checkSize = 6;
+      for (let cy = 0;cy < previewSize; cy += checkSize) {
+        for (let cx = 0;cx < previewSize; cx += checkSize) {
+          const isLight = (cx / checkSize + cy / checkSize) % 2 === 0;
+          ctx.fillStyle = isLight ? "#4a4a4a" : "#3a3a3a";
+          ctx.fillRect(previewX + cx, previewY + cy, Math.min(checkSize, previewSize - cx), Math.min(checkSize, previewSize - cy));
+        }
+      }
+      ctx.drawImage(preview, previewX, previewY, previewSize, previewSize);
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = 1 / zoom;
+      ctx.strokeRect(previewX, previewY, previewSize, previewSize);
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+      const filename = imagePath.split("/").pop() || imagePath || "No texture";
+      const maxChars = 12;
+      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
+      ctx.fillText(displayName, previewX + previewSize + 6, previewY + 14);
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(`${texW}×${texH}`, previewX + previewSize + 6, previewY + 28);
+      }
+    } else {
+      const infoY = y + headerHeight + 36;
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+      const filename = imagePath ? imagePath.split("/").pop() || imagePath : "No texture";
+      const maxChars = 20;
+      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
+      ctx.fillText(displayName, x + 8, infoY);
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+      }
     }
   }
   if (type === "color-ramp") {
@@ -28150,7 +28856,7 @@ function WelcomeModal({ onClose }) {
                       ]
                     }, undefined, true, undefined, this),
                     /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
-                      children: "Drag & drop .OBJ files to import"
+                      children: "Drag & drop .OBJ, .GLTF, .GLB files to import"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this)
@@ -28163,7 +28869,7 @@ function WelcomeModal({ onClose }) {
           children: [
             /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("p", {
               className: "welcome-note",
-              children: "\uD83E\uDD16 This project was entirely written by AI (Claude) under human supervision. Total cost: ~$60 in tokens."
+              children: "\uD83E\uDD16 This project was entirely written by AI (Claude) under human supervision. Total cost: ~$100 in tokens."
             }, undefined, false, undefined, this),
             /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
               className: "welcome-footer-actions",
@@ -28542,6 +29248,23 @@ function App() {
   const [workspace, setWorkspace] = import_react9.useState("modeling");
   const [selectedMaterialId, setSelectedMaterialId] = import_react9.useState(null);
   const [materialList, setMaterialList] = import_react9.useState([]);
+  const textureMap = import_react9.useMemo(() => {
+    const map = new Map;
+    const scene = sceneRef.current;
+    for (const obj of scene.objects) {
+      if (obj.texture && obj.materialId) {
+        const material = scene.materials.get(obj.materialId);
+        if (material) {
+          for (const node of material.nodes) {
+            if (node.type === "texture" && node.data.imagePath) {
+              map.set(node.data.imagePath, obj.texture);
+            }
+          }
+        }
+      }
+    }
+    return map;
+  }, [sceneObjects, materialList]);
   const [primitiveParams, setPrimitiveParams] = import_react9.useState(null);
   const newPrimitiveRef = import_react9.useRef(null);
   const [boxSelection, setBoxSelection] = import_react9.useState(null);
@@ -28597,6 +29320,7 @@ function App() {
     const scene = sceneRef.current;
     try {
       console.log(`Loading OBJ: ${url}`);
+      clearTextureCache();
       const result2 = await OBJLoader.load(url, new Color(200, 200, 200));
       const mtlToShaderMaterial = new Map;
       for (const [mtlName, mtlMat] of result2.materials) {
@@ -28666,6 +29390,242 @@ function App() {
       console.warn(`Could not load OBJ file: ${error}`);
     }
   }, []);
+  const loadGLTF = import_react9.useCallback(async (url) => {
+    const scene = sceneRef.current;
+    try {
+      console.log(`Loading GLTF: ${url}`);
+      clearTextureCache();
+      const result2 = await GLTFLoader.load(url);
+      const gltfToShaderMaterial = new Map;
+      for (const [matName, gltfMat] of result2.materials) {
+        const shaderMat = scene.materials.createMaterial(matName);
+        const hasTexture = gltfMat.texture !== null;
+        const c = gltfMat.baseColor;
+        const colorHex = "#" + c.r.toString(16).padStart(2, "0") + c.g.toString(16).padStart(2, "0") + c.b.toString(16).padStart(2, "0");
+        if (hasTexture) {
+          const isWhite = c.r >= 250 && c.g >= 250 && c.b >= 250;
+          if (isWhite) {
+            shaderMat.nodes = [
+              {
+                id: "output-1",
+                type: "output",
+                x: 500,
+                y: 150,
+                width: 140,
+                height: 80,
+                inputs: [
+                  { id: "color", name: "Color", type: "color", isInput: true }
+                ],
+                outputs: [],
+                data: {}
+              },
+              {
+                id: "texture-1",
+                type: "texture",
+                x: 150,
+                y: 100,
+                width: 180,
+                height: 100,
+                inputs: [],
+                outputs: [
+                  { id: "color", name: "Color", type: "color", isInput: false }
+                ],
+                data: {
+                  imagePath: gltfMat.textureName || matName,
+                  textureWidth: gltfMat.texture.width,
+                  textureHeight: gltfMat.texture.height
+                }
+              }
+            ];
+            shaderMat.connections = [
+              {
+                id: "conn-1",
+                fromNodeId: "texture-1",
+                fromSocketId: "color",
+                toNodeId: "output-1",
+                toSocketId: "color"
+              }
+            ];
+          } else {
+            shaderMat.nodes = [
+              {
+                id: "output-1",
+                type: "output",
+                x: 650,
+                y: 150,
+                width: 140,
+                height: 80,
+                inputs: [
+                  { id: "color", name: "Color", type: "color", isInput: true }
+                ],
+                outputs: [],
+                data: {}
+              },
+              {
+                id: "texture-1",
+                type: "texture",
+                x: 100,
+                y: 80,
+                width: 180,
+                height: 100,
+                inputs: [],
+                outputs: [
+                  { id: "color", name: "Color", type: "color", isInput: false }
+                ],
+                data: {
+                  imagePath: gltfMat.textureName || matName,
+                  textureWidth: gltfMat.texture.width,
+                  textureHeight: gltfMat.texture.height
+                }
+              },
+              {
+                id: "flat-color-1",
+                type: "flat-color",
+                x: 100,
+                y: 200,
+                width: 160,
+                height: 100,
+                inputs: [],
+                outputs: [
+                  { id: "color", name: "Color", type: "color", isInput: false }
+                ],
+                data: { color: colorHex }
+              },
+              {
+                id: "mix-1",
+                type: "mix",
+                x: 400,
+                y: 130,
+                width: 160,
+                height: 120,
+                inputs: [
+                  {
+                    id: "color1",
+                    name: "Color1",
+                    type: "color",
+                    isInput: true
+                  },
+                  {
+                    id: "color2",
+                    name: "Color2",
+                    type: "color",
+                    isInput: true
+                  }
+                ],
+                outputs: [
+                  { id: "color", name: "Color", type: "color", isInput: false }
+                ],
+                data: { blendMode: "multiply", factor: 1 }
+              }
+            ];
+            shaderMat.connections = [
+              {
+                id: "conn-1",
+                fromNodeId: "texture-1",
+                fromSocketId: "color",
+                toNodeId: "mix-1",
+                toSocketId: "color1"
+              },
+              {
+                id: "conn-2",
+                fromNodeId: "flat-color-1",
+                fromSocketId: "color",
+                toNodeId: "mix-1",
+                toSocketId: "color2"
+              },
+              {
+                id: "conn-3",
+                fromNodeId: "mix-1",
+                fromSocketId: "color",
+                toNodeId: "output-1",
+                toSocketId: "color"
+              }
+            ];
+          }
+          console.log(`Created textured material "${matName}" (${gltfMat.texture.width}x${gltfMat.texture.height})`);
+        } else {
+          const flatColorNode = shaderMat.nodes.find((n) => n.type === "flat-color");
+          if (flatColorNode && flatColorNode.data) {
+            flatColorNode.data.color = colorHex;
+          }
+        }
+        gltfToShaderMaterial.set(matName, shaderMat.id);
+        console.log(`Created shader material "${matName}" from GLTF`);
+      }
+      let firstObj = null;
+      const createdObjects = [];
+      const objectsWithMeshes = result2.sceneObjects.filter((obj) => obj.mesh.vertices.length > 0);
+      for (const obj of objectsWithMeshes) {
+        const matName = result2.meshMaterials.get(obj.name);
+        if (matName && gltfToShaderMaterial.has(matName)) {
+          obj.materialId = gltfToShaderMaterial.get(matName);
+        } else if (gltfToShaderMaterial.size > 0) {
+          obj.materialId = gltfToShaderMaterial.values().next().value;
+        }
+        const gltfMat = matName ? result2.materials.get(matName) : null;
+        if (gltfMat?.texture) {
+          obj.texture = gltfMat.texture;
+          if (!textureRef.current) {
+            textureRef.current = gltfMat.texture;
+            textureChangedRef.current = true;
+          }
+        }
+        scene.addObject(obj);
+        createdObjects.push(obj);
+        if (!firstObj) {
+          firstObj = obj;
+        }
+        console.log(`Loaded mesh "${obj.name}" with ${obj.mesh.triangles.length} triangles`);
+      }
+      if (firstObj) {
+        scene.selectObject(firstObj);
+      }
+      setMaterialList([...scene.materials.getAll()]);
+      if (firstObj && firstObj.materialId) {
+        setSelectedMaterialId(firstObj.materialId);
+      }
+      if (result2.defaultMesh.vertices.length > 0) {
+        const size = result2.defaultMesh.getSize();
+        const maxDim = Math.max(size.x, size.y, size.z);
+        scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
+        scene.camera.target = Vector3.zero();
+      }
+      console.log(`Loaded GLTF with ${createdObjects.length} object(s)`);
+    } catch (error) {
+      console.warn(`Could not load GLTF file: ${error}`);
+    }
+  }, []);
+  const loadModelFile = import_react9.useCallback(async (file) => {
+    const url = URL.createObjectURL(file);
+    const ext = file.name.toLowerCase().split(".").pop();
+    try {
+      if (ext === "obj") {
+        await loadOBJ(url);
+      } else if (ext === "gltf" || ext === "glb") {
+        await loadGLTF(url);
+      } else {
+        console.warn(`Unsupported file format: ${ext}`);
+      }
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }, [loadOBJ, loadGLTF]);
+  const handleDragOver = import_react9.useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+  const handleDrop = import_react9.useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = Array.from(e.dataTransfer.files);
+    const modelFiles = files.filter((file) => {
+      const ext = file.name.toLowerCase().split(".").pop();
+      return ext === "obj" || ext === "gltf" || ext === "glb";
+    });
+    for (const file of modelFiles) {
+      loadModelFile(file);
+    }
+  }, [loadModelFile]);
   const lastSelectedRef = import_react9.useRef(null);
   const handleSelectObject = import_react9.useCallback((name, modifiers) => {
     const scene = sceneRef.current;
@@ -29204,6 +30164,8 @@ function App() {
       /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
         className: "viewport",
         ref: viewportRef,
+        onDragOver: handleDragOver,
+        onDrop: handleDrop,
         children: [
           /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("canvas", {
             id: "canvas",
@@ -29234,6 +30196,7 @@ function App() {
       workspace === "shading" && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(NodeEditor, {
         materials: materialList,
         selectedMaterialId,
+        textureMap,
         onSelectMaterial: (id) => {
           setSelectedMaterialId(id);
           const scene = sceneRef.current;

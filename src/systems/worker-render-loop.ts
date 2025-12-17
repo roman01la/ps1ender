@@ -20,6 +20,7 @@ import {
   RenderTransparentTris,
   SerializedMesh,
   MaterialBakeRequest,
+  TextureUpload,
 } from "../render-worker";
 import { Texture } from "../texture";
 import {
@@ -31,6 +32,16 @@ import {
   TextureSampler,
   RGBA,
 } from "../material";
+
+// Track which textures have been sent to the worker (by texture hash)
+const sentTextureIds = new Set<string>();
+
+/**
+ * Clear the texture cache (call when loading new models or clearing scene)
+ */
+export function clearTextureCache(): void {
+  sentTextureIds.clear();
+}
 
 /**
  * Create a simple hash of material state for cache invalidation
@@ -438,6 +449,7 @@ export function buildRenderFrame(
       originPoint: null,
     },
     texture: null,
+    textures: [], // New textures to upload
     enableTexturing: false,
   };
 
@@ -534,6 +546,23 @@ export function buildRenderFrame(
         useTexture = true; // Baked result is always a texture
       }
 
+      // Generate texture ID for non-baked textured objects
+      let textureId: string | undefined;
+      if (useTexture && !needsBaking && obj.texture && obj.texture.loaded) {
+        textureId = hashTexture(obj.texture);
+
+        // Only send texture data if not already sent to worker
+        if (!sentTextureIds.has(textureId)) {
+          frame.textures.push({
+            id: textureId,
+            width: obj.texture.width,
+            height: obj.texture.height,
+            data: new Uint8Array(obj.texture.getData()),
+          });
+          sentTextureIds.add(textureId);
+        }
+      }
+
       frame.objects.push({
         mesh: serializeMesh(obj.mesh, material, textureSampler, useTexture),
         modelMatrix: serializeMatrix(modelMatrix),
@@ -541,6 +570,7 @@ export function buildRenderFrame(
         smoothShading: obj.mesh.smoothShading,
         hasTexture: useTexture,
         materialBake,
+        textureId,
       });
     }
   }
@@ -641,17 +671,18 @@ export function buildRenderFrame(
     };
   }
 
-  // Texture (send if changed, or if we have a texture and texturing is enabled)
-  // Priority: baked texture > object texture > global texture
+  // Global texture (only used as fallback when per-object texture isn't set)
+  // Per-object textures are now sent with each RenderObject
   const texturingEnabled = editor.viewMode === "material";
-  const textureToSend = bakedTexture || objectTexture || ctx.currentTexture;
 
-  if (textureToSend && texturingEnabled && (textureChanged || bakedTexture)) {
+  // Only send global texture if we have one and no per-object textures
+  // (for backwards compatibility with single-texture OBJ files)
+  if (ctx.currentTexture && texturingEnabled && !objectTexture) {
     frame.texture = {
       slot: 0,
-      width: textureToSend.width,
-      height: textureToSend.height,
-      data: new Uint8Array(textureToSend.getData()),
+      width: ctx.currentTexture.width,
+      height: ctx.currentTexture.height,
+      data: new Uint8Array(ctx.currentTexture.getData()),
     };
   }
 
