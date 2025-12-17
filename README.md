@@ -82,7 +82,8 @@ ps1ender/
 │   ├── App.tsx              # Main application component
 │   ├── editor.ts            # Editor orchestration
 │   ├── scene.ts             # Scene graph and camera
-│   ├── rasterizer.ts        # Software renderer
+│   ├── render-worker.ts     # Software renderer worker
+│   ├── wasm-rasterizer.ts   # WASM rasterizer wrapper
 │   ├── math.ts              # Vector/Matrix math
 │   ├── primitives.ts        # Mesh factories
 │   ├── obj-loader.ts        # OBJ file parser
@@ -182,7 +183,7 @@ PS1ender uses a custom software rasterizer that mimics PlayStation 1 graphics ch
 
 ### WebAssembly Acceleration
 
-The WASM module provides significant performance improvements:
+The WASM module provides significant performance improvements over the JavaScript implementation:
 
 | Operation | JavaScript | WASM+SIMD | Speedup |
 |-----------|-----------|-----------|---------|
@@ -190,6 +191,8 @@ The WASM module provides significant performance improvements:
 | Vertex transform | 0.2ms | 0.05ms | 4× |
 | Rasterization | 0.8ms | 0.2ms | 4× |
 | **Total** | ~1.1ms | ~0.3ms | **3-4×** |
+
+*Benchmarks measured on 640×480 resolution with typical scene geometry. Performance may vary based on hardware and scene complexity.*
 
 See [wasm/README.md](wasm/README.md) for WASM build instructions.
 
