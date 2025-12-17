@@ -16,19 +16,19 @@ import { Vector3, Color } from "../math";
 function createCubeMesh(): Mesh {
   const vertices = [
     // Front face (z = 1)
-    new Vertex(new Vector3(-1, -1, 1), Color.white()),  // 0
-    new Vertex(new Vector3(1, -1, 1), Color.white()),   // 1
-    new Vertex(new Vector3(1, 1, 1), Color.white()),    // 2
-    new Vertex(new Vector3(-1, 1, 1), Color.white()),   // 3
+    new Vertex(new Vector3(-1, -1, 1), Color.white()), // 0
+    new Vertex(new Vector3(1, -1, 1), Color.white()), // 1
+    new Vertex(new Vector3(1, 1, 1), Color.white()), // 2
+    new Vertex(new Vector3(-1, 1, 1), Color.white()), // 3
     // Back face (z = -1)
     new Vertex(new Vector3(-1, -1, -1), Color.white()), // 4
-    new Vertex(new Vector3(1, -1, -1), Color.white()),  // 5
-    new Vertex(new Vector3(1, 1, -1), Color.white()),   // 6
-    new Vertex(new Vector3(-1, 1, -1), Color.white()),  // 7
+    new Vertex(new Vector3(1, -1, -1), Color.white()), // 5
+    new Vertex(new Vector3(1, 1, -1), Color.white()), // 6
+    new Vertex(new Vector3(-1, 1, -1), Color.white()), // 7
   ];
 
   const mesh = new Mesh(vertices);
-  
+
   // Define cube faces (6 quad faces)
   mesh.faceData = [
     { vertices: [0, 1, 2, 3] }, // front
@@ -49,8 +49,8 @@ function createCubeMesh(): Mesh {
  */
 function createTriangleMesh(): Mesh {
   const vertices = [
-    new Vertex(new Vector3(0, 0, 0), Color.white()),   // 0
-    new Vertex(new Vector3(1, 0, 0), Color.white()),   // 1
+    new Vertex(new Vector3(0, 0, 0), Color.white()), // 0
+    new Vertex(new Vector3(1, 0, 0), Color.white()), // 1
     new Vertex(new Vector3(0.5, 1, 0), Color.white()), // 2
   ];
 
@@ -155,7 +155,7 @@ describe("SelectionManager - Vertex Selection", () => {
   test("should add multiple vertices", () => {
     selection.addVertices([0, 1, 2]);
     expect(selection.selectedVertices.size).toBe(3);
-    
+
     selection.addVertices([3, 4]);
     expect(selection.selectedVertices.size).toBe(5);
   });
@@ -191,7 +191,9 @@ describe("SelectionManager - Edge Selection", () => {
     selection.removeEdge(0, 1);
 
     expect(selection.selectedEdges.size).toBe(1);
-    expect(selection.selectedEdges.has(selection.makeEdgeKey(0, 1))).toBe(false);
+    expect(selection.selectedEdges.has(selection.makeEdgeKey(0, 1))).toBe(
+      false
+    );
   });
 
   test("should toggle edge selection", () => {
@@ -199,7 +201,9 @@ describe("SelectionManager - Edge Selection", () => {
     expect(selection.selectedEdges.has(selection.makeEdgeKey(0, 1))).toBe(true);
 
     selection.toggleEdge(0, 1);
-    expect(selection.selectedEdges.has(selection.makeEdgeKey(0, 1))).toBe(false);
+    expect(selection.selectedEdges.has(selection.makeEdgeKey(0, 1))).toBe(
+      false
+    );
   });
 
   test("should set edges (replace current selection)", () => {
@@ -269,7 +273,7 @@ describe("SelectionManager - Face Selection", () => {
   test("should add multiple faces", () => {
     selection.addFaces([0, 1]);
     expect(selection.selectedFaces.size).toBe(2);
-    
+
     selection.addFaces([2, 3]);
     expect(selection.selectedFaces.size).toBe(4);
   });
@@ -300,9 +304,21 @@ describe("SelectionManager - Edge Key Utilities", () => {
 
     expect(edges.length).toBe(3);
     // Triangle should have 3 edges
-    expect(edges.some(e => (e.v0 === 0 && e.v1 === 1) || (e.v0 === 1 && e.v1 === 0))).toBe(true);
-    expect(edges.some(e => (e.v0 === 1 && e.v1 === 2) || (e.v0 === 2 && e.v1 === 1))).toBe(true);
-    expect(edges.some(e => (e.v0 === 2 && e.v1 === 0) || (e.v0 === 0 && e.v1 === 2))).toBe(true);
+    expect(
+      edges.some(
+        (e) => (e.v0 === 0 && e.v1 === 1) || (e.v0 === 1 && e.v1 === 0)
+      )
+    ).toBe(true);
+    expect(
+      edges.some(
+        (e) => (e.v0 === 1 && e.v1 === 2) || (e.v0 === 2 && e.v1 === 1)
+      )
+    ).toBe(true);
+    expect(
+      edges.some(
+        (e) => (e.v0 === 2 && e.v1 === 0) || (e.v0 === 0 && e.v1 === 2)
+      )
+    ).toBe(true);
   });
 });
 
