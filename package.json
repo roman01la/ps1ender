@@ -6,7 +6,8 @@
     "build": "bun build --outdir=public --target=browser --format=esm --splitting src/App.tsx src/render-worker.ts",
     "prod": "bun build --outdir=public --target=browser --format=esm --splitting --minify src/App.tsx src/render-worker.ts",
     "watch": "bun build --outdir=public --target=browser --format=esm --splitting --watch src/App.tsx src/render-worker.ts",
-    "dev": "bun run build && bunx serve public"
+    "dev": "bun run build && bunx serve public",
+    "test": "bun test"
   },
   "keywords": [],
   "author": "",
