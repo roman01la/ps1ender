@@ -680,6 +680,101 @@ describe("Ray - Plane Intersection", () => {
 });
 
 // ============================================================================
+// Ray - Triangle Intersection (Möller–Trumbore algorithm)
+// ============================================================================
+
+describe("Ray - Triangle Intersection", () => {
+  // Triangle in XY plane at z=0: vertices at (0,0,0), (2,0,0), (1,2,0)
+  const v0 = new Vector3(0, 0, 0);
+  const v1 = new Vector3(2, 0, 0);
+  const v2 = new Vector3(1, 2, 0);
+
+  test("should hit triangle at center", () => {
+    // Ray from (1, 0.5, 10) pointing -Z should hit the triangle
+    const ray = new Ray(new Vector3(1, 0.5, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeCloseTo(10, 5);
+  });
+
+  test("should hit triangle at vertex", () => {
+    // Ray through vertex v2 at (1, 2, 0)
+    const ray = new Ray(new Vector3(1, 2, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeCloseTo(10, 5);
+  });
+
+  test("should hit triangle at edge", () => {
+    // Ray through midpoint of edge v0-v1 at (1, 0, 0)
+    const ray = new Ray(new Vector3(1, 0, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeCloseTo(10, 5);
+  });
+
+  test("should return null when ray misses triangle to the left", () => {
+    const ray = new Ray(new Vector3(-1, 1, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should return null when ray misses triangle to the right", () => {
+    const ray = new Ray(new Vector3(3, 1, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should return null when ray misses triangle above", () => {
+    const ray = new Ray(new Vector3(1, 3, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should return null when ray misses triangle below", () => {
+    const ray = new Ray(new Vector3(1, -1, 10), new Vector3(0, 0, -1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should return null when ray is parallel to triangle", () => {
+    // Ray parallel to XY plane
+    const ray = new Ray(new Vector3(0, 0, 5), new Vector3(1, 0, 0));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should return null when triangle is behind ray", () => {
+    // Ray pointing away from triangle
+    const ray = new Ray(new Vector3(1, 0.5, 10), new Vector3(0, 0, 1));
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).toBeNull();
+  });
+
+  test("should handle triangle in different plane", () => {
+    // Triangle in YZ plane at x=5
+    const t0 = new Vector3(5, 0, 0);
+    const t1 = new Vector3(5, 2, 0);
+    const t2 = new Vector3(5, 1, 2);
+    
+    // Ray along X axis should hit at x=5
+    const ray = new Ray(new Vector3(0, 1, 0.5), new Vector3(1, 0, 0));
+    const t = ray.intersectTriangle(t0, t1, t2);
+    expect(t).toBeCloseTo(5, 5);
+  });
+
+  test("should handle angled ray hitting triangle", () => {
+    // Triangle at z=0
+    // Ray from (0, 0, 10) pointing at (1, 1, 0)
+    const direction = new Vector3(1, 1, -10).normalize();
+    const ray = new Ray(new Vector3(0, 0, 10), direction);
+    const t = ray.intersectTriangle(v0, v1, v2);
+    expect(t).not.toBeNull();
+    
+    // Check that hit point is inside triangle
+    const hitPoint = ray.at(t!);
+    expect(hitPoint.z).toBeCloseTo(0, 5);
+  });
+});
+
+// ============================================================================
 // Utility Function Tests
 // ============================================================================
 
