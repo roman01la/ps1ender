@@ -5,6 +5,7 @@ A SIMD-accelerated PS1-style software rasterizer compiled to WebAssembly.
 ## Features
 
 - **SIMD acceleration**: Processes 4 pixels at a time using WebAssembly SIMD
+- **Optional pthread parallelization**: Multi-threaded triangle rasterization for large scenes
 - **Zero-copy buffers**: JavaScript and WASM share memory directly
 - **PS1-style rendering**:
   - 16-bit depth buffer
@@ -18,24 +19,28 @@ A SIMD-accelerated PS1-style software rasterizer compiled to WebAssembly.
 
 ### Prerequisites
 
-Install LLVM with WASM support:
+Install Emscripten:
 
 ```bash
 # macOS
-brew install llvm
+brew install emscripten
 
 # Linux (Ubuntu/Debian)
-apt install clang lld
+apt install emscripten
 ```
 
 ### Build
 
 ```bash
-# Using make
+# Single-threaded build (default, no JS glue needed)
 make
 
-# Or directly
-make install  # Copies to ../public/
+# Multi-threaded build (requires pthreads, produces JS + WASM + worker)
+make threads
+
+# Install to ../public/
+make install          # Single-threaded
+make install-threads  # Multi-threaded
 
 # Check compiler
 make check
@@ -44,11 +49,14 @@ make check
 ### Manual build
 
 ```bash
-clang++ -O3 -flto --target=wasm32 -msimd128 -nostdlib \
-  -fno-exceptions -fno-rtti \
-  -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
-  -Wl,--initial-memory=67108864 \
+# Single-threaded (standalone WASM)
+emcc -O3 -msimd128 -mbulk-memory -s STANDALONE_WASM=1 --no-entry \
   -o rasterizer.wasm rasterizer.cpp
+
+# Multi-threaded (requires JS glue)
+emcc -O3 -msimd128 -mbulk-memory -pthread -s USE_PTHREADS=1 \
+  -s PTHREAD_POOL_SIZE=4 -s MODULARIZE=1 \
+  -o rasterizer.js rasterizer.cpp
 ```
 
 ## Usage
@@ -137,6 +145,7 @@ loadWasmRasterizer(wasmPath?: string): Promise<WasmRasterizerInstance>
 ```typescript
 wasm.clear(r: number, g: number, b: number): void
 wasm.renderTriangles(): void
+wasm.renderTrianglesParallel(): void  // Multi-threaded (requires pthreads build)
 wasm.drawLine(x0, y0, x1, y1, r, g, b, depth): void
 ```
 
@@ -150,6 +159,13 @@ wasm.setEnableBackfaceCulling(enable: boolean): void
 wasm.setEnableVertexSnapping(enable: boolean): void
 wasm.setAmbientLight(ambient: number): void
 wasm.setSnapResolution(x: number, y: number): void
+```
+
+### Threading
+
+```typescript
+wasm.setThreadCount(count: number): void  // Set threads (1-8)
+wasm.getThreadCount(): number             // Get current thread count
 ```
 
 ### Lighting
@@ -166,6 +182,40 @@ wasm.getTextureBuffer(slot: number): Uint8Array
 wasm.setTextureSize(slot: number, width: number, height: number): void
 wasm.setCurrentTexture(slot: number): void  // -1 for no texture
 ```
+
+## Parallel Rendering with pthreads
+
+The rasterizer supports optional multi-threaded triangle processing using WebAssembly pthreads.
+
+### Browser Requirements
+
+Threading requires:
+- **SharedArrayBuffer** support
+- **Cross-Origin-Opener-Policy** (COOP) header: `same-origin`
+- **Cross-Origin-Embedder-Policy** (COEP) header: `require-corp`
+
+Add these headers to your server configuration:
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+### Usage
+
+```typescript
+// For large scenes, use parallel rendering
+wasm.setThreadCount(4);  // Use 4 threads
+wasm.renderTrianglesParallel();  // Parallel rasterization
+
+// For small scenes, sequential is faster
+wasm.renderTriangles();  // Single-threaded (default)
+```
+
+### When to Use Parallel Rendering
+
+- **Use parallel rendering** for scenes with many triangles (>1000)
+- **Use sequential rendering** for simple scenes (<64 triangles) due to threading overhead
+- The parallel function automatically falls back to sequential for small batches
 
 ## Integration with PS1ender
 

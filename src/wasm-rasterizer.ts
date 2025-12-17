@@ -52,6 +52,12 @@ export interface WasmRasterizerInstance {
   // Methods
   clear(r: number, g: number, b: number): void;
   renderTriangles(): void;
+  /**
+   * Parallel triangle rendering using pthreads (when WASM is built with threading support)
+   * Falls back to sequential rendering if threading is not available or for small batches.
+   * Requires SharedArrayBuffer support in the browser (needs COOP/COEP headers).
+   */
+  renderTrianglesParallel(): void;
   drawLine(
     x0: number,
     y0: number,
@@ -85,6 +91,17 @@ export interface WasmRasterizerInstance {
   setEnableVertexSnapping(enable: boolean): void;
   setEnableSmoothShading(enable: boolean): void;
   setSnapResolution(x: number, y: number): void;
+
+  // Threading settings (for parallel rendering)
+  /**
+   * Set the number of threads to use for parallel rendering.
+   * @param count Number of threads (1-8). Values outside range are clamped.
+   */
+  setThreadCount(count: number): void;
+  /**
+   * Get the current thread count setting.
+   */
+  getThreadCount(): number;
 
   // Point rendering
   renderPoint(
@@ -177,6 +194,11 @@ interface WasmExports {
   ) => void;
   set_color_ramp_count: (count: number) => void;
   bake_material: () => void;
+
+  // Threading exports
+  render_triangles_parallel: () => void;
+  set_thread_count: (count: number) => void;
+  get_thread_count: () => number;
 }
 
 /**
@@ -314,6 +336,10 @@ export async function loadWasmRasterizer(
       exports.render_triangles();
     },
 
+    renderTrianglesParallel() {
+      exports.render_triangles_parallel();
+    },
+
     drawLine(
       x0: number,
       y0: number,
@@ -385,6 +411,14 @@ export async function loadWasmRasterizer(
 
     setSnapResolution(x: number, y: number) {
       exports.set_snap_resolution(x, y);
+    },
+
+    setThreadCount(count: number) {
+      exports.set_thread_count(count);
+    },
+
+    getThreadCount(): number {
+      return exports.get_thread_count();
     },
 
     renderPoint(
