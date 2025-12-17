@@ -37,6 +37,9 @@ bun test src/systems/history.test.ts
 
 # Run headless renderer test (requires Node.js for SIMD WASM support)
 bun run test:headless
+
+# Run MCP server (for AI visual debugging)
+bun run mcp
 ```
 
 ---
@@ -304,11 +307,13 @@ interface PickContext {
 ### Headless Rendering
 
 The project includes a headless rendering module (`src/headless-rasterizer.ts`) for:
+
 - Screenshot tests
 - Visual debugging
 - MCP service integration for AI visual debugging
 
 **Usage:**
+
 ```typescript
 import { HeadlessRenderer } from "./headless-rasterizer";
 import { createCubeMesh } from "./primitives";
@@ -322,6 +327,67 @@ await renderer.savePNG("output.png");
 ```
 
 **Note:** Requires Node.js (not Bun) for SIMD WASM support. Run with `npx tsx` or `bun run test:headless`.
+
+### MCP Server
+
+The project includes an MCP (Model Context Protocol) server (`src/mcp-server.ts`) that exposes the headless renderer and editor functionality to AI agents for visual debugging and scene manipulation.
+
+**Run the server:**
+
+```bash
+bun run mcp
+```
+
+**Available Tools:**
+
+| Tool                    | Description                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `render_scene`          | Render current scene to PNG (returns base64 image)                            |
+| `add_primitive`         | Add primitive (cube, sphere, cylinder, cone, torus, plane, circle, icosphere) |
+| `delete_object`         | Remove object by name                                                         |
+| `list_objects`          | List all objects with transforms                                              |
+| `transform_object`      | Move/rotate/scale object                                                      |
+| `select_object`         | Select object by name                                                         |
+| `deselect_all`          | Deselect all objects                                                          |
+| `set_camera`            | Configure camera position/target/FOV                                          |
+| `set_view`              | Set predefined view (front, back, left, right, top, bottom, persp)            |
+| `get_scene_info`        | Get detailed scene information                                                |
+| `set_render_settings`   | Configure PS1-style effects (dithering, vertex snap, lighting)                |
+| `create_material`       | Create new material                                                           |
+| `set_object_material`   | Assign material to object                                                     |
+| `set_object_color`      | Set vertex colors for object                                                  |
+| `clear_scene`           | Remove all objects                                                            |
+| `duplicate_object`      | Duplicate object with optional offset                                         |
+| `set_object_visibility` | Show/hide object                                                              |
+
+**Example MCP Client Usage:**
+
+```typescript
+// Add a cube
+await client.callTool("add_primitive", {
+  type: "cube",
+  position: { x: 0, y: 0, z: 1 },
+  settings: { size: 2 },
+});
+
+// Set camera view
+await client.callTool("set_view", { view: "persp" });
+
+// Enable PS1 effects
+await client.callTool("set_render_settings", {
+  enableDithering: true,
+  enableVertexSnapping: true,
+  snapResolutionX: 320,
+  snapResolutionY: 240,
+});
+
+// Render scene
+const result = await client.callTool("render_scene", {
+  width: 640,
+  height: 480,
+});
+// result.content[0] contains base64 PNG image
+```
 
 ---
 

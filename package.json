@@ -8,17 +8,21 @@
     "watch": "bun build --outdir=public --target=browser --format=esm --splitting --watch src/App.tsx src/render-worker.ts",
     "dev": "bun run build && bunx serve public",
     "test": "bun test",
-    "test:headless": "npx tsx src/headless-test.ts"
+    "test:headless": "npx tsx src/headless-test.ts",
+    "mcp": "npx tsx src/mcp-server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "Software rasterizer for 3D graphics using Canvas 2D API",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@types/node": "^25.0.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
   }
