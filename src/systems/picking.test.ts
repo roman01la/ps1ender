@@ -74,11 +74,13 @@ function createTriangleMesh(): Mesh {
 
 /**
  * Create a mock camera for testing
+ * Camera at (0, 0, 10) looking at origin, using Y-up to avoid degenerate cross products
  */
 function createTestCamera(): Camera {
   const camera = new Camera();
   camera.position = new Vector3(0, 0, 10);
   camera.target = new Vector3(0, 0, 0);
+  camera.up = new Vector3(0, 1, 0); // Y-up for looking down Z axis
   return camera;
 }
 
@@ -374,6 +376,131 @@ describe("PickingManager - Object Picking", () => {
     const picked = picking.pickObject(400, 300, objects, ctx);
 
     expect(picked?.name).toBe("VisibleCube");
+  });
+});
+
+// ============================================================================
+// Precise Object Picking (Ray-Triangle Intersection)
+// ============================================================================
+
+describe("PickingManager - Precise Object Picking", () => {
+  let picking: PickingManager;
+  let ctx: PickContext;
+
+  beforeEach(() => {
+    picking = new PickingManager();
+    ctx = createTestContext();
+  });
+
+  test("should NOT pick triangle object when clicking outside mesh but inside bounding box", () => {
+    // Create a triangle that doesn't fill its entire bounding box
+    // Triangle with vertices at (0,0,0), (4,0,0), (2,4,0)
+    // The bounding box is from (0,0,0) to (4,4,0)
+    // But clicking at the corner (near 4,4,0) should NOT hit the triangle
+    const vertices = [
+      new Vertex(new Vector3(-2, -2, 0), Color.white()),
+      new Vertex(new Vector3(2, -2, 0), Color.white()),
+      new Vertex(new Vector3(0, 2, 0), Color.white()),
+    ];
+    const mesh = new Mesh(vertices);
+    mesh.faceData = [{ vertices: [0, 1, 2] }];
+    mesh.rebuildFromFaces();
+
+    const triangleObj = new SceneObject("Triangle", mesh);
+    const objects = [triangleObj];
+
+    // Project the corner of the bounding box (2, 2, 0) to screen
+    // This point is in the bounding box but outside the actual triangle
+    const cornerScreen = picking.projectToScreen(new Vector3(2, 2, 0), ctx);
+    expect(cornerScreen).not.toBe(null);
+
+    // Clicking at this corner should NOT pick the triangle
+    // because the ray doesn't actually hit the triangle geometry
+    const picked = picking.pickObject(cornerScreen!.x, cornerScreen!.y, objects, ctx);
+    expect(picked).toBe(null);
+  });
+
+  test("should pick triangle object when clicking inside the actual triangle", () => {
+    // Same triangle as above
+    const vertices = [
+      new Vertex(new Vector3(-2, -2, 0), Color.white()),
+      new Vertex(new Vector3(2, -2, 0), Color.white()),
+      new Vertex(new Vector3(0, 2, 0), Color.white()),
+    ];
+    const mesh = new Mesh(vertices);
+    mesh.faceData = [{ vertices: [0, 1, 2] }];
+    mesh.rebuildFromFaces();
+
+    const triangleObj = new SceneObject("Triangle", mesh);
+    const objects = [triangleObj];
+
+    // Project the centroid of the triangle to screen
+    const centroid = new Vector3(0, -0.67, 0); // Centroid of the triangle
+    const centroidScreen = picking.projectToScreen(centroid, ctx);
+    expect(centroidScreen).not.toBe(null);
+
+    // Clicking at the centroid should pick the triangle
+    const picked = picking.pickObject(centroidScreen!.x, centroidScreen!.y, objects, ctx);
+    expect(picked?.name).toBe("Triangle");
+  });
+
+  test("should select closer object based on actual mesh hit distance, not bounding box", () => {
+    // Create two objects:
+    // 1. A small triangle close to camera
+    // 2. A larger cube behind it
+    // The cube's bounding box might extend forward of the triangle's bounding box,
+    // but clicking on the triangle should select the triangle, not the cube
+
+    // Small triangle at z=2 (closer to camera)
+    const triVertices = [
+      new Vertex(new Vector3(-0.5, -0.5, 2), Color.white()),
+      new Vertex(new Vector3(0.5, -0.5, 2), Color.white()),
+      new Vertex(new Vector3(0, 0.5, 2), Color.white()),
+    ];
+    const triMesh = new Mesh(triVertices);
+    triMesh.faceData = [{ vertices: [0, 1, 2] }];
+    triMesh.rebuildFromFaces();
+    const triangleObj = new SceneObject("FrontTriangle", triMesh);
+
+    // Cube at z=-2 (further from camera)
+    const cubeObj = createTestSceneObject("BackCube", new Vector3(0, 0, -2));
+
+    const objects = [cubeObj, triangleObj];
+
+    // Click at center where both objects' bounding boxes overlap
+    const picked = picking.pickObject(400, 300, objects, ctx);
+
+    // Should pick the front triangle, not the back cube
+    expect(picked?.name).toBe("FrontTriangle");
+  });
+
+  test("should return null when clicking empty space between separated objects", () => {
+    // Two triangles on either side, with empty space in the middle
+    const leftVertices = [
+      new Vertex(new Vector3(-5, -1, 0), Color.white()),
+      new Vertex(new Vector3(-3, -1, 0), Color.white()),
+      new Vertex(new Vector3(-4, 1, 0), Color.white()),
+    ];
+    const leftMesh = new Mesh(leftVertices);
+    leftMesh.faceData = [{ vertices: [0, 1, 2] }];
+    leftMesh.rebuildFromFaces();
+    const leftObj = new SceneObject("LeftTriangle", leftMesh);
+
+    const rightVertices = [
+      new Vertex(new Vector3(3, -1, 0), Color.white()),
+      new Vertex(new Vector3(5, -1, 0), Color.white()),
+      new Vertex(new Vector3(4, 1, 0), Color.white()),
+    ];
+    const rightMesh = new Mesh(rightVertices);
+    rightMesh.faceData = [{ vertices: [0, 1, 2] }];
+    rightMesh.rebuildFromFaces();
+    const rightObj = new SceneObject("RightTriangle", rightMesh);
+
+    const objects = [leftObj, rightObj];
+
+    // Click at center (0, 0) where there's empty space
+    const picked = picking.pickObject(400, 300, objects, ctx);
+    expect(picked).toBe(null);
   });
 });
 

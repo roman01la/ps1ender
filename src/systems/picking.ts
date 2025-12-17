@@ -119,7 +119,8 @@ export class PickingManager {
   }
 
   /**
-   * Pick an object by testing ray against AABBs
+   * Pick an object by testing ray against mesh triangles
+   * Uses AABB as early-out, then precise ray-triangle intersection
    */
   pickObject(
     screenX: number,
@@ -135,12 +136,30 @@ export class PickingManager {
     for (const obj of objects) {
       if (!obj.visible) continue;
 
+      // Fast early-out using AABB
       const bounds = obj.getWorldBounds();
-      const dist = ray.intersectAABB(bounds.min, bounds.max);
+      const aabbDist = ray.intersectAABB(bounds.min, bounds.max);
 
-      if (dist !== null && dist < closestDist) {
-        closestDist = dist;
-        closestObj = obj;
+      if (aabbDist === null || aabbDist >= closestDist) {
+        continue;
+      }
+
+      // Precise ray-triangle intersection
+      const modelMatrix = obj.getModelMatrix();
+      const mesh = obj.mesh;
+
+      for (const tri of mesh.triangles) {
+        // Transform triangle vertices to world space
+        const v0 = modelMatrix.transformPoint(tri.v0.position);
+        const v1 = modelMatrix.transformPoint(tri.v1.position);
+        const v2 = modelMatrix.transformPoint(tri.v2.position);
+
+        const dist = ray.intersectTriangle(v0, v1, v2);
+
+        if (dist !== null && dist < closestDist) {
+          closestDist = dist;
+          closestObj = obj;
+        }
       }
     }
 

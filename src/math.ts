@@ -574,6 +574,50 @@ export class Ray {
     const t = planePoint.sub(this.origin).dot(planeNormal) / denom;
     return t > 0 ? t : null;
   }
+
+  /**
+   * Test intersection with a triangle using Möller–Trumbore algorithm
+   * Returns distance to intersection or null if no hit
+   */
+  intersectTriangle(v0: Vector3, v1: Vector3, v2: Vector3): number | null {
+    const EPSILON = 0.0000001;
+
+    const edge1 = v1.sub(v0);
+    const edge2 = v2.sub(v0);
+    const h = this.direction.cross(edge2);
+    const a = edge1.dot(h);
+
+    // Ray is parallel to triangle
+    if (a > -EPSILON && a < EPSILON) {
+      return null;
+    }
+
+    const f = 1.0 / a;
+    const s = this.origin.sub(v0);
+    const u = f * s.dot(h);
+
+    // Check u bounds
+    if (u < 0.0 || u > 1.0) {
+      return null;
+    }
+
+    const q = s.cross(edge1);
+    const v = f * this.direction.dot(q);
+
+    // Check v bounds
+    if (v < 0.0 || u + v > 1.0) {
+      return null;
+    }
+
+    // Compute t to find intersection point
+    const t = f * edge2.dot(q);
+
+    if (t > EPSILON) {
+      return t;
+    }
+
+    return null;
+  }
 }
 
 // Utility functions
