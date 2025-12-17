@@ -5,3 +5,5 @@ coverage
 test-output
 # WASM build artifacts (only rasterizer.wasm should be committed)
 wasm/*.js
+# CodeQL analysis artifacts
+_codeql_detected_source_root
