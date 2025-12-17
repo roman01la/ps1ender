@@ -18370,225 +18370,6 @@ class MTLLoader {
   }
 }
 
-// src/obj-loader.ts
-class OBJLoader {
-  static parse(objContent, defaultColor = Color.white()) {
-    const lines = objContent.split(`
-`);
-    const positions = [];
-    const texCoords = [];
-    const normals = [];
-    let currentGroupName = "default";
-    let mtlFile = null;
-    let currentMaterial = null;
-    let currentSmoothGroup = 0;
-    const groups = new Map;
-    groups.set(currentGroupName, {
-      vertices: [],
-      indices: [],
-      faceData: [],
-      material: null,
-      hasSmoothShading: false
-    });
-    const vertexCache = new Map;
-    for (let lineNum = 0;lineNum < lines.length; lineNum++) {
-      const line = lines[lineNum].trim();
-      if (line.length === 0 || line.startsWith("#")) {
-        continue;
-      }
-      const parts = line.split(/\s+/);
-      const command = parts[0];
-      switch (command) {
-        case "v":
-          positions.push(new Vector3(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0));
-          break;
-        case "vt":
-          texCoords.push([
-            parseFloat(parts[1]) || 0,
-            parseFloat(parts[2]) || 0
-          ]);
-          break;
-        case "vn":
-          normals.push(new Vector3(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0).normalize());
-          break;
-        case "g":
-        case "o":
-          currentGroupName = parts[1] || "default";
-          if (!groups.has(currentGroupName)) {
-            groups.set(currentGroupName, {
-              vertices: [],
-              indices: [],
-              faceData: [],
-              material: currentMaterial,
-              hasSmoothShading: false
-            });
-          }
-          vertexCache.clear();
-          break;
-        case "mtllib":
-          mtlFile = parts.slice(1).join(" ");
-          break;
-        case "usemtl":
-          currentMaterial = parts.slice(1).join(" ");
-          const currentGroup = groups.get(currentGroupName);
-          if (currentGroup && !currentGroup.material) {
-            currentGroup.material = currentMaterial;
-          }
-          break;
-        case "f":
-          const group = groups.get(currentGroupName);
-          const faceVertices = [];
-          for (let i = 1;i < parts.length; i++) {
-            const vertexData = parts[i];
-            const cacheKey = vertexData;
-            if (vertexCache.has(cacheKey)) {
-              faceVertices.push(vertexCache.get(cacheKey));
-            } else {
-              const indices = vertexData.split("/");
-              const posIdx = parseInt(indices[0]) - 1;
-              const texIdx = indices[1] ? parseInt(indices[1]) - 1 : -1;
-              const normIdx = indices[2] ? parseInt(indices[2]) - 1 : -1;
-              const actualPosIdx = posIdx < 0 ? positions.length + posIdx + 1 : posIdx;
-              const actualTexIdx = texIdx < 0 ? texCoords.length + texIdx + 1 : texIdx;
-              const actualNormIdx = normIdx < 0 ? normals.length + normIdx + 1 : normIdx;
-              const position = positions[actualPosIdx] || Vector3.zero();
-              const uv = actualTexIdx >= 0 && texCoords[actualTexIdx] ? texCoords[actualTexIdx] : [0, 0];
-              const normal = actualNormIdx >= 0 && normals[actualNormIdx] ? normals[actualNormIdx] : Vector3.zero();
-              const vertex = new Vertex(position.clone(), defaultColor.clone(), normal.clone(), uv[0], uv[1]);
-              const vertexIndex = group.vertices.length;
-              group.vertices.push(vertex);
-              vertexCache.set(cacheKey, vertexIndex);
-              faceVertices.push(vertexIndex);
-            }
-          }
-          group.faceData.push({ vertices: [...faceVertices] });
-          if (currentSmoothGroup > 0) {
-            group.hasSmoothShading = true;
-          }
-          for (let i = 1;i < faceVertices.length - 1; i++) {
-            group.indices.push(faceVertices[0]);
-            group.indices.push(faceVertices[i]);
-            group.indices.push(faceVertices[i + 1]);
-          }
-          break;
-        case "s":
-          const smoothVal = parts[1]?.toLowerCase();
-          if (smoothVal === "off" || smoothVal === "0") {
-            currentSmoothGroup = 0;
-          } else {
-            currentSmoothGroup = parseInt(parts[1]) || 1;
-          }
-          break;
-        default:
-          break;
-      }
-    }
-    const meshes = new Map;
-    const groupMaterials = new Map;
-    let defaultMesh = null;
-    for (const [name, data] of groups) {
-      if (data.vertices.length > 0 && data.indices.length > 0) {
-        const mesh = new Mesh(data.vertices, data.indices);
-        mesh.faceData = data.faceData;
-        mesh.smoothShading = data.hasSmoothShading;
-        OBJLoader.calculateNormalsIfMissing(mesh);
-        meshes.set(name, mesh);
-        if (data.material) {
-          groupMaterials.set(name, data.material);
-        }
-        if (!defaultMesh) {
-          defaultMesh = mesh;
-        }
-      }
-    }
-    if (!defaultMesh) {
-      defaultMesh = new Mesh([], []);
-    }
-    return {
-      meshes,
-      defaultMesh,
-      materials: new Map,
-      defaultTexture: null,
-      mtlFile,
-      groupMaterials
-    };
-  }
-  static calculateNormalsIfMissing(mesh) {
-    let hasNormals = false;
-    for (const vertex of mesh.vertices) {
-      if (vertex.normal.lengthSquared() > 0.001) {
-        hasNormals = true;
-        break;
-      }
-    }
-    if (hasNormals)
-      return;
-    for (let i = 0;i < mesh.indices.length; i += 3) {
-      const i0 = mesh.indices[i];
-      const i1 = mesh.indices[i + 1];
-      const i2 = mesh.indices[i + 2];
-      const v0 = mesh.vertices[i0].position;
-      const v1 = mesh.vertices[i1].position;
-      const v2 = mesh.vertices[i2].position;
-      const edge1 = v1.sub(v0);
-      const edge2 = v2.sub(v0);
-      const faceNormal = edge1.cross(edge2).normalize();
-      mesh.vertices[i0].normal = faceNormal;
-      mesh.vertices[i1].normal = faceNormal;
-      mesh.vertices[i2].normal = faceNormal;
-    }
-    mesh.rebuildTriangles();
-  }
-  static async load(url, defaultColor = Color.white()) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to load OBJ file: ${response.statusText}`);
-    }
-    const content = await response.text();
-    const result2 = OBJLoader.parse(content, defaultColor);
-    if (result2.mtlFile) {
-      try {
-        const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
-        const mtlUrl = baseUrl + result2.mtlFile;
-        const materials = await MTLLoader.load(mtlUrl, baseUrl);
-        result2.materials = materials;
-        for (const material of materials.values()) {
-          if (material.diffuseTexture) {
-            result2.defaultTexture = material.diffuseTexture;
-            break;
-          }
-        }
-      } catch (e) {
-        console.warn(`Failed to load MTL file: ${e}`);
-      }
-    }
-    return result2;
-  }
-  static assignRandomFaceColors(mesh) {
-    for (const triangle of mesh.triangles) {
-      const color = new Color(Math.floor(Math.random() * 200) + 55, Math.floor(Math.random() * 200) + 55, Math.floor(Math.random() * 200) + 55);
-      triangle.v0.color = color.clone();
-      triangle.v1.color = color.clone();
-      triangle.v2.color = color.clone();
-    }
-  }
-  static assignHeightGradient(mesh, colorA, colorB) {
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const vertex of mesh.vertices) {
-      minY = Math.min(minY, vertex.position.y);
-      maxY = Math.max(maxY, vertex.position.y);
-    }
-    const range = maxY - minY || 1;
-    for (const triangle of mesh.triangles) {
-      for (const v of [triangle.v0, triangle.v1, triangle.v2]) {
-        const t = (v.position.y - minY) / range;
-        v.color = colorA.lerp(colorB, t);
-      }
-    }
-  }
-}
-
 // src/material.ts
 function evaluateMaterial(material, ctx) {
   const outputNode = material.nodes.find((n) => n.type === "output");
@@ -19091,7 +18872,7 @@ function createDefaultMaterialData(id, name) {
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false }
         ],
-        data: { color: "#dcdcdcff" }
+        data: { color: "#dcdcdc" }
       }
     ],
     connections: [
@@ -19271,9 +19052,16 @@ class Scene {
   gridDivisions = 10;
   activeObject = null;
   materials;
+  textures = new Map;
   constructor() {
     this.camera = new Camera;
     this.materials = new MaterialRegistry;
+  }
+  registerTexture(path, texture) {
+    this.textures.set(path, texture);
+  }
+  getTexture(path) {
+    return this.textures.get(path);
   }
   addObject(obj) {
     if (!obj.materialId) {
@@ -19351,6 +19139,295 @@ class Scene {
   }
 }
 
+// src/obj-loader.ts
+async function loadOBJToScene(url, scene) {
+  const result2 = await OBJLoader.load(url);
+  const mtlToShaderMaterial = new Map;
+  let defaultTexture = result2.defaultTexture;
+  for (const [mtlName, mtlMat] of result2.materials) {
+    const texturePath = mtlMat.diffuseTexturePath;
+    const shaderMat = scene.materials.createFromMTL({
+      name: mtlName,
+      diffuseColor: mtlMat.diffuseColor,
+      diffuseTexturePath: texturePath,
+      textureWidth: mtlMat.diffuseTexture?.width || 0,
+      textureHeight: mtlMat.diffuseTexture?.height || 0
+    });
+    mtlToShaderMaterial.set(mtlName, shaderMat.id);
+    if (mtlMat.diffuseTexture && texturePath) {
+      scene.registerTexture(texturePath, mtlMat.diffuseTexture);
+    }
+    console.log(`Created shader material "${mtlName}" from MTL`);
+  }
+  let firstObj = null;
+  const createdObjects = [];
+  let minPos = new Vector3(Infinity, Infinity, Infinity);
+  let maxPos = new Vector3(-Infinity, -Infinity, -Infinity);
+  for (const [meshName, mesh] of result2.meshes) {
+    for (const v of mesh.vertices) {
+      minPos = new Vector3(Math.min(minPos.x, v.position.x), Math.min(minPos.y, v.position.y), Math.min(minPos.z, v.position.z));
+      maxPos = new Vector3(Math.max(maxPos.x, v.position.x), Math.max(maxPos.y, v.position.y), Math.max(maxPos.z, v.position.z));
+    }
+  }
+  const center = minPos.add(maxPos).mul(0.5);
+  for (const [meshName, mesh] of result2.meshes) {
+    for (const v of mesh.vertices) {
+      v.position = v.position.sub(center);
+    }
+    mesh.rebuildTriangles();
+    const obj = new SceneObject(meshName, mesh);
+    const mtlMatName = result2.groupMaterials.get(meshName);
+    if (mtlMatName && mtlToShaderMaterial.has(mtlMatName)) {
+      obj.materialId = mtlToShaderMaterial.get(mtlMatName);
+      const mtlMat = result2.materials.get(mtlMatName);
+      if (mtlMat?.diffuseTexture) {
+        obj.texture = mtlMat.diffuseTexture;
+      }
+    } else if (mtlToShaderMaterial.size > 0) {
+      obj.materialId = mtlToShaderMaterial.values().next().value;
+    }
+    scene.addObject(obj);
+    createdObjects.push(obj);
+    if (!firstObj) {
+      firstObj = obj;
+    }
+    console.log(`Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`);
+  }
+  if (firstObj) {
+    scene.selectObject(firstObj);
+  }
+  if (result2.defaultMesh.vertices.length > 0) {
+    const size = result2.defaultMesh.getSize();
+    const maxDim = Math.max(size.x, size.y, size.z);
+    scene.camera.position = new Vector3(maxDim * 1.5, maxDim * -1.5, maxDim * 0.5);
+    scene.camera.target = Vector3.zero();
+  }
+  console.log(`Loaded OBJ with ${createdObjects.length} object(s)`);
+  return {
+    objects: createdObjects,
+    firstObject: firstObj,
+    defaultTexture
+  };
+}
+
+class OBJLoader {
+  static parse(objContent, defaultColor = Color.white()) {
+    const lines = objContent.split(`
+`);
+    const positions = [];
+    const texCoords = [];
+    const normals = [];
+    let currentGroupName = "default";
+    let mtlFile = null;
+    let currentMaterial = null;
+    let currentSmoothGroup = 0;
+    const groups = new Map;
+    groups.set(currentGroupName, {
+      vertices: [],
+      indices: [],
+      faceData: [],
+      material: null,
+      hasSmoothShading: false
+    });
+    const vertexCache = new Map;
+    for (let lineNum = 0;lineNum < lines.length; lineNum++) {
+      const line = lines[lineNum].trim();
+      if (line.length === 0 || line.startsWith("#")) {
+        continue;
+      }
+      const parts = line.split(/\s+/);
+      const command = parts[0];
+      switch (command) {
+        case "v":
+          positions.push(new Vector3(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0));
+          break;
+        case "vt":
+          texCoords.push([
+            parseFloat(parts[1]) || 0,
+            parseFloat(parts[2]) || 0
+          ]);
+          break;
+        case "vn":
+          normals.push(new Vector3(parseFloat(parts[1]) || 0, parseFloat(parts[2]) || 0, parseFloat(parts[3]) || 0).normalize());
+          break;
+        case "g":
+        case "o":
+          currentGroupName = parts[1] || "default";
+          if (!groups.has(currentGroupName)) {
+            groups.set(currentGroupName, {
+              vertices: [],
+              indices: [],
+              faceData: [],
+              material: currentMaterial,
+              hasSmoothShading: false
+            });
+          }
+          vertexCache.clear();
+          break;
+        case "mtllib":
+          mtlFile = parts.slice(1).join(" ");
+          break;
+        case "usemtl":
+          currentMaterial = parts.slice(1).join(" ");
+          const currentGroup = groups.get(currentGroupName);
+          if (currentGroup && !currentGroup.material) {
+            currentGroup.material = currentMaterial;
+          }
+          break;
+        case "f":
+          const group = groups.get(currentGroupName);
+          const faceVertices = [];
+          for (let i = 1;i < parts.length; i++) {
+            const vertexData = parts[i];
+            const cacheKey = vertexData;
+            if (vertexCache.has(cacheKey)) {
+              faceVertices.push(vertexCache.get(cacheKey));
+            } else {
+              const indices = vertexData.split("/");
+              const posIdx = parseInt(indices[0]) - 1;
+              const texIdx = indices[1] ? parseInt(indices[1]) - 1 : -1;
+              const normIdx = indices[2] ? parseInt(indices[2]) - 1 : -1;
+              const actualPosIdx = posIdx < 0 ? positions.length + posIdx + 1 : posIdx;
+              const actualTexIdx = texIdx < 0 ? texCoords.length + texIdx + 1 : texIdx;
+              const actualNormIdx = normIdx < 0 ? normals.length + normIdx + 1 : normIdx;
+              const position = positions[actualPosIdx] || Vector3.zero();
+              const uv = actualTexIdx >= 0 && texCoords[actualTexIdx] ? texCoords[actualTexIdx] : [0, 0];
+              const normal = actualNormIdx >= 0 && normals[actualNormIdx] ? normals[actualNormIdx] : Vector3.zero();
+              const vertex = new Vertex(position.clone(), defaultColor.clone(), normal.clone(), uv[0], uv[1]);
+              const vertexIndex = group.vertices.length;
+              group.vertices.push(vertex);
+              vertexCache.set(cacheKey, vertexIndex);
+              faceVertices.push(vertexIndex);
+            }
+          }
+          group.faceData.push({ vertices: [...faceVertices] });
+          if (currentSmoothGroup > 0) {
+            group.hasSmoothShading = true;
+          }
+          for (let i = 1;i < faceVertices.length - 1; i++) {
+            group.indices.push(faceVertices[0]);
+            group.indices.push(faceVertices[i]);
+            group.indices.push(faceVertices[i + 1]);
+          }
+          break;
+        case "s":
+          const smoothVal = parts[1]?.toLowerCase();
+          if (smoothVal === "off" || smoothVal === "0") {
+            currentSmoothGroup = 0;
+          } else {
+            currentSmoothGroup = parseInt(parts[1]) || 1;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    const meshes = new Map;
+    const groupMaterials = new Map;
+    let defaultMesh = null;
+    for (const [name, data] of groups) {
+      if (data.vertices.length > 0 && data.indices.length > 0) {
+        const mesh = new Mesh(data.vertices, data.indices);
+        mesh.faceData = data.faceData;
+        mesh.smoothShading = data.hasSmoothShading;
+        OBJLoader.calculateNormalsIfMissing(mesh);
+        meshes.set(name, mesh);
+        if (data.material) {
+          groupMaterials.set(name, data.material);
+        }
+        if (!defaultMesh) {
+          defaultMesh = mesh;
+        }
+      }
+    }
+    if (!defaultMesh) {
+      defaultMesh = new Mesh([], []);
+    }
+    return {
+      meshes,
+      defaultMesh,
+      materials: new Map,
+      defaultTexture: null,
+      mtlFile,
+      groupMaterials
+    };
+  }
+  static calculateNormalsIfMissing(mesh) {
+    let hasNormals = false;
+    for (const vertex of mesh.vertices) {
+      if (vertex.normal.lengthSquared() > 0.001) {
+        hasNormals = true;
+        break;
+      }
+    }
+    if (hasNormals)
+      return;
+    for (let i = 0;i < mesh.indices.length; i += 3) {
+      const i0 = mesh.indices[i];
+      const i1 = mesh.indices[i + 1];
+      const i2 = mesh.indices[i + 2];
+      const v0 = mesh.vertices[i0].position;
+      const v1 = mesh.vertices[i1].position;
+      const v2 = mesh.vertices[i2].position;
+      const edge1 = v1.sub(v0);
+      const edge2 = v2.sub(v0);
+      const faceNormal = edge1.cross(edge2).normalize();
+      mesh.vertices[i0].normal = faceNormal;
+      mesh.vertices[i1].normal = faceNormal;
+      mesh.vertices[i2].normal = faceNormal;
+    }
+    mesh.rebuildTriangles();
+  }
+  static async load(url, defaultColor = Color.white()) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load OBJ file: ${response.statusText}`);
+    }
+    const content = await response.text();
+    const result2 = OBJLoader.parse(content, defaultColor);
+    if (result2.mtlFile) {
+      try {
+        const baseUrl = url.substring(0, url.lastIndexOf("/") + 1);
+        const mtlUrl = baseUrl + result2.mtlFile;
+        const materials = await MTLLoader.load(mtlUrl, baseUrl);
+        result2.materials = materials;
+        for (const material of materials.values()) {
+          if (material.diffuseTexture) {
+            result2.defaultTexture = material.diffuseTexture;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to load MTL file: ${e}`);
+      }
+    }
+    return result2;
+  }
+  static assignRandomFaceColors(mesh) {
+    for (const triangle of mesh.triangles) {
+      const color = new Color(Math.floor(Math.random() * 200) + 55, Math.floor(Math.random() * 200) + 55, Math.floor(Math.random() * 200) + 55);
+      triangle.v0.color = color.clone();
+      triangle.v1.color = color.clone();
+      triangle.v2.color = color.clone();
+    }
+  }
+  static assignHeightGradient(mesh, colorA, colorB) {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const vertex of mesh.vertices) {
+      minY = Math.min(minY, vertex.position.y);
+      maxY = Math.max(maxY, vertex.position.y);
+    }
+    const range = maxY - minY || 1;
+    for (const triangle of mesh.triangles) {
+      for (const v of [triangle.v0, triangle.v1, triangle.v2]) {
+        const t = (v.position.y - minY) / range;
+        v.color = colorA.lerp(colorB, t);
+      }
+    }
+  }
+}
+
 // src/gltf-loader.ts
 var COMPONENT_TYPE_SIZE = {
   5120: 1,
@@ -19369,6 +19446,206 @@ var TYPE_COMPONENTS = {
   MAT3: 9,
   MAT4: 16
 };
+function createTexturedMaterialNodes(texturePath, textureWidth, textureHeight, tintColor) {
+  if (!tintColor) {
+    return {
+      nodes: [
+        {
+          id: "output-1",
+          type: "output",
+          x: 500,
+          y: 150,
+          width: 140,
+          height: 80,
+          inputs: [
+            { id: "color", name: "Color", type: "color", isInput: true }
+          ],
+          outputs: [],
+          data: {}
+        },
+        {
+          id: "texture-1",
+          type: "texture",
+          x: 150,
+          y: 100,
+          width: 180,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false }
+          ],
+          data: {
+            imagePath: texturePath,
+            textureWidth,
+            textureHeight
+          }
+        }
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          fromNodeId: "texture-1",
+          fromSocketId: "color",
+          toNodeId: "output-1",
+          toSocketId: "color"
+        }
+      ]
+    };
+  } else {
+    return {
+      nodes: [
+        {
+          id: "output-1",
+          type: "output",
+          x: 650,
+          y: 150,
+          width: 140,
+          height: 80,
+          inputs: [
+            { id: "color", name: "Color", type: "color", isInput: true }
+          ],
+          outputs: [],
+          data: {}
+        },
+        {
+          id: "texture-1",
+          type: "texture",
+          x: 100,
+          y: 80,
+          width: 180,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false }
+          ],
+          data: {
+            imagePath: texturePath,
+            textureWidth,
+            textureHeight
+          }
+        },
+        {
+          id: "flat-color-1",
+          type: "flat-color",
+          x: 100,
+          y: 200,
+          width: 160,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false }
+          ],
+          data: { color: tintColor }
+        },
+        {
+          id: "mix-1",
+          type: "mix",
+          x: 400,
+          y: 130,
+          width: 160,
+          height: 120,
+          inputs: [
+            { id: "color1", name: "Color1", type: "color", isInput: true },
+            { id: "color2", name: "Color2", type: "color", isInput: true }
+          ],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false }
+          ],
+          data: { blendMode: "multiply", factor: 1 }
+        }
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          fromNodeId: "texture-1",
+          fromSocketId: "color",
+          toNodeId: "mix-1",
+          toSocketId: "color1"
+        },
+        {
+          id: "conn-2",
+          fromNodeId: "flat-color-1",
+          fromSocketId: "color",
+          toNodeId: "mix-1",
+          toSocketId: "color2"
+        },
+        {
+          id: "conn-3",
+          fromNodeId: "mix-1",
+          fromSocketId: "color",
+          toNodeId: "output-1",
+          toSocketId: "color"
+        }
+      ]
+    };
+  }
+}
+async function loadGLTFToScene(url, scene) {
+  const result2 = await GLTFLoader.load(url);
+  const gltfToShaderMaterial = new Map;
+  let defaultTexture = null;
+  for (const [matName, gltfMat] of result2.materials) {
+    const shaderMat = scene.materials.createMaterial(matName);
+    const hasTexture = gltfMat.texture !== null;
+    const c = gltfMat.baseColor;
+    const colorHex = "#" + c.r.toString(16).padStart(2, "0") + c.g.toString(16).padStart(2, "0") + c.b.toString(16).padStart(2, "0");
+    if (hasTexture) {
+      const isWhite = c.r >= 250 && c.g >= 250 && c.b >= 250;
+      const texturePath = gltfMat.textureName || matName;
+      scene.registerTexture(texturePath, gltfMat.texture);
+      const { nodes, connections } = createTexturedMaterialNodes(texturePath, gltfMat.texture.width, gltfMat.texture.height, isWhite ? null : colorHex);
+      shaderMat.nodes = nodes;
+      shaderMat.connections = connections;
+      console.log(`Created textured material "${matName}" (${gltfMat.texture.width}x${gltfMat.texture.height})`);
+      if (!defaultTexture) {
+        defaultTexture = gltfMat.texture;
+      }
+    } else {
+      const flatColorNode = shaderMat.nodes.find((n) => n.type === "flat-color");
+      if (flatColorNode && flatColorNode.data) {
+        flatColorNode.data.color = colorHex;
+      }
+    }
+    gltfToShaderMaterial.set(matName, shaderMat.id);
+    console.log(`Created shader material "${matName}" from GLTF`);
+  }
+  let firstObj = null;
+  const createdObjects = [];
+  const objectsWithMeshes = result2.sceneObjects.filter((obj) => obj.mesh.vertices.length > 0);
+  for (const obj of objectsWithMeshes) {
+    const matName = result2.meshMaterials.get(obj.name);
+    if (matName && gltfToShaderMaterial.has(matName)) {
+      obj.materialId = gltfToShaderMaterial.get(matName);
+    } else if (gltfToShaderMaterial.size > 0) {
+      obj.materialId = gltfToShaderMaterial.values().next().value;
+    }
+    const gltfMat = matName ? result2.materials.get(matName) : null;
+    if (gltfMat?.texture) {
+      obj.texture = gltfMat.texture;
+    }
+    scene.addObject(obj);
+    createdObjects.push(obj);
+    if (!firstObj) {
+      firstObj = obj;
+    }
+    console.log(`Loaded mesh "${obj.name}" with ${obj.mesh.triangles.length} triangles`);
+  }
+  if (firstObj) {
+    scene.selectObject(firstObj);
+  }
+  if (result2.defaultMesh.vertices.length > 0) {
+    const size = result2.defaultMesh.getSize();
+    const maxDim = Math.max(size.x, size.y, size.z);
+    scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
+    scene.camera.target = Vector3.zero();
+  }
+  console.log(`Loaded GLTF with ${createdObjects.length} object(s)`);
+  return {
+    objects: createdObjects,
+    firstObject: firstObj,
+    defaultTexture
+  };
+}
 
 class GLTFLoader {
   json;
@@ -25754,7 +26031,23 @@ function buildRenderFrame(ctx, textureChanged = false) {
       continue;
     const modelMatrix = obj.getModelMatrix();
     const material = obj.materialId ? scene.materials.get(obj.materialId) : undefined;
-    if (obj.texture) {
+    let objTexture = null;
+    if (material) {
+      for (const node of material.nodes) {
+        if (node.type === "texture" && node.data.imagePath) {
+          const tex = scene.textures.get(node.data.imagePath);
+          if (tex) {
+            objTexture = tex;
+            textureSampler.set("default", tex);
+            textureSampler.set(node.data.imagePath, tex);
+            objectTexture = tex;
+            break;
+          }
+        }
+      }
+    }
+    if (!objTexture && obj.texture) {
+      objTexture = obj.texture;
       textureSampler.set("default", obj.texture);
       objectTexture = obj.texture;
       if (material) {
@@ -25771,16 +26064,16 @@ function buildRenderFrame(ctx, textureChanged = false) {
       frame.sceneLines.push(buildWireframeLines(obj, modelMatrix));
     } else {
       const needsBaking = material ? materialNeedsBaking(material) : false;
-      let useTexture = material ? materialUsesTexture(material) && !!obj.texture : false;
+      let useTexture = material ? materialUsesTexture(material) && !!objTexture : false;
       let materialBake;
       if (needsBaking && material) {
         const compiled = compileMaterialForWorker(material);
         let sourceTexture;
-        if (compiled.hasTexture && obj.texture && obj.texture.loaded) {
+        if (compiled.hasTexture && objTexture && objTexture.loaded) {
           sourceTexture = {
-            data: new Uint8Array(obj.texture.getData()),
-            width: obj.texture.width,
-            height: obj.texture.height
+            data: new Uint8Array(objTexture.getData()),
+            width: objTexture.width,
+            height: objTexture.height
           };
         }
         materialBake = {
@@ -25788,21 +26081,21 @@ function buildRenderFrame(ctx, textureChanged = false) {
           program: compiled.program,
           colorRampData: compiled.colorRampData,
           colorRampCount: compiled.colorRampCount,
-          bakeWidth: obj.texture?.width || 256,
-          bakeHeight: obj.texture?.height || 256,
+          bakeWidth: objTexture?.width || 256,
+          bakeHeight: objTexture?.height || 256,
           sourceTexture
         };
         useTexture = true;
       }
       let textureId;
-      if (useTexture && !needsBaking && obj.texture && obj.texture.loaded) {
-        textureId = hashTexture(obj.texture);
+      if (useTexture && !needsBaking && objTexture && objTexture.loaded) {
+        textureId = hashTexture(objTexture);
         if (!sentTextureIds.has(textureId)) {
           frame.textures.push({
             id: textureId,
-            width: obj.texture.width,
-            height: obj.texture.height,
-            data: new Uint8Array(obj.texture.getData())
+            width: objTexture.width,
+            height: objTexture.height,
+            data: new Uint8Array(objTexture.getData())
           });
           sentTextureIds.add(textureId);
         }
@@ -26100,1373 +26393,486 @@ function Toolbar({
   }, undefined, true, undefined, this);
 }
 
-// src/components/NodeEditor.tsx
-var import_react2 = __toESM(require_react(), 1);
+// src/components/Instructions.tsx
 var jsx_dev_runtime4 = __toESM(require_jsx_dev_runtime(), 1);
-var NODE_COLORS = {
-  output: "#6b3a3a",
-  texture: "#6b5a3a",
-  "flat-color": "#5a3a6b",
-  mix: "#3a5a6b",
-  "color-ramp": "#3a6b5a",
-  voronoi: "#4a4a6b"
-};
-var SOCKET_COLORS = {
-  color: "#c7c729",
-  float: "#a1a1a1"
-};
-function createNode(type, x, y) {
-  const baseId = `${type}-${Date.now()}`;
-  switch (type) {
-    case "output":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 140,
-        height: 80,
-        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
-        outputs: [],
-        data: {}
-      };
-    case "texture":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 180,
-        height: 100,
-        inputs: [],
-        outputs: [
-          { id: "color", name: "Color", type: "color", isInput: false }
-        ],
-        data: { imagePath: "", textureWidth: 0, textureHeight: 0 }
-      };
-    case "flat-color":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 160,
-        height: 100,
-        inputs: [],
-        outputs: [
-          { id: "color", name: "Color", type: "color", isInput: false }
-        ],
-        data: { color: "#808080" }
-      };
-    case "mix":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 160,
-        height: 120,
-        inputs: [
-          { id: "color1", name: "Color1", type: "color", isInput: true },
-          { id: "color2", name: "Color2", type: "color", isInput: true }
-        ],
-        outputs: [
-          { id: "color", name: "Color", type: "color", isInput: false }
-        ],
-        data: { blendMode: "multiply", factor: 1 }
-      };
-    case "color-ramp":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 200,
-        height: 140,
-        inputs: [{ id: "fac", name: "Fac", type: "float", isInput: true }],
-        outputs: [
-          { id: "color", name: "Color", type: "color", isInput: false }
-        ],
-        data: {
-          stops: [
-            { position: 0, color: "#000000" },
-            { position: 1, color: "#ffffff" }
-          ]
-        }
-      };
-    case "voronoi":
-      return {
-        id: baseId,
-        type,
-        x,
-        y,
-        width: 160,
-        height: 130,
-        inputs: [],
-        outputs: [
-          { id: "color", name: "Distance", type: "float", isInput: false }
-        ],
-        data: { scale: 5, mode: 0 }
-      };
-    default:
-      throw new Error(`Unknown node type: ${type}`);
-  }
-}
-function getNodeTitle(type) {
-  switch (type) {
-    case "output":
-      return "Material Output";
-    case "texture":
-      return "Texture";
-    case "flat-color":
-      return "Flat Color";
-    case "mix":
-      return "Mix";
-    case "color-ramp":
-      return "Color Ramp";
-    case "voronoi":
-      return "Voronoi";
-    default:
-      return type;
-  }
-}
-function NodeEditor({
-  materials,
-  selectedMaterialId,
-  onSelectMaterial,
-  onMaterialChange,
-  onNewMaterial,
-  textureMap
-}) {
-  const canvasRef = import_react2.useRef(null);
-  const containerRef = import_react2.useRef(null);
-  const texturePreviewCache = import_react2.useRef(new Map);
-  const material = materials.find((m) => m.id === selectedMaterialId) || null;
-  const [nodes, setNodes] = import_react2.useState(material?.nodes || []);
-  const [connections, setConnections] = import_react2.useState(material?.connections || []);
-  const [selectedNodeIds, setSelectedNodeIds] = import_react2.useState(new Set);
-  const [pan, setPan] = import_react2.useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = import_react2.useState(1);
-  const historyStackId = selectedMaterialId ? `shader-editor:${selectedMaterialId}` : "shader-editor:default";
-  const historyStackRef = import_react2.useRef(null);
-  const isUndoingRef = import_react2.useRef(false);
-  const [, forceUpdate] = import_react2.useState(0);
-  import_react2.useEffect(() => {
-    historyStackRef.current = historyManager.getStack(historyStackId);
-    historyStackRef.current.setOnChange(() => forceUpdate((n) => n + 1));
-    return () => {
-      historyStackRef.current?.setOnChange(null);
-    };
-  }, [historyStackId]);
-  const pushUndo = import_react2.useCallback(() => {
-    if (isUndoingRef.current || !historyStackRef.current)
-      return;
-    historyStackRef.current.push({ nodes, connections });
-  }, [nodes, connections]);
-  const undo = import_react2.useCallback(() => {
-    if (!historyStackRef.current?.canUndo())
-      return;
-    isUndoingRef.current = true;
-    const prevState = historyStackRef.current.popUndo({ nodes, connections });
-    if (prevState) {
-      setNodes(prevState.nodes);
-      setConnections(prevState.connections);
-    }
-    setTimeout(() => {
-      isUndoingRef.current = false;
-    }, 0);
-  }, [nodes, connections]);
-  const redo = import_react2.useCallback(() => {
-    if (!historyStackRef.current?.canRedo())
-      return;
-    isUndoingRef.current = true;
-    const nextState = historyStackRef.current.popRedo({ nodes, connections });
-    if (nextState) {
-      setNodes(nextState.nodes);
-      setConnections(nextState.connections);
-    }
-    setTimeout(() => {
-      isUndoingRef.current = false;
-    }, 0);
-  }, [nodes, connections]);
-  import_react2.useEffect(() => {
-    if (material) {
-      setNodes(material.nodes);
-      setConnections(material.connections);
-      setSelectedNodeIds(new Set);
-    } else {
-      setNodes([]);
-      setConnections([]);
-      setSelectedNodeIds(new Set);
-    }
-  }, [material?.id]);
-  import_react2.useEffect(() => {
-    if (material && onMaterialChange) {
-      if (nodes !== material.nodes || connections !== material.connections) {
-        onMaterialChange({
-          ...material,
-          nodes,
-          connections
-        });
-      }
-    }
-  }, [nodes, connections, material, onMaterialChange]);
-  import_react2.useEffect(() => {
-    if (!textureMap)
-      return;
-    const cache = texturePreviewCache.current;
-    textureMap.forEach((texture, key) => {
-      if (cache.has(key))
-        return;
-      if (texture.loaded && texture.width > 0 && texture.height > 0) {
-        const imageData = new ImageData(new Uint8ClampedArray(texture.getData()), texture.width, texture.height);
-        createImageBitmap(imageData).then((bitmap) => {
-          cache.set(key, bitmap);
-          setNodes((n) => [...n]);
-        });
-      }
-    });
-    cache.forEach((_, key) => {
-      if (!textureMap.has(key)) {
-        cache.get(key)?.close();
-        cache.delete(key);
-      }
-    });
-  }, [textureMap, nodes]);
-  const [dragging, setDragging] = import_react2.useState(null);
-  const [pendingConnection, setPendingConnection] = import_react2.useState(null);
-  const [boxSelection, setBoxSelection] = import_react2.useState(null);
-  const [contextMenu, setContextMenu] = import_react2.useState(null);
-  const [draggingStop, setDraggingStop] = import_react2.useState(null);
-  const mousePositionRef = import_react2.useRef({ x: 0, y: 0 });
-  const isMouseOverRef = import_react2.useRef(false);
-  const getSocketPosition = import_react2.useCallback((node, socket) => {
-    const socketRadius = 6;
-    const headerHeight = 24;
-    const socketSpacing = 22;
-    const x = socket.isInput ? node.x : node.x + node.width;
-    let socketIndex = 0;
-    const sockets = socket.isInput ? node.inputs : node.outputs;
-    for (let i = 0;i < sockets.length; i++) {
-      if (sockets[i].id === socket.id) {
-        socketIndex = i;
-        break;
-      }
-    }
-    const y = node.y + headerHeight + 16 + socketIndex * socketSpacing;
-    return { x, y };
-  }, []);
-  const findConnectionAt = import_react2.useCallback((canvasX, canvasY, threshold = 15) => {
-    for (const conn of connections) {
-      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
-      const toNode = nodes.find((n) => n.id === conn.toNodeId);
-      if (!fromNode || !toNode)
-        continue;
-      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
-      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
-      if (!fromSocket || !toSocket)
-        continue;
-      const fromPos = getSocketPosition(fromNode, fromSocket);
-      const toPos = getSocketPosition(toNode, toSocket);
-      const dist = distanceToBezier(canvasX, canvasY, fromPos, toPos);
-      if (dist < threshold) {
-        return conn;
-      }
-    }
-    return null;
-  }, [connections, nodes, getSocketPosition]);
-  const screenToCanvas = import_react2.useCallback((screenX, screenY) => {
-    const container = containerRef.current;
-    if (!container)
-      return { x: screenX, y: screenY };
-    const rect = container.getBoundingClientRect();
-    return {
-      x: (screenX - rect.left - pan.x) / zoom,
-      y: (screenY - rect.top - pan.y) / zoom
-    };
-  }, [pan, zoom]);
-  const findNodeAt = import_react2.useCallback((canvasX, canvasY) => {
-    for (let i = nodes.length - 1;i >= 0; i--) {
-      const node = nodes[i];
-      if (canvasX >= node.x && canvasX <= node.x + node.width && canvasY >= node.y && canvasY <= node.y + node.height) {
-        return node;
-      }
-    }
-    return null;
-  }, [nodes]);
-  const findSocketAt = import_react2.useCallback((canvasX, canvasY) => {
-    const socketRadius = 8;
-    for (const node of nodes) {
-      for (const socket of [...node.inputs, ...node.outputs]) {
-        const pos = getSocketPosition(node, socket);
-        const dist = Math.sqrt((canvasX - pos.x) ** 2 + (canvasY - pos.y) ** 2);
-        if (dist <= socketRadius) {
-          return { node, socket };
-        }
-      }
-    }
-    return null;
-  }, [nodes, getSocketPosition]);
-  const handleMouseDown = import_react2.useCallback((e) => {
-    const canvasPos = screenToCanvas(e.clientX, e.clientY);
-    const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
-    if (socketHit && e.button === 0) {
-      const { node: node2, socket } = socketHit;
-      if (socket.isInput) {
-        const existingConn = connections.find((c) => c.toNodeId === node2.id && c.toSocketId === socket.id);
-        if (existingConn) {
-          setConnections((prev) => prev.filter((c) => c.id !== existingConn.id));
-          setPendingConnection({
-            fromNodeId: existingConn.fromNodeId,
-            fromSocketId: existingConn.fromSocketId,
-            isInput: false,
-            mouseX: canvasPos.x,
-            mouseY: canvasPos.y
-          });
-          setDragging({
-            type: "socket",
-            startX: e.clientX,
-            startY: e.clientY
-          });
-          return;
-        }
-      }
-      setPendingConnection({
-        fromNodeId: node2.id,
-        fromSocketId: socket.id,
-        isInput: socket.isInput,
-        mouseX: canvasPos.x,
-        mouseY: canvasPos.y
-      });
-      setDragging({
-        type: "socket",
-        startX: e.clientX,
-        startY: e.clientY
-      });
-      return;
-    }
-    const node = findNodeAt(canvasPos.x, canvasPos.y);
-    if (node && e.button === 0) {
-      if (e.shiftKey) {
-        setSelectedNodeIds((prev) => {
-          const next = new Set(prev);
-          if (next.has(node.id)) {
-            next.delete(node.id);
-          } else {
-            next.add(node.id);
-          }
-          return next;
-        });
-      } else {
-        if (!selectedNodeIds.has(node.id)) {
-          setSelectedNodeIds(new Set([node.id]));
-        }
-      }
-      const nodeStartPositions = new Map;
-      const idsToUse = selectedNodeIds.has(node.id) ? selectedNodeIds : new Set([node.id]);
-      for (const id of idsToUse) {
-        const n = nodes.find((n2) => n2.id === id);
-        if (n) {
-          nodeStartPositions.set(id, { x: n.x, y: n.y });
-        }
-      }
-      setDragging({
-        type: "node",
-        nodeId: node.id,
-        startX: e.clientX,
-        startY: e.clientY,
-        startNodeX: node.x,
-        startNodeY: node.y,
-        nodeStartPositions
-      });
-      setNodes((prev) => {
-        const idx = prev.findIndex((n) => n.id === node.id);
-        if (idx === -1 || idx === prev.length - 1)
-          return prev;
-        const newNodes = [...prev];
-        const [removed] = newNodes.splice(idx, 1);
-        newNodes.push(removed);
-        return newNodes;
-      });
-      return;
-    }
-    if (e.button === 1) {
-      setDragging({
-        type: "pan",
-        startX: e.clientX - pan.x,
-        startY: e.clientY - pan.y
-      });
-      return;
-    }
-    if (e.button === 0 && !node) {
-      if (!e.shiftKey) {
-        setSelectedNodeIds(new Set);
-      }
-      setBoxSelection({
-        startX: canvasPos.x,
-        startY: canvasPos.y,
-        currentX: canvasPos.x,
-        currentY: canvasPos.y
-      });
-      setDragging({
-        type: "box",
-        startX: e.clientX,
-        startY: e.clientY,
-        boxStartCanvasX: canvasPos.x,
-        boxStartCanvasY: canvasPos.y
-      });
-    }
-  }, [
-    screenToCanvas,
-    findNodeAt,
-    findSocketAt,
-    connections,
-    pan,
-    selectedNodeIds,
-    nodes
-  ]);
-  const handleMouseMove = import_react2.useCallback((e) => {
-    if (!dragging)
-      return;
-    if (dragging.type === "node" && dragging.nodeId) {
-      const dx = (e.clientX - dragging.startX) / zoom;
-      const dy = (e.clientY - dragging.startY) / zoom;
-      if (dragging.nodeStartPositions && dragging.nodeStartPositions.size > 1) {
-        setNodes((prev) => prev.map((n) => {
-          const startPos = dragging.nodeStartPositions?.get(n.id);
-          if (startPos) {
-            return {
-              ...n,
-              x: startPos.x + dx,
-              y: startPos.y + dy
-            };
-          }
-          return n;
-        }));
-      } else {
-        setNodes((prev) => prev.map((n) => n.id === dragging.nodeId ? {
-          ...n,
-          x: (dragging.startNodeX ?? 0) + dx,
-          y: (dragging.startNodeY ?? 0) + dy
-        } : n));
-      }
-    } else if (dragging.type === "box") {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      setBoxSelection((prev) => prev ? { ...prev, currentX: canvasPos.x, currentY: canvasPos.y } : null);
-    } else if (dragging.type === "pan") {
-      setPan({
-        x: e.clientX - dragging.startX,
-        y: e.clientY - dragging.startY
-      });
-    } else if (dragging.type === "socket" && pendingConnection) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      setPendingConnection((prev) => prev ? { ...prev, mouseX: canvasPos.x, mouseY: canvasPos.y } : null);
-    }
-  }, [dragging, zoom, pendingConnection, screenToCanvas]);
-  const handleMouseUp = import_react2.useCallback((e) => {
-    if (dragging?.type === "node" && dragging.nodeId) {
-      const droppedNode = nodes.find((n) => n.id === dragging.nodeId);
-      if (droppedNode) {
-        const nodeCenterX = droppedNode.x + droppedNode.width / 2;
-        const nodeCenterY = droppedNode.y + droppedNode.height / 2;
-        const hitConnection = findConnectionAt(nodeCenterX, nodeCenterY);
-        if (hitConnection && droppedNode.id !== hitConnection.fromNodeId && droppedNode.id !== hitConnection.toNodeId) {
-          const hasInput = droppedNode.inputs.length > 0;
-          const hasOutput = droppedNode.outputs.length > 0;
-          if (hasInput && hasOutput) {
-            const fromNode = nodes.find((n) => n.id === hitConnection.fromNodeId);
-            const toNode = nodes.find((n) => n.id === hitConnection.toNodeId);
-            const fromSocket = fromNode?.outputs.find((s) => s.id === hitConnection.fromSocketId);
-            const toSocket = toNode?.inputs.find((s) => s.id === hitConnection.toSocketId);
-            if (fromSocket && toSocket) {
-              const compatibleInput = droppedNode.inputs.find((s) => s.type === fromSocket.type || fromSocket.type === "color" && s.type === "float");
-              const compatibleOutput = droppedNode.outputs.find((s) => s.type === toSocket.type || s.type === "color" && toSocket.type === "float");
-              if (compatibleInput && compatibleOutput) {
-                pushUndo();
-                setConnections((prev) => {
-                  const filtered = prev.filter((c) => c.id !== hitConnection.id);
-                  return [
-                    ...filtered,
-                    {
-                      id: `conn-${Date.now()}-1`,
-                      fromNodeId: hitConnection.fromNodeId,
-                      fromSocketId: hitConnection.fromSocketId,
-                      toNodeId: droppedNode.id,
-                      toSocketId: compatibleInput.id
-                    },
-                    {
-                      id: `conn-${Date.now()}-2`,
-                      fromNodeId: droppedNode.id,
-                      fromSocketId: compatibleOutput.id,
-                      toNodeId: hitConnection.toNodeId,
-                      toSocketId: hitConnection.toSocketId
-                    }
-                  ];
-                });
-              }
-            }
-          }
-        }
-      }
-    }
-    if (dragging?.type === "box" && boxSelection) {
-      const minX = Math.min(boxSelection.startX, boxSelection.currentX);
-      const maxX = Math.max(boxSelection.startX, boxSelection.currentX);
-      const minY = Math.min(boxSelection.startY, boxSelection.currentY);
-      const maxY = Math.max(boxSelection.startY, boxSelection.currentY);
-      const selectedIds = new Set;
-      for (const node of nodes) {
-        const nodeRight = node.x + node.width;
-        const nodeBottom = node.y + node.height;
-        if (node.x < maxX && nodeRight > minX && node.y < maxY && nodeBottom > minY) {
-          selectedIds.add(node.id);
-        }
-      }
-      setSelectedNodeIds((prev) => {
-        if (e.shiftKey) {
-          const combined = new Set(prev);
-          for (const id of selectedIds) {
-            combined.add(id);
-          }
-          return combined;
-        }
-        return selectedIds;
-      });
-      setBoxSelection(null);
-    }
-    if (dragging?.type === "socket" && pendingConnection) {
-      const canvasPos = screenToCanvas(e.clientX, e.clientY);
-      const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
-      if (socketHit) {
-        const { node: targetNode, socket: targetSocket } = socketHit;
-        const sourceNode = nodes.find((n) => n.id === pendingConnection.fromNodeId);
-        const sourceSocket = sourceNode ? [...sourceNode.inputs, ...sourceNode.outputs].find((s) => s.id === pendingConnection.fromSocketId) : null;
-        const canConnect = targetNode.id !== pendingConnection.fromNodeId && targetSocket.isInput !== pendingConnection.isInput && (sourceSocket?.type === targetSocket.type || sourceSocket?.type === "color" && targetSocket.type === "float");
-        if (canConnect) {
-          const fromNode = pendingConnection.isInput ? targetNode.id : pendingConnection.fromNodeId;
-          const fromSocket = pendingConnection.isInput ? targetSocket.id : pendingConnection.fromSocketId;
-          const toNode = pendingConnection.isInput ? pendingConnection.fromNodeId : targetNode.id;
-          const toSocket = pendingConnection.isInput ? pendingConnection.fromSocketId : targetSocket.id;
-          pushUndo();
-          setConnections((prev) => {
-            const filtered = prev.filter((c) => !(c.toNodeId === toNode && c.toSocketId === toSocket));
-            return [
-              ...filtered,
-              {
-                id: `conn-${Date.now()}`,
-                fromNodeId: fromNode,
-                fromSocketId: fromSocket,
-                toNodeId: toNode,
-                toSocketId: toSocket
-              }
-            ];
-          });
-        }
-      }
-    }
-    setDragging(null);
-    setPendingConnection(null);
-  }, [
-    dragging,
-    pendingConnection,
-    screenToCanvas,
-    findSocketAt,
-    nodes,
-    findConnectionAt,
-    pushUndo,
-    boxSelection
-  ]);
-  const getSocketType = (nodeId, socketId) => {
-    const node = nodes.find((n) => n.id === nodeId);
-    if (!node)
-      return "color";
-    const socket = [...node.inputs, ...node.outputs].find((s) => s.id === socketId);
-    return socket?.type ?? "color";
-  };
-  import_react2.useEffect(() => {
-    const container = containerRef.current;
-    if (!container)
-      return;
-    const handleWheel = (e) => {
-      e.preventDefault();
-      if (e.metaKey || e.ctrlKey) {
-        const rect = container.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const zoomFactor = e.deltaY > 0 ? 0.99 : 1.01;
-        const newZoom = Math.max(0.25, Math.min(2, zoom * zoomFactor));
-        const actualFactor = newZoom / zoom;
-        const newPanX = mouseX - (mouseX - pan.x) * actualFactor;
-        const newPanY = mouseY - (mouseY - pan.y) * actualFactor;
-        setZoom(newZoom);
-        setPan({ x: newPanX, y: newPanY });
-      } else {
-        setPan((prev) => ({
-          x: prev.x - e.deltaX,
-          y: prev.y - e.deltaY
-        }));
-      }
-    };
-    container.addEventListener("wheel", handleWheel, { passive: false });
-    return () => container.removeEventListener("wheel", handleWheel);
-  }, [zoom, pan]);
-  const handleAddNode = import_react2.useCallback((type) => {
-    if (!contextMenu)
-      return;
-    pushUndo();
-    const canvasPos = screenToCanvas(contextMenu.x, contextMenu.y);
-    const newNode = createNode(type, canvasPos.x, canvasPos.y);
-    setNodes((prev) => [...prev, newNode]);
-    setContextMenu(null);
-    setSelectedNodeIds(new Set([newNode.id]));
-  }, [contextMenu, screenToCanvas, pushUndo]);
-  const handleDeleteNode = import_react2.useCallback(() => {
-    if (selectedNodeIds.size === 0)
-      return;
-    const nodesToDelete = new Set;
-    for (const id of selectedNodeIds) {
-      const node = nodes.find((n) => n.id === id);
-      if (node && node.type !== "output") {
-        nodesToDelete.add(id);
-      }
-    }
-    if (nodesToDelete.size === 0)
-      return;
-    pushUndo();
-    setNodes((prev) => prev.filter((n) => !nodesToDelete.has(n.id)));
-    setConnections((prev) => prev.filter((c) => !nodesToDelete.has(c.fromNodeId) && !nodesToDelete.has(c.toNodeId)));
-    setSelectedNodeIds(new Set);
-  }, [selectedNodeIds, nodes, pushUndo]);
-  import_react2.useEffect(() => {
-    const handleKeyDown2 = (e) => {
-      if (e.key === "Escape") {
-        setContextMenu(null);
-        return;
-      }
-      if (!isMouseOverRef.current)
-        return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        undo();
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key.toLowerCase() === "z" || !e.shiftKey && e.key.toLowerCase() === "y")) {
-        e.preventDefault();
-        e.stopPropagation();
-        redo();
-        return;
-      }
-      if (e.shiftKey && e.key.toLowerCase() === "a") {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({
-          x: mousePositionRef.current.x,
-          y: mousePositionRef.current.y
-        });
-        return;
-      }
-      if ((e.key === "Delete" || e.key === "x") && !contextMenu) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleDeleteNode();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown2);
-    return () => window.removeEventListener("keydown", handleKeyDown2);
-  }, [handleDeleteNode, contextMenu, undo, redo]);
-  import_react2.useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container)
-      return;
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width * window.devicePixelRatio;
-    canvas.height = rect.height * window.devicePixelRatio;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    const ctx = canvas.getContext("2d");
-    if (!ctx)
-      return;
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0, 0, rect.width, rect.height);
-    ctx.save();
-    ctx.translate(pan.x, pan.y);
-    ctx.scale(zoom, zoom);
-    const gridSize = 20;
-    const gridExtent = 2000;
-    ctx.strokeStyle = "#252525";
-    ctx.lineWidth = 1 / zoom;
-    for (let x = -gridExtent;x <= gridExtent; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, -gridExtent);
-      ctx.lineTo(x, gridExtent);
-      ctx.stroke();
-    }
-    for (let y = -gridExtent;y <= gridExtent; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(-gridExtent, y);
-      ctx.lineTo(gridExtent, y);
-      ctx.stroke();
-    }
-    for (const conn of connections) {
-      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
-      const toNode = nodes.find((n) => n.id === conn.toNodeId);
-      if (!fromNode || !toNode)
-        continue;
-      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
-      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
-      if (!fromSocket || !toSocket)
-        continue;
-      const fromPos = getSocketPosition(fromNode, fromSocket);
-      const toPos = getSocketPosition(toNode, toSocket);
-      drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[fromSocket.type], zoom);
-    }
-    if (pendingConnection) {
-      const node = nodes.find((n) => n.id === pendingConnection.fromNodeId);
-      if (node) {
-        const socket = [...node.inputs, ...node.outputs].find((s) => s.id === pendingConnection.fromSocketId);
-        if (socket) {
-          const pos = getSocketPosition(node, socket);
-          const mousePos = {
-            x: pendingConnection.mouseX,
-            y: pendingConnection.mouseY
-          };
-          const fromPos = pendingConnection.isInput ? mousePos : pos;
-          const toPos = pendingConnection.isInput ? pos : mousePos;
-          drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[socket.type], zoom, true);
-        }
-      }
-    }
-    for (const node of nodes) {
-      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom, texturePreviewCache.current);
-    }
-    if (boxSelection) {
-      ctx.strokeStyle = "#4a90d9";
-      ctx.fillStyle = "rgba(74, 144, 217, 0.2)";
-      ctx.lineWidth = 1 / zoom;
-      const x = Math.min(boxSelection.startX, boxSelection.currentX);
-      const y = Math.min(boxSelection.startY, boxSelection.currentY);
-      const w = Math.abs(boxSelection.currentX - boxSelection.startX);
-      const h = Math.abs(boxSelection.currentY - boxSelection.startY);
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x, y, w, h);
-    }
-    ctx.restore();
-  }, [
-    nodes,
-    connections,
-    selectedNodeIds,
-    pan,
-    zoom,
-    pendingConnection,
-    getSocketPosition,
-    boxSelection
-  ]);
+function Instructions() {
   return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-    ref: containerRef,
-    className: "node-editor",
-    style: { position: "relative" },
-    onMouseDown: (e) => {
-      const target = e.target;
-      if (target.tagName === "INPUT" || target.tagName === "BUTTON") {
-        return;
-      }
-      if (contextMenu) {
-        if (!target.closest(".node-context-menu")) {
-          setContextMenu(null);
-        }
-      }
-      handleMouseDown(e);
-    },
-    onMouseMove: (e) => {
-      mousePositionRef.current = { x: e.clientX, y: e.clientY };
-      if (draggingStop) {
-        const container = containerRef.current;
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const relativeX = mouseX - draggingStop.rampX;
-          const newPosition = Math.max(0, Math.min(1, relativeX / draggingStop.rampW));
-          setNodes((prev) => prev.map((n) => {
-            if (n.id === draggingStop.nodeId) {
-              const stops = [...n.data.stops];
-              stops[draggingStop.stopIndex] = {
-                ...stops[draggingStop.stopIndex],
-                position: newPosition
-              };
-              stops.sort((a, b) => a.position - b.position);
-              return { ...n, data: { ...n.data, stops } };
-            }
-            return n;
-          }));
-        }
-        return;
-      }
-      handleMouseMove(e);
-    },
-    onMouseUp: (e) => {
-      if (draggingStop) {
-        setDraggingStop(null);
-        return;
-      }
-      handleMouseUp(e);
-    },
-    onMouseEnter: () => {
-      isMouseOverRef.current = true;
-    },
-    onMouseLeave: () => {
-      isMouseOverRef.current = false;
-      if (dragging?.type !== "socket") {
-        setDragging(null);
-      }
-    },
-    onContextMenu: (e) => e.preventDefault(),
+    className: "instructions",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("canvas", {
-        ref: canvasRef
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "Tab"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-        className: "node-editor-header",
+      " Edit/Object | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "LMB"
+      }, undefined, false, undefined, this),
+      " Select | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "⇧A"
+      }, undefined, false, undefined, this),
+      " Add |",
+      " ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "Scroll"
+      }, undefined, false, undefined, this),
+      " Orbit | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "⌘Scroll"
+      }, undefined, false, undefined, this),
+      " Zoom | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "⇧Scroll"
+      }, undefined, false, undefined, this),
+      " Pan | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "G"
+      }, undefined, false, undefined, this),
+      " Grab | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "R"
+      }, undefined, false, undefined, this),
+      " Rotate | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "S"
+      }, undefined, false, undefined, this),
+      " Scale |",
+      " ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "1"
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "3"
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "7"
+      }, undefined, false, undefined, this),
+      " Views | ",
+      /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("kbd", {
+        children: "⌘Z"
+      }, undefined, false, undefined, this),
+      " Undo"
+    ]
+  }, undefined, true, undefined, this);
+}
+
+// src/components/ViewportGizmo.tsx
+var jsx_dev_runtime5 = __toESM(require_jsx_dev_runtime(), 1);
+function ViewportGizmo({
+  onViewpointChange,
+  onToggleOrtho,
+  isOrtho
+}) {
+  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+    className: "viewport-gizmo",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+        className: "viewport-gizmo-cube",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
-            children: "Shader Editor"
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+            className: "gizmo-face gizmo-top",
+            onClick: () => onViewpointChange("top"),
+            title: "Top (Numpad 7)",
+            children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+              className: "gizmo-label gizmo-z",
+              children: "Z"
+            }, undefined, false, undefined, this)
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-            className: "material-selector",
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+            className: "gizmo-middle-row",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("select", {
-                value: selectedMaterialId || "",
-                onChange: (e) => onSelectMaterial(e.target.value),
-                children: materials.map((mat) => /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("option", {
-                  value: mat.id,
-                  children: mat.name
-                }, mat.id, false, undefined, this))
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+                className: "gizmo-face gizmo-left",
+                onClick: () => onViewpointChange("left"),
+                title: "Left (Ctrl+Numpad 3)",
+                children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+                  className: "gizmo-label gizmo-x-neg",
+                  children: "−X"
+                }, undefined, false, undefined, this)
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-                className: "new-material-btn",
-                onClick: onNewMaterial,
-                title: "New Material",
-                children: "+"
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+                className: "gizmo-face gizmo-front",
+                onClick: () => onViewpointChange("front"),
+                title: "Front (Numpad 1)",
+                children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+                  className: "gizmo-label gizmo-y-neg",
+                  children: "−Y"
+                }, undefined, false, undefined, this)
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+                className: "gizmo-face gizmo-right",
+                onClick: () => onViewpointChange("right"),
+                title: "Right (Numpad 3)",
+                children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+                  className: "gizmo-label gizmo-x",
+                  children: "X"
+                }, undefined, false, undefined, this)
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+                className: "gizmo-face gizmo-back",
+                onClick: () => onViewpointChange("back"),
+                title: "Back (Ctrl+Numpad 1)",
+                children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+                  className: "gizmo-label gizmo-y",
+                  children: "Y"
+                }, undefined, false, undefined, this)
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+            className: "gizmo-face gizmo-bottom",
+            onClick: () => onViewpointChange("bottom"),
+            title: "Bottom (Ctrl+Numpad 7)",
+            children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+              className: "gizmo-label gizmo-z-neg",
+              children: "−Z"
+            }, undefined, false, undefined, this)
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+        className: `gizmo-ortho-toggle ${isOrtho ? "ortho" : "persp"}`,
+        onClick: onToggleOrtho,
+        title: "Toggle Orthographic/Perspective (Numpad 5)",
+        children: isOrtho ? "Ortho" : "Persp"
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+
+// src/components/PrimitiveSettings.tsx
+var import_react2 = __toESM(require_react(), 1);
+var jsx_dev_runtime6 = __toESM(require_jsx_dev_runtime(), 1);
+function NumberInput({
+  label: label2,
+  value: value2,
+  onChange: onChange2,
+  onSubmit,
+  min,
+  max,
+  step: step2 = 0.1,
+  integer = false
+}) {
+  const [localValue, setLocalValue] = import_react2.useState(value2.toString());
+  import_react2.useEffect(() => {
+    setLocalValue(integer ? value2.toString() : value2.toFixed(3));
+  }, [value2, integer]);
+  const handleChange = import_react2.useCallback((newValue) => {
+    setLocalValue(newValue);
+    let parsed = integer ? parseInt(newValue) : parseFloat(newValue);
+    if (isNaN(parsed))
+      return;
+    if (min !== undefined)
+      parsed = Math.max(min, parsed);
+    if (max !== undefined)
+      parsed = Math.min(max, parsed);
+    onChange2(parsed);
+  }, [onChange2, min, max, integer]);
+  const handleBlur2 = import_react2.useCallback(() => {
+    let parsed = integer ? parseInt(localValue) : parseFloat(localValue);
+    if (isNaN(parsed)) {
+      setLocalValue(integer ? value2.toString() : value2.toFixed(3));
+      return;
+    }
+    if (min !== undefined)
+      parsed = Math.max(min, parsed);
+    if (max !== undefined)
+      parsed = Math.min(max, parsed);
+    setLocalValue(integer ? parsed.toString() : parsed.toFixed(3));
+  }, [localValue, value2, min, max, integer]);
+  const handleKeyDown2 = import_react2.useCallback((e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      handleBlur2();
+      onSubmit();
+    }
+  }, [handleBlur2, onSubmit]);
+  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+    className: "primitive-setting",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
+        children: label2
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
+        type: "text",
+        value: localValue,
+        onChange: (e) => handleChange(e.target.value),
+        onBlur: handleBlur2,
+        onKeyDown: handleKeyDown2
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+function PrimitiveSettings({
+  params,
+  onChange: onChange2,
+  onSubmit
+}) {
+  const titles = {
+    plane: "Add Plane",
+    cube: "Add Cube",
+    circle: "Add Circle",
+    uvsphere: "Add UV Sphere",
+    icosphere: "Add Ico Sphere",
+    cylinder: "Add Cylinder",
+    cone: "Add Cone",
+    torus: "Add Torus"
+  };
+  const title = titles[params.type];
+  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+    className: "primitive-settings-modal",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+        className: "primitive-settings-header",
+        children: title
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+        className: "primitive-settings-content",
+        children: [
+          params.type === "plane" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+            label: "Size",
+            value: params.planeSize ?? 2,
+            onChange: (v) => onChange2({ ...params, planeSize: v }),
+            onSubmit,
+            min: 0.01,
+            step: 0.1
+          }, undefined, false, undefined, this),
+          params.type === "cube" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+            label: "Size",
+            value: params.cubeSize ?? 2,
+            onChange: (v) => onChange2({ ...params, cubeSize: v }),
+            onSubmit,
+            min: 0.01,
+            step: 0.1
+          }, undefined, false, undefined, this),
+          params.type === "circle" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.circleVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, circleVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 128,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.circleRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, circleRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "uvsphere" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Segments",
+                value: params.uvSphereSegments ?? 32,
+                onChange: (v) => onChange2({ ...params, uvSphereSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Rings",
+                value: params.uvSphereRings ?? 16,
+                onChange: (v) => onChange2({ ...params, uvSphereRings: v }),
+                onSubmit,
+                min: 2,
+                max: 32,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.uvSphereRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, uvSphereRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "icosphere" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Subdivisions",
+                value: params.icoSphereSubdivisions ?? 2,
+                onChange: (v) => onChange2({ ...params, icoSphereSubdivisions: v }),
+                onSubmit,
+                min: 1,
+                max: 5,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.icoSphereRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, icoSphereRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "cylinder" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.cylinderVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, cylinderVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius",
+                value: params.cylinderRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, cylinderRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Depth",
+                value: params.cylinderDepth ?? 2,
+                onChange: (v) => onChange2({ ...params, cylinderDepth: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "cone" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Vertices",
+                value: params.coneVertices ?? 32,
+                onChange: (v) => onChange2({ ...params, coneVertices: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius 1",
+                value: params.coneRadius1 ?? 1,
+                onChange: (v) => onChange2({ ...params, coneRadius1: v }),
+                onSubmit,
+                min: 0,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Radius 2",
+                value: params.coneRadius2 ?? 0,
+                onChange: (v) => onChange2({ ...params, coneRadius2: v }),
+                onSubmit,
+                min: 0,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Depth",
+                value: params.coneDepth ?? 2,
+                onChange: (v) => onChange2({ ...params, coneDepth: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this),
+          params.type === "torus" && /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Major Segments",
+                value: params.torusMajorSegments ?? 48,
+                onChange: (v) => onChange2({ ...params, torusMajorSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 64,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Minor Segments",
+                value: params.torusMinorSegments ?? 12,
+                onChange: (v) => onChange2({ ...params, torusMinorSegments: v }),
+                onSubmit,
+                min: 3,
+                max: 32,
+                integer: true
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Major Radius",
+                value: params.torusMajorRadius ?? 1,
+                onChange: (v) => onChange2({ ...params, torusMajorRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.1
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(NumberInput, {
+                label: "Minor Radius",
+                value: params.torusMinorRadius ?? 0.25,
+                onChange: (v) => onChange2({ ...params, torusMinorRadius: v }),
+                onSubmit,
+                min: 0.01,
+                step: 0.05
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this)
         ]
-      }, undefined, true, undefined, this),
-      contextMenu && /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-        className: "node-context-menu",
-        style: { left: contextMenu.x, top: contextMenu.y },
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-            className: "menu-header",
-            children: "Add Node"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-            onClick: () => handleAddNode("flat-color"),
-            children: "Flat Color"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-            onClick: () => handleAddNode("texture"),
-            children: "Texture"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-            onClick: () => handleAddNode("mix"),
-            children: "Mix"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-            onClick: () => handleAddNode("color-ramp"),
-            children: "Color Ramp"
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-            onClick: () => handleAddNode("voronoi"),
-            children: "Voronoi"
-          }, undefined, false, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      nodes.filter((n) => n.type === "flat-color").map((node) => {
-        const container = containerRef.current;
-        if (!container)
-          return null;
-        const screenX = node.x * zoom + pan.x + 12 * zoom;
-        const screenY = node.y * zoom + pan.y + 24 * zoom + 36 * zoom;
-        const swatchW = (node.width - 24) * zoom;
-        const swatchH = 24 * zoom;
-        return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
-          type: "color",
-          className: "node-color-picker",
-          value: node.data.color || "#808080",
-          onFocus: () => pushUndo(),
-          onChange: (e) => {
-            setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, color: e.target.value } } : n));
-          },
-          style: {
-            position: "absolute",
-            left: screenX,
-            top: screenY,
-            width: swatchW,
-            height: swatchH,
-            zIndex: 10
-          }
-        }, node.id, false, undefined, this);
-      }),
-      nodes.filter((n) => n.type === "color-ramp").map((node) => {
-        const stops = node.data.stops || [
-          { position: 0, color: "#000000" },
-          { position: 1, color: "#ffffff" }
-        ];
-        const rampX = node.x * zoom + pan.x + 8 * zoom;
-        const rampY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
-        const rampW = (node.width - 16) * zoom;
-        const rampH = 24 * zoom;
-        return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV(import_react2.default.Fragment, {
-          children: [
-            stops.map((stop, idx) => {
-              const markerX = rampX + stop.position * rampW - 8 * zoom;
-              const markerY = rampY + rampH + 4 * zoom;
-              return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-                className: "color-ramp-stop",
-                style: {
-                  position: "absolute",
-                  left: markerX,
-                  top: markerY,
-                  width: 16 * zoom,
-                  height: 16 * zoom,
-                  backgroundColor: stop.color,
-                  border: "2px solid #fff",
-                  borderRadius: 2,
-                  cursor: "ew-resize",
-                  zIndex: 10,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.5)"
-                },
-                title: `Stop ${idx + 1} (${(stop.position * 100).toFixed(0)}%) - Drag to move, click to change color`,
-                onMouseDown: (e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  pushUndo();
-                  setDraggingStop({
-                    nodeId: node.id,
-                    stopIndex: idx,
-                    rampX,
-                    rampW
-                  });
-                },
-                onDoubleClick: (e) => {
-                  e.stopPropagation();
-                  pushUndo();
-                  const colorInput = document.getElementById(`color-input-${node.id}-${idx}`);
-                  colorInput?.click();
-                },
-                children: /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
-                  id: `color-input-${node.id}-${idx}`,
-                  type: "color",
-                  value: stop.color,
-                  onChange: (e) => {
-                    const newStops = [...stops];
-                    newStops[idx] = { ...stop, color: e.target.value };
-                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
-                  },
-                  style: {
-                    position: "absolute",
-                    opacity: 0,
-                    width: "100%",
-                    height: "100%",
-                    cursor: "ew-resize"
-                  },
-                  onClick: (e) => e.stopPropagation()
-                }, undefined, false, undefined, this)
-              }, `${node.id}-stop-${idx}`, false, undefined, this);
-            }),
-            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-              className: "color-ramp-buttons",
-              style: {
-                position: "absolute",
-                left: rampX,
-                top: rampY + rampH + 24 * zoom,
-                display: "flex",
-                gap: 4,
-                zIndex: 10
-              },
-              children: [
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-                  style: {
-                    padding: "2px 8px",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    background: "#444",
-                    border: "1px solid #666",
-                    color: "#fff",
-                    borderRadius: 2
-                  },
-                  onClick: () => {
-                    pushUndo();
-                    const newPos = stops.length === 0 ? 0.5 : stops[Math.floor(stops.length / 2)]?.position || 0.5;
-                    const newStops = [
-                      ...stops,
-                      {
-                        position: Math.min(0.99, newPos + 0.1),
-                        color: "#888888"
-                      }
-                    ].sort((a, b) => a.position - b.position);
-                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
-                  },
-                  title: "Add stop",
-                  children: "+"
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("button", {
-                  style: {
-                    padding: "2px 8px",
-                    fontSize: 12,
-                    cursor: stops.length <= 2 ? "not-allowed" : "pointer",
-                    background: stops.length <= 2 ? "#333" : "#444",
-                    border: "1px solid #666",
-                    color: stops.length <= 2 ? "#666" : "#fff",
-                    borderRadius: 2
-                  },
-                  onClick: () => {
-                    if (stops.length > 2) {
-                      pushUndo();
-                      const newStops = stops.filter((_, i) => i !== Math.floor(stops.length / 2));
-                      setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
-                    }
-                  },
-                  disabled: stops.length <= 2,
-                  title: "Remove stop",
-                  children: "−"
-                }, undefined, false, undefined, this)
-              ]
-            }, undefined, true, undefined, this)
-          ]
-        }, node.id, true, undefined, this);
-      }),
-      nodes.filter((n) => n.type === "voronoi").map((node) => {
-        const container = containerRef.current;
-        if (!container)
-          return null;
-        const controlX = node.x * zoom + pan.x + 8 * zoom;
-        const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
-        const controlW = (node.width - 16) * zoom;
-        const scale = node.data.scale || 5;
-        const mode = node.data.mode || 0;
-        return /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-          className: "voronoi-scale-control",
-          style: {
-            position: "absolute",
-            left: controlX,
-            top: sliderY,
-            width: controlW,
-            zIndex: 10
-          },
-          children: [
-            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: 4 * zoom,
-                width: "100%",
-                marginBottom: 6 * zoom
-              },
-              children: [
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
-                  style: {
-                    fontSize: 10 * zoom,
-                    color: "#aaa",
-                    flexShrink: 0
-                  },
-                  children: "Mode"
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("select", {
-                  value: mode,
-                  onMouseDown: () => pushUndo(),
-                  onChange: (e) => {
-                    const newMode = parseInt(e.target.value);
-                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, mode: newMode } } : n));
-                  },
-                  style: {
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: 10 * zoom,
-                    background: "#333",
-                    color: "#fff",
-                    border: "1px solid #555",
-                    borderRadius: 2,
-                    padding: "2px 4px",
-                    cursor: "pointer"
-                  },
-                  children: [
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("option", {
-                      value: 0,
-                      children: "F1 (Distance)"
-                    }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("option", {
-                      value: 1,
-                      children: "Edge"
-                    }, undefined, false, undefined, this)
-                  ]
-                }, undefined, true, undefined, this)
-              ]
-            }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("div", {
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: 4 * zoom,
-                width: "100%"
-              },
-              children: [
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
-                  style: {
-                    fontSize: 10 * zoom,
-                    color: "#aaa",
-                    flexShrink: 0
-                  },
-                  children: "Scale"
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("input", {
-                  type: "range",
-                  min: "1",
-                  max: "50",
-                  step: "1",
-                  value: scale,
-                  onMouseDown: () => pushUndo(),
-                  onChange: (e) => {
-                    const newScale = parseInt(e.target.value);
-                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, scale: newScale } } : n));
-                  },
-                  style: {
-                    flex: 1,
-                    minWidth: 0,
-                    height: 12 * zoom,
-                    cursor: "pointer"
-                  }
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime4.jsxDEV("span", {
-                  style: {
-                    fontSize: 10 * zoom,
-                    color: "#fff",
-                    flexShrink: 0,
-                    minWidth: 16 * zoom,
-                    textAlign: "right"
-                  },
-                  children: scale
-                }, undefined, false, undefined, this)
-              ]
-            }, undefined, true, undefined, this)
-          ]
-        }, node.id, true, undefined, this);
-      })
+      }, undefined, true, undefined, this)
     ]
   }, undefined, true, undefined, this);
 }
-function drawConnection(ctx, from, to, color, zoom, dashed = false) {
-  const dx = Math.abs(to.x - from.x);
-  const controlDist = Math.max(50, dx * 0.5);
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.bezierCurveTo(from.x + controlDist, from.y, to.x - controlDist, to.y, to.x, to.y);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2 / zoom;
-  if (dashed) {
-    ctx.setLineDash([5 / zoom, 5 / zoom]);
-  } else {
-    ctx.setLineDash([]);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-function drawNode(ctx, node, selected, zoom, texturePreviewCache) {
-  const { x, y, width, height, type } = node;
-  const headerHeight = 24;
-  const borderRadius = 6;
-  const socketRadius = 6;
-  const socketSpacing = 22;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-  roundRect(ctx, x + 3, y + 3, width, height, borderRadius);
-  ctx.fill();
-  ctx.fillStyle = "#3d3d3d";
-  roundRect(ctx, x, y, width, height, borderRadius);
-  ctx.fill();
-  ctx.fillStyle = NODE_COLORS[type];
-  roundRectTop(ctx, x, y, width, headerHeight, borderRadius);
-  ctx.fill();
-  if (selected) {
-    ctx.strokeStyle = "#ff9500";
-    ctx.lineWidth = 2 / zoom;
-    roundRect(ctx, x, y, width, height, borderRadius);
-    ctx.stroke();
-  }
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "12px 'Pixelify Sans', sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(getNodeTitle(type), x + width / 2, y + 16);
-  ctx.textAlign = "left";
-  ctx.font = "11px 'Pixelify Sans', sans-serif";
-  for (let i = 0;i < node.inputs.length; i++) {
-    const socket = node.inputs[i];
-    const sy = y + headerHeight + 16 + i * socketSpacing;
-    ctx.beginPath();
-    ctx.arc(x, sy, socketRadius, 0, Math.PI * 2);
-    ctx.fillStyle = SOCKET_COLORS[socket.type];
-    ctx.fill();
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 1 / zoom;
-    ctx.stroke();
-    ctx.fillStyle = "#cccccc";
-    ctx.fillText(socket.name, x + socketRadius + 6, sy + 4);
-  }
-  ctx.textAlign = "right";
-  for (let i = 0;i < node.outputs.length; i++) {
-    const socket = node.outputs[i];
-    const sy = y + headerHeight + 16 + i * socketSpacing;
-    ctx.beginPath();
-    ctx.arc(x + width, sy, socketRadius, 0, Math.PI * 2);
-    ctx.fillStyle = SOCKET_COLORS[socket.type];
-    ctx.fill();
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 1 / zoom;
-    ctx.stroke();
-    ctx.fillStyle = "#cccccc";
-    ctx.fillText(socket.name, x + width - socketRadius - 6, sy + 4);
-  }
-  if (type === "flat-color" && node.data.color) {
-    const swatchX = x + 12;
-    const swatchY = y + headerHeight + 36;
-    const swatchW = width - 24;
-    const swatchH = 24;
-    ctx.fillStyle = "#2a2a2a";
-    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
-    ctx.fillStyle = node.data.color;
-    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 1 / zoom;
-    ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
-  }
-  if (type === "texture") {
-    const imagePath = node.data.imagePath || "";
-    const texW = node.data.textureWidth || 0;
-    const texH = node.data.textureHeight || 0;
-    const preview = texturePreviewCache?.get(imagePath);
-    if (preview) {
-      const previewX = x + 8;
-      const previewY = y + headerHeight + 8;
-      const previewSize = Math.min(width - 16, 48);
-      const checkSize = 6;
-      for (let cy = 0;cy < previewSize; cy += checkSize) {
-        for (let cx = 0;cx < previewSize; cx += checkSize) {
-          const isLight = (cx / checkSize + cy / checkSize) % 2 === 0;
-          ctx.fillStyle = isLight ? "#4a4a4a" : "#3a3a3a";
-          ctx.fillRect(previewX + cx, previewY + cy, Math.min(checkSize, previewSize - cx), Math.min(checkSize, previewSize - cy));
+
+// src/components/Viewport.tsx
+var jsx_dev_runtime7 = __toESM(require_jsx_dev_runtime(), 1);
+function Viewport({
+  viewportRef,
+  canvasRef,
+  onDragOver,
+  onDrop,
+  onViewpointChange,
+  onToggleOrtho,
+  isOrtho,
+  primitiveParams,
+  onPrimitiveParamsChange,
+  onPrimitiveSubmit,
+  boxSelection
+}) {
+  return /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+    className: "viewport",
+    ref: viewportRef,
+    onDragOver,
+    onDrop,
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("canvas", {
+        id: "canvas",
+        ref: canvasRef
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV(Instructions, {}, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV(ViewportGizmo, {
+        onViewpointChange,
+        onToggleOrtho,
+        isOrtho
+      }, undefined, false, undefined, this),
+      primitiveParams && /* @__PURE__ */ jsx_dev_runtime7.jsxDEV(PrimitiveSettings, {
+        params: primitiveParams,
+        onChange: onPrimitiveParamsChange,
+        onSubmit: onPrimitiveSubmit
+      }, undefined, false, undefined, this),
+      boxSelection && boxSelection.active && /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+        className: "box-selection",
+        style: {
+          left: Math.min(boxSelection.startX, boxSelection.currentX),
+          top: Math.min(boxSelection.startY, boxSelection.currentY),
+          width: Math.abs(boxSelection.currentX - boxSelection.startX),
+          height: Math.abs(boxSelection.currentY - boxSelection.startY)
         }
-      }
-      ctx.drawImage(preview, previewX, previewY, previewSize, previewSize);
-      ctx.strokeStyle = "#1a1a1a";
-      ctx.lineWidth = 1 / zoom;
-      ctx.strokeRect(previewX, previewY, previewSize, previewSize);
-      ctx.font = "10px 'Pixelify Sans', sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillStyle = "#888888";
-      const filename = imagePath.split("/").pop() || imagePath || "No texture";
-      const maxChars = 12;
-      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
-      ctx.fillText(displayName, previewX + previewSize + 6, previewY + 14);
-      if (texW > 0 && texH > 0) {
-        ctx.fillStyle = "#666666";
-        ctx.fillText(`${texW}×${texH}`, previewX + previewSize + 6, previewY + 28);
-      }
-    } else {
-      const infoY = y + headerHeight + 36;
-      ctx.font = "10px 'Pixelify Sans', sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillStyle = "#888888";
-      const filename = imagePath ? imagePath.split("/").pop() || imagePath : "No texture";
-      const maxChars = 20;
-      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
-      ctx.fillText(displayName, x + 8, infoY);
-      if (texW > 0 && texH > 0) {
-        ctx.fillStyle = "#666666";
-        ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
-      }
-    }
-  }
-  if (type === "color-ramp") {
-    const stops = node.data.stops || [
-      { position: 0, color: "#000000" },
-      { position: 1, color: "#ffffff" }
-    ];
-    const sortedStops = [...stops].sort((a, b) => a.position - b.position);
-    const rampX = x + 8;
-    const rampY = y + headerHeight + 32;
-    const rampW = width - 16;
-    const rampH = 24;
-    const gradient = ctx.createLinearGradient(rampX, 0, rampX + rampW, 0);
-    for (const stop of sortedStops) {
-      gradient.addColorStop(stop.position, stop.color);
-    }
-    ctx.fillStyle = gradient;
-    ctx.fillRect(rampX, rampY, rampW, rampH);
-    ctx.strokeStyle = "#1a1a1a";
-    ctx.lineWidth = 1 / zoom;
-    ctx.strokeRect(rampX, rampY, rampW, rampH);
-    for (const stop of sortedStops) {
-      const markerX = rampX + stop.position * rampW;
-      const markerY = rampY + rampH;
-      ctx.beginPath();
-      ctx.moveTo(markerX, markerY);
-      ctx.lineTo(markerX - 4, markerY + 8);
-      ctx.lineTo(markerX + 4, markerY + 8);
-      ctx.closePath();
-      ctx.fillStyle = stop.color;
-      ctx.fill();
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1 / zoom;
-      ctx.stroke();
-    }
-  }
-}
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-function roundRectTop(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h);
-  ctx.lineTo(x, y + h);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-function distanceToBezier(px, py, from, to) {
-  const dx = Math.abs(to.x - from.x);
-  const controlDist = Math.max(50, dx * 0.5);
-  let minDist = Infinity;
-  const samples = 20;
-  for (let i = 0;i <= samples; i++) {
-    const t = i / samples;
-    const t1 = 1 - t;
-    const cp1x = from.x + controlDist;
-    const cp1y = from.y;
-    const cp2x = to.x - controlDist;
-    const cp2y = to.y;
-    const x = t1 * t1 * t1 * from.x + 3 * t1 * t1 * t * cp1x + 3 * t1 * t * t * cp2x + t * t * t * to.x;
-    const y = t1 * t1 * t1 * from.y + 3 * t1 * t1 * t * cp1y + 3 * t1 * t * t * cp2y + t * t * t * to.y;
-    const dist = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
-    if (dist < minDist) {
-      minDist = dist;
-    }
-  }
-  return minDist;
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
 }
 
 // src/components/SceneTree.tsx
@@ -27479,7 +26885,7 @@ var hide_on_default = "./hide_on-sbmkbsw2.svg";
 var hide_off_default = "./hide_off-afbwcne5.svg";
 
 // src/components/SceneTree.tsx
-var jsx_dev_runtime5 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime8 = __toESM(require_jsx_dev_runtime(), 1);
 function TreeItem({
   obj,
   objects,
@@ -27492,30 +26898,30 @@ function TreeItem({
   const children = objects.filter((o) => o.parentName === obj.name);
   const hasChildren = children.length > 0;
   const isCollapsed = collapsedItems.has(obj.name);
-  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(jsx_dev_runtime5.Fragment, {
+  return /* @__PURE__ */ jsx_dev_runtime8.jsxDEV(jsx_dev_runtime8.Fragment, {
     children: [
-      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
         className: `tree-item object-item ${obj.selected ? "selected" : ""}`,
         onClick: (e) => onSelectObject(obj.name, {
           shiftKey: e.shiftKey,
           ctrlKey: e.ctrlKey || e.metaKey
         }),
         children: [
-          Array.from({ length: depth }).map((_, i) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          Array.from({ length: depth }).map((_, i) => /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
             className: "tree-indent"
           }, i, false, undefined, this)),
-          hasChildren ? /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          hasChildren ? /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
             className: "tree-collapse",
             onClick: (e) => {
               e.stopPropagation();
               toggleCollapsed(obj.name);
             },
             children: isCollapsed ? "▶" : "▼"
-          }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          }, undefined, false, undefined, this) : /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
             className: "tree-icon",
             children: "◆"
           }, undefined, false, undefined, this),
-          obj.inEditMode && /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("img", {
+          obj.inEditMode && /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("img", {
             src: editmode_hlt_default,
             className: "icon edit-mode-icon",
             width: 14,
@@ -27523,18 +26929,18 @@ function TreeItem({
             alt: "Edit Mode",
             title: "Edit Mode"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
             className: "tree-label",
             children: obj.name
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("button", {
+          /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("button", {
             className: `visibility-btn ${obj.visible ? "visible" : "hidden"}`,
             onClick: (e) => {
               e.stopPropagation();
               onToggleVisibility(obj.name);
             },
             title: obj.visible ? "Hide" : "Show",
-            children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("img", {
+            children: /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("img", {
               src: obj.visible ? hide_off_default : hide_on_default,
               className: "icon",
               width: 18,
@@ -27544,7 +26950,7 @@ function TreeItem({
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      !isCollapsed && children.map((child) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(TreeItem, {
+      !isCollapsed && children.map((child) => /* @__PURE__ */ jsx_dev_runtime8.jsxDEV(TreeItem, {
         obj: child,
         objects,
         depth: depth + 1,
@@ -27574,33 +26980,33 @@ function SceneTree({
     });
   };
   const rootObjects = objects.filter((obj) => obj.parentName === null);
-  return /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
     className: "panel scene-tree",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
         className: "panel-header",
-        children: /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
           className: "panel-title",
           children: "Scene"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
         className: "panel-content",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
             className: "tree-item scene-root",
             children: [
-              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
                 className: "tree-icon",
                 children: "▼"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("span", {
+              /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("span", {
                 className: "tree-label",
                 children: "Scene Collection"
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          rootObjects.map((obj) => /* @__PURE__ */ jsx_dev_runtime5.jsxDEV(TreeItem, {
+          rootObjects.map((obj) => /* @__PURE__ */ jsx_dev_runtime8.jsxDEV(TreeItem, {
             obj,
             objects,
             depth: 1,
@@ -27609,7 +27015,7 @@ function SceneTree({
             collapsedItems,
             toggleCollapsed
           }, obj.name, false, undefined, this)),
-          objects.length === 0 && /* @__PURE__ */ jsx_dev_runtime5.jsxDEV("div", {
+          objects.length === 0 && /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
             className: "tree-empty",
             children: "No objects in scene"
           }, undefined, false, undefined, this)
@@ -27621,7 +27027,7 @@ function SceneTree({
 
 // src/components/PropertiesPanel.tsx
 var import_react4 = __toESM(require_react(), 1);
-var jsx_dev_runtime6 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime9 = __toESM(require_jsx_dev_runtime(), 1);
 function VectorInput({
   label,
   value,
@@ -27898,28 +27304,28 @@ function VectorInput({
       handleSingleChange(axis, newValue);
     }
   };
-  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
     className: "vector-input",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
         className: "vector-label",
         children: label
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
         className: "vector-fields",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
             ref: (el) => {
               fieldRefs.current.x = el;
             },
             className: getFieldClassName("x"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("label", {
                 className: "axis-label x",
                 onMouseDown: (e) => handleLabelMouseDown(e, "x"),
                 children: "X"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("input", {
                 ref: (el) => {
                   inputRefs.current.x = el;
                 },
@@ -27933,18 +27339,18 @@ function VectorInput({
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
             ref: (el) => {
               fieldRefs.current.y = el;
             },
             className: getFieldClassName("y"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("label", {
                 className: "axis-label y",
                 onMouseDown: (e) => handleLabelMouseDown(e, "y"),
                 children: "Y"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("input", {
                 ref: (el) => {
                   inputRefs.current.y = el;
                 },
@@ -27958,18 +27364,18 @@ function VectorInput({
               }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
             ref: (el) => {
               fieldRefs.current.z = el;
             },
             className: getFieldClassName("z"),
             children: [
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("label", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("label", {
                 className: "axis-label z",
                 onMouseDown: (e) => handleLabelMouseDown(e, "z"),
                 children: "Z"
               }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("input", {
+              /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("input", {
                 ref: (el) => {
                   inputRefs.current.z = el;
                 },
@@ -28004,56 +27410,56 @@ function PropertiesPanel({
   const handleRotationChange = import_react4.useCallback((degValue) => {
     onRotationChange(new Vector3(degValue.x * Math.PI / 180, degValue.y * Math.PI / 180, degValue.z * Math.PI / 180));
   }, [onRotationChange]);
-  return /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
     className: "panel properties-panel",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
         className: "panel-header",
-        children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
           className: "panel-title",
           children: "Properties"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
         className: "panel-content",
-        children: objectName ? /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(jsx_dev_runtime6.Fragment, {
+        children: objectName ? /* @__PURE__ */ jsx_dev_runtime9.jsxDEV(jsx_dev_runtime9.Fragment, {
           children: [
-            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
               className: "property-section",
-              children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+              children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                 className: "section-header",
                 children: [
-                  /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                  /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                     className: "section-icon",
                     children: "◆"
                   }, undefined, false, undefined, this),
-                  /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                  /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                     className: "section-title",
                     children: objectName
                   }, undefined, false, undefined, this)
                 ]
               }, undefined, true, undefined, this)
             }, undefined, false, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
               className: "property-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                   className: "section-header",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                       className: "section-icon",
                       children: "⊞"
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                       className: "section-title",
                       children: "Transform"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                   className: "section-content",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV(VectorInput, {
                       label: "Location",
                       value: position,
                       onChange: onPositionChange,
@@ -28062,7 +27468,7 @@ function PropertiesPanel({
                       step: 0.1,
                       precision: 3
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV(VectorInput, {
                       label: "Rotation",
                       value: rotationDeg,
                       onChange: handleRotationChange,
@@ -28071,7 +27477,7 @@ function PropertiesPanel({
                       step: 1,
                       precision: 1
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV(VectorInput, {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV(VectorInput, {
                       label: "Scale",
                       value: scale,
                       onChange: onScaleChange,
@@ -28084,61 +27490,61 @@ function PropertiesPanel({
                 }, undefined, true, undefined, this)
               ]
             }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
               className: "property-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                   className: "section-header",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                       className: "section-icon",
                       children: "\uD83D\uDCD0"
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                    /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                       className: "section-title",
                       children: "Dimensions"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                   className: "section-content",
-                  children: /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                  children: /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                     className: "dimensions-display",
                     children: [
-                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                         className: "dimension-row",
                         children: [
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "axis-label x",
                             children: "X"
                           }, undefined, false, undefined, this),
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "dimension-value",
                             children: dimensions.x.toFixed(3)
                           }, undefined, false, undefined, this)
                         ]
                       }, undefined, true, undefined, this),
-                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                         className: "dimension-row",
                         children: [
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "axis-label y",
                             children: "Y"
                           }, undefined, false, undefined, this),
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "dimension-value",
                             children: dimensions.y.toFixed(3)
                           }, undefined, false, undefined, this)
                         ]
                       }, undefined, true, undefined, this),
-                      /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+                      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
                         className: "dimension-row",
                         children: [
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "axis-label z",
                             children: "Z"
                           }, undefined, false, undefined, this),
-                          /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("span", {
+                          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
                             className: "dimension-value",
                             children: dimensions.z.toFixed(3)
                           }, undefined, false, undefined, this)
@@ -28150,7 +27556,7 @@ function PropertiesPanel({
               ]
             }, undefined, true, undefined, this)
           ]
-        }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime6.jsxDEV("div", {
+        }, undefined, true, undefined, this) : /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
           className: "no-selection",
           children: "No object selected"
         }, undefined, false, undefined, this)
@@ -28159,8 +27565,1438 @@ function PropertiesPanel({
   }, undefined, true, undefined, this);
 }
 
+// src/components/Sidebar.tsx
+var jsx_dev_runtime10 = __toESM(require_jsx_dev_runtime(), 1);
+function Sidebar({
+  objects,
+  onSelectObject,
+  onToggleVisibility,
+  selectedObjectName,
+  selectedPosition,
+  selectedRotation,
+  selectedScale,
+  selectedDimensions,
+  onPositionChange,
+  onRotationChange,
+  onScaleChange,
+  onEditStart: onEditStart2,
+  onEditEnd: onEditEnd2
+}) {
+  return /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
+    className: "sidebar",
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(SceneTree, {
+        objects,
+        onSelectObject,
+        onToggleVisibility
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV(PropertiesPanel, {
+        objectName: selectedObjectName,
+        position: selectedPosition,
+        rotation: selectedRotation,
+        scale: selectedScale,
+        dimensions: selectedDimensions,
+        onPositionChange,
+        onRotationChange,
+        onScaleChange,
+        onEditStart: onEditStart2,
+        onEditEnd: onEditEnd2
+      }, undefined, false, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+
+// src/components/NodeEditor.tsx
+var import_react5 = __toESM(require_react(), 1);
+var jsx_dev_runtime11 = __toESM(require_jsx_dev_runtime(), 1);
+var NODE_COLORS = {
+  output: "#6b3a3a",
+  texture: "#6b5a3a",
+  "flat-color": "#5a3a6b",
+  mix: "#3a5a6b",
+  "color-ramp": "#3a6b5a",
+  voronoi: "#4a4a6b"
+};
+var SOCKET_COLORS = {
+  color: "#c7c729",
+  float: "#a1a1a1"
+};
+function createNode(type, x, y) {
+  const baseId = `${type}-${Date.now()}`;
+  switch (type) {
+    case "output":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 140,
+        height: 80,
+        inputs: [{ id: "color", name: "Color", type: "color", isInput: true }],
+        outputs: [],
+        data: {}
+      };
+    case "texture":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 180,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { imagePath: "", textureWidth: 0, textureHeight: 0 }
+      };
+    case "flat-color":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 100,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { color: "#808080" }
+      };
+    case "mix":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 120,
+        inputs: [
+          { id: "color1", name: "Color1", type: "color", isInput: true },
+          { id: "color2", name: "Color2", type: "color", isInput: true }
+        ],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: { blendMode: "multiply", factor: 1 }
+      };
+    case "color-ramp":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 200,
+        height: 140,
+        inputs: [{ id: "fac", name: "Fac", type: "float", isInput: true }],
+        outputs: [
+          { id: "color", name: "Color", type: "color", isInput: false }
+        ],
+        data: {
+          stops: [
+            { position: 0, color: "#000000" },
+            { position: 1, color: "#ffffff" }
+          ]
+        }
+      };
+    case "voronoi":
+      return {
+        id: baseId,
+        type,
+        x,
+        y,
+        width: 160,
+        height: 130,
+        inputs: [],
+        outputs: [
+          { id: "color", name: "Distance", type: "float", isInput: false }
+        ],
+        data: { scale: 5, mode: 0 }
+      };
+    default:
+      throw new Error(`Unknown node type: ${type}`);
+  }
+}
+function getNodeTitle(type) {
+  switch (type) {
+    case "output":
+      return "Material Output";
+    case "texture":
+      return "Texture";
+    case "flat-color":
+      return "Flat Color";
+    case "mix":
+      return "Mix";
+    case "color-ramp":
+      return "Color Ramp";
+    case "voronoi":
+      return "Voronoi";
+    default:
+      return type;
+  }
+}
+function NodeEditor({
+  materials,
+  selectedMaterialId,
+  onSelectMaterial,
+  onMaterialChange,
+  onNewMaterial,
+  textureMap
+}) {
+  const canvasRef = import_react5.useRef(null);
+  const containerRef = import_react5.useRef(null);
+  const texturePreviewCache = import_react5.useRef(new Map);
+  const material = materials.find((m) => m.id === selectedMaterialId) || null;
+  const [nodes, setNodes] = import_react5.useState(material?.nodes || []);
+  const [connections, setConnections] = import_react5.useState(material?.connections || []);
+  const [selectedNodeIds, setSelectedNodeIds] = import_react5.useState(new Set);
+  const [pan, setPan] = import_react5.useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = import_react5.useState(1);
+  const historyStackId = selectedMaterialId ? `shader-editor:${selectedMaterialId}` : "shader-editor:default";
+  const historyStackRef = import_react5.useRef(null);
+  const isUndoingRef = import_react5.useRef(false);
+  const [, forceUpdate] = import_react5.useState(0);
+  import_react5.useEffect(() => {
+    historyStackRef.current = historyManager.getStack(historyStackId);
+    historyStackRef.current.setOnChange(() => forceUpdate((n) => n + 1));
+    return () => {
+      historyStackRef.current?.setOnChange(null);
+    };
+  }, [historyStackId]);
+  const pushUndo = import_react5.useCallback(() => {
+    if (isUndoingRef.current || !historyStackRef.current)
+      return;
+    historyStackRef.current.push({ nodes, connections });
+  }, [nodes, connections]);
+  const undo = import_react5.useCallback(() => {
+    if (!historyStackRef.current?.canUndo())
+      return;
+    isUndoingRef.current = true;
+    const prevState = historyStackRef.current.popUndo({ nodes, connections });
+    if (prevState) {
+      setNodes(prevState.nodes);
+      setConnections(prevState.connections);
+    }
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+  }, [nodes, connections]);
+  const redo = import_react5.useCallback(() => {
+    if (!historyStackRef.current?.canRedo())
+      return;
+    isUndoingRef.current = true;
+    const nextState = historyStackRef.current.popRedo({ nodes, connections });
+    if (nextState) {
+      setNodes(nextState.nodes);
+      setConnections(nextState.connections);
+    }
+    setTimeout(() => {
+      isUndoingRef.current = false;
+    }, 0);
+  }, [nodes, connections]);
+  import_react5.useEffect(() => {
+    if (material) {
+      setNodes(material.nodes);
+      setConnections(material.connections);
+      setSelectedNodeIds(new Set);
+    } else {
+      setNodes([]);
+      setConnections([]);
+      setSelectedNodeIds(new Set);
+    }
+  }, [material?.id]);
+  import_react5.useEffect(() => {
+    if (material && onMaterialChange) {
+      if (nodes !== material.nodes || connections !== material.connections) {
+        onMaterialChange({
+          ...material,
+          nodes,
+          connections
+        });
+      }
+    }
+  }, [nodes, connections, material, onMaterialChange]);
+  import_react5.useEffect(() => {
+    if (!textureMap)
+      return;
+    const cache = texturePreviewCache.current;
+    textureMap.forEach((texture, key) => {
+      if (cache.has(key))
+        return;
+      if (texture.loaded && texture.width > 0 && texture.height > 0) {
+        const imageData = new ImageData(new Uint8ClampedArray(texture.getData()), texture.width, texture.height);
+        createImageBitmap(imageData).then((bitmap) => {
+          cache.set(key, bitmap);
+          setNodes((n) => [...n]);
+        });
+      }
+    });
+    cache.forEach((_, key) => {
+      if (!textureMap.has(key)) {
+        cache.get(key)?.close();
+        cache.delete(key);
+      }
+    });
+  }, [textureMap, nodes]);
+  const [dragging, setDragging] = import_react5.useState(null);
+  const [pendingConnection, setPendingConnection] = import_react5.useState(null);
+  const [boxSelection, setBoxSelection] = import_react5.useState(null);
+  const [contextMenu, setContextMenu] = import_react5.useState(null);
+  const [draggingStop, setDraggingStop] = import_react5.useState(null);
+  const mousePositionRef = import_react5.useRef({ x: 0, y: 0 });
+  const isMouseOverRef = import_react5.useRef(false);
+  const getSocketPosition = import_react5.useCallback((node, socket) => {
+    const socketRadius = 6;
+    const headerHeight = 24;
+    const socketSpacing = 22;
+    const x = socket.isInput ? node.x : node.x + node.width;
+    let socketIndex = 0;
+    const sockets = socket.isInput ? node.inputs : node.outputs;
+    for (let i = 0;i < sockets.length; i++) {
+      if (sockets[i].id === socket.id) {
+        socketIndex = i;
+        break;
+      }
+    }
+    const y = node.y + headerHeight + 16 + socketIndex * socketSpacing;
+    return { x, y };
+  }, []);
+  const findConnectionAt = import_react5.useCallback((canvasX, canvasY, threshold = 15) => {
+    for (const conn of connections) {
+      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
+      const toNode = nodes.find((n) => n.id === conn.toNodeId);
+      if (!fromNode || !toNode)
+        continue;
+      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
+      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
+      if (!fromSocket || !toSocket)
+        continue;
+      const fromPos = getSocketPosition(fromNode, fromSocket);
+      const toPos = getSocketPosition(toNode, toSocket);
+      const dist = distanceToBezier(canvasX, canvasY, fromPos, toPos);
+      if (dist < threshold) {
+        return conn;
+      }
+    }
+    return null;
+  }, [connections, nodes, getSocketPosition]);
+  const screenToCanvas = import_react5.useCallback((screenX, screenY) => {
+    const container = containerRef.current;
+    if (!container)
+      return { x: screenX, y: screenY };
+    const rect = container.getBoundingClientRect();
+    return {
+      x: (screenX - rect.left - pan.x) / zoom,
+      y: (screenY - rect.top - pan.y) / zoom
+    };
+  }, [pan, zoom]);
+  const findNodeAt = import_react5.useCallback((canvasX, canvasY) => {
+    for (let i = nodes.length - 1;i >= 0; i--) {
+      const node = nodes[i];
+      if (canvasX >= node.x && canvasX <= node.x + node.width && canvasY >= node.y && canvasY <= node.y + node.height) {
+        return node;
+      }
+    }
+    return null;
+  }, [nodes]);
+  const findSocketAt = import_react5.useCallback((canvasX, canvasY) => {
+    const socketRadius = 8;
+    for (const node of nodes) {
+      for (const socket of [...node.inputs, ...node.outputs]) {
+        const pos = getSocketPosition(node, socket);
+        const dist = Math.sqrt((canvasX - pos.x) ** 2 + (canvasY - pos.y) ** 2);
+        if (dist <= socketRadius) {
+          return { node, socket };
+        }
+      }
+    }
+    return null;
+  }, [nodes, getSocketPosition]);
+  const handleMouseDown = import_react5.useCallback((e) => {
+    const canvasPos = screenToCanvas(e.clientX, e.clientY);
+    const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
+    if (socketHit && e.button === 0) {
+      const { node: node2, socket } = socketHit;
+      if (socket.isInput) {
+        const existingConn = connections.find((c) => c.toNodeId === node2.id && c.toSocketId === socket.id);
+        if (existingConn) {
+          setConnections((prev) => prev.filter((c) => c.id !== existingConn.id));
+          setPendingConnection({
+            fromNodeId: existingConn.fromNodeId,
+            fromSocketId: existingConn.fromSocketId,
+            isInput: false,
+            mouseX: canvasPos.x,
+            mouseY: canvasPos.y
+          });
+          setDragging({
+            type: "socket",
+            startX: e.clientX,
+            startY: e.clientY
+          });
+          return;
+        }
+      }
+      setPendingConnection({
+        fromNodeId: node2.id,
+        fromSocketId: socket.id,
+        isInput: socket.isInput,
+        mouseX: canvasPos.x,
+        mouseY: canvasPos.y
+      });
+      setDragging({
+        type: "socket",
+        startX: e.clientX,
+        startY: e.clientY
+      });
+      return;
+    }
+    const node = findNodeAt(canvasPos.x, canvasPos.y);
+    if (node && e.button === 0) {
+      if (e.shiftKey) {
+        setSelectedNodeIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(node.id)) {
+            next.delete(node.id);
+          } else {
+            next.add(node.id);
+          }
+          return next;
+        });
+      } else {
+        if (!selectedNodeIds.has(node.id)) {
+          setSelectedNodeIds(new Set([node.id]));
+        }
+      }
+      const nodeStartPositions = new Map;
+      const idsToUse = selectedNodeIds.has(node.id) ? selectedNodeIds : new Set([node.id]);
+      for (const id of idsToUse) {
+        const n = nodes.find((n2) => n2.id === id);
+        if (n) {
+          nodeStartPositions.set(id, { x: n.x, y: n.y });
+        }
+      }
+      setDragging({
+        type: "node",
+        nodeId: node.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        startNodeX: node.x,
+        startNodeY: node.y,
+        nodeStartPositions
+      });
+      setNodes((prev) => {
+        const idx = prev.findIndex((n) => n.id === node.id);
+        if (idx === -1 || idx === prev.length - 1)
+          return prev;
+        const newNodes = [...prev];
+        const [removed] = newNodes.splice(idx, 1);
+        newNodes.push(removed);
+        return newNodes;
+      });
+      return;
+    }
+    if (e.button === 1) {
+      setDragging({
+        type: "pan",
+        startX: e.clientX - pan.x,
+        startY: e.clientY - pan.y
+      });
+      return;
+    }
+    if (e.button === 0 && !node) {
+      if (!e.shiftKey) {
+        setSelectedNodeIds(new Set);
+      }
+      setBoxSelection({
+        startX: canvasPos.x,
+        startY: canvasPos.y,
+        currentX: canvasPos.x,
+        currentY: canvasPos.y
+      });
+      setDragging({
+        type: "box",
+        startX: e.clientX,
+        startY: e.clientY,
+        boxStartCanvasX: canvasPos.x,
+        boxStartCanvasY: canvasPos.y
+      });
+    }
+  }, [
+    screenToCanvas,
+    findNodeAt,
+    findSocketAt,
+    connections,
+    pan,
+    selectedNodeIds,
+    nodes
+  ]);
+  const handleMouseMove = import_react5.useCallback((e) => {
+    if (!dragging)
+      return;
+    if (dragging.type === "node" && dragging.nodeId) {
+      const dx = (e.clientX - dragging.startX) / zoom;
+      const dy = (e.clientY - dragging.startY) / zoom;
+      if (dragging.nodeStartPositions && dragging.nodeStartPositions.size > 1) {
+        setNodes((prev) => prev.map((n) => {
+          const startPos = dragging.nodeStartPositions?.get(n.id);
+          if (startPos) {
+            return {
+              ...n,
+              x: startPos.x + dx,
+              y: startPos.y + dy
+            };
+          }
+          return n;
+        }));
+      } else {
+        setNodes((prev) => prev.map((n) => n.id === dragging.nodeId ? {
+          ...n,
+          x: (dragging.startNodeX ?? 0) + dx,
+          y: (dragging.startNodeY ?? 0) + dy
+        } : n));
+      }
+    } else if (dragging.type === "box") {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      setBoxSelection((prev) => prev ? { ...prev, currentX: canvasPos.x, currentY: canvasPos.y } : null);
+    } else if (dragging.type === "pan") {
+      setPan({
+        x: e.clientX - dragging.startX,
+        y: e.clientY - dragging.startY
+      });
+    } else if (dragging.type === "socket" && pendingConnection) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      setPendingConnection((prev) => prev ? { ...prev, mouseX: canvasPos.x, mouseY: canvasPos.y } : null);
+    }
+  }, [dragging, zoom, pendingConnection, screenToCanvas]);
+  const handleMouseUp = import_react5.useCallback((e) => {
+    if (dragging?.type === "node" && dragging.nodeId) {
+      const droppedNode = nodes.find((n) => n.id === dragging.nodeId);
+      if (droppedNode) {
+        const nodeCenterX = droppedNode.x + droppedNode.width / 2;
+        const nodeCenterY = droppedNode.y + droppedNode.height / 2;
+        const hitConnection = findConnectionAt(nodeCenterX, nodeCenterY);
+        if (hitConnection && droppedNode.id !== hitConnection.fromNodeId && droppedNode.id !== hitConnection.toNodeId) {
+          const hasInput = droppedNode.inputs.length > 0;
+          const hasOutput = droppedNode.outputs.length > 0;
+          if (hasInput && hasOutput) {
+            const fromNode = nodes.find((n) => n.id === hitConnection.fromNodeId);
+            const toNode = nodes.find((n) => n.id === hitConnection.toNodeId);
+            const fromSocket = fromNode?.outputs.find((s) => s.id === hitConnection.fromSocketId);
+            const toSocket = toNode?.inputs.find((s) => s.id === hitConnection.toSocketId);
+            if (fromSocket && toSocket) {
+              const compatibleInput = droppedNode.inputs.find((s) => s.type === fromSocket.type || fromSocket.type === "color" && s.type === "float");
+              const compatibleOutput = droppedNode.outputs.find((s) => s.type === toSocket.type || s.type === "color" && toSocket.type === "float");
+              if (compatibleInput && compatibleOutput) {
+                pushUndo();
+                setConnections((prev) => {
+                  const filtered = prev.filter((c) => c.id !== hitConnection.id);
+                  return [
+                    ...filtered,
+                    {
+                      id: `conn-${Date.now()}-1`,
+                      fromNodeId: hitConnection.fromNodeId,
+                      fromSocketId: hitConnection.fromSocketId,
+                      toNodeId: droppedNode.id,
+                      toSocketId: compatibleInput.id
+                    },
+                    {
+                      id: `conn-${Date.now()}-2`,
+                      fromNodeId: droppedNode.id,
+                      fromSocketId: compatibleOutput.id,
+                      toNodeId: hitConnection.toNodeId,
+                      toSocketId: hitConnection.toSocketId
+                    }
+                  ];
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    if (dragging?.type === "box" && boxSelection) {
+      const minX = Math.min(boxSelection.startX, boxSelection.currentX);
+      const maxX = Math.max(boxSelection.startX, boxSelection.currentX);
+      const minY = Math.min(boxSelection.startY, boxSelection.currentY);
+      const maxY = Math.max(boxSelection.startY, boxSelection.currentY);
+      const selectedIds = new Set;
+      for (const node of nodes) {
+        const nodeRight = node.x + node.width;
+        const nodeBottom = node.y + node.height;
+        if (node.x < maxX && nodeRight > minX && node.y < maxY && nodeBottom > minY) {
+          selectedIds.add(node.id);
+        }
+      }
+      setSelectedNodeIds((prev) => {
+        if (e.shiftKey) {
+          const combined = new Set(prev);
+          for (const id of selectedIds) {
+            combined.add(id);
+          }
+          return combined;
+        }
+        return selectedIds;
+      });
+      setBoxSelection(null);
+    }
+    if (dragging?.type === "socket" && pendingConnection) {
+      const canvasPos = screenToCanvas(e.clientX, e.clientY);
+      const socketHit = findSocketAt(canvasPos.x, canvasPos.y);
+      if (socketHit) {
+        const { node: targetNode, socket: targetSocket } = socketHit;
+        const sourceNode = nodes.find((n) => n.id === pendingConnection.fromNodeId);
+        const sourceSocket = sourceNode ? [...sourceNode.inputs, ...sourceNode.outputs].find((s) => s.id === pendingConnection.fromSocketId) : null;
+        const canConnect = targetNode.id !== pendingConnection.fromNodeId && targetSocket.isInput !== pendingConnection.isInput && (sourceSocket?.type === targetSocket.type || sourceSocket?.type === "color" && targetSocket.type === "float");
+        if (canConnect) {
+          const fromNode = pendingConnection.isInput ? targetNode.id : pendingConnection.fromNodeId;
+          const fromSocket = pendingConnection.isInput ? targetSocket.id : pendingConnection.fromSocketId;
+          const toNode = pendingConnection.isInput ? pendingConnection.fromNodeId : targetNode.id;
+          const toSocket = pendingConnection.isInput ? pendingConnection.fromSocketId : targetSocket.id;
+          pushUndo();
+          setConnections((prev) => {
+            const filtered = prev.filter((c) => !(c.toNodeId === toNode && c.toSocketId === toSocket));
+            return [
+              ...filtered,
+              {
+                id: `conn-${Date.now()}`,
+                fromNodeId: fromNode,
+                fromSocketId: fromSocket,
+                toNodeId: toNode,
+                toSocketId: toSocket
+              }
+            ];
+          });
+        }
+      }
+    }
+    setDragging(null);
+    setPendingConnection(null);
+  }, [
+    dragging,
+    pendingConnection,
+    screenToCanvas,
+    findSocketAt,
+    nodes,
+    findConnectionAt,
+    pushUndo,
+    boxSelection
+  ]);
+  const getSocketType = (nodeId, socketId) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node)
+      return "color";
+    const socket = [...node.inputs, ...node.outputs].find((s) => s.id === socketId);
+    return socket?.type ?? "color";
+  };
+  import_react5.useEffect(() => {
+    const container = containerRef.current;
+    if (!container)
+      return;
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (e.metaKey || e.ctrlKey) {
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomFactor = e.deltaY > 0 ? 0.99 : 1.01;
+        const newZoom = Math.max(0.25, Math.min(2, zoom * zoomFactor));
+        const actualFactor = newZoom / zoom;
+        const newPanX = mouseX - (mouseX - pan.x) * actualFactor;
+        const newPanY = mouseY - (mouseY - pan.y) * actualFactor;
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
+      } else {
+        setPan((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY
+        }));
+      }
+    };
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [zoom, pan]);
+  const handleAddNode = import_react5.useCallback((type) => {
+    if (!contextMenu)
+      return;
+    pushUndo();
+    const canvasPos = screenToCanvas(contextMenu.x, contextMenu.y);
+    const newNode = createNode(type, canvasPos.x, canvasPos.y);
+    setNodes((prev) => [...prev, newNode]);
+    setContextMenu(null);
+    setSelectedNodeIds(new Set([newNode.id]));
+  }, [contextMenu, screenToCanvas, pushUndo]);
+  const handleDeleteNode = import_react5.useCallback(() => {
+    if (selectedNodeIds.size === 0)
+      return;
+    const nodesToDelete = new Set;
+    for (const id of selectedNodeIds) {
+      const node = nodes.find((n) => n.id === id);
+      if (node && node.type !== "output") {
+        nodesToDelete.add(id);
+      }
+    }
+    if (nodesToDelete.size === 0)
+      return;
+    pushUndo();
+    setNodes((prev) => prev.filter((n) => !nodesToDelete.has(n.id)));
+    setConnections((prev) => prev.filter((c) => !nodesToDelete.has(c.fromNodeId) && !nodesToDelete.has(c.toNodeId)));
+    setSelectedNodeIds(new Set);
+  }, [selectedNodeIds, nodes, pushUndo]);
+  import_react5.useEffect(() => {
+    const handleKeyDown2 = (e) => {
+      if (e.key === "Escape") {
+        setContextMenu(null);
+        return;
+      }
+      if (!isMouseOverRef.current)
+        return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        undo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key.toLowerCase() === "z" || !e.shiftKey && e.key.toLowerCase() === "y")) {
+        e.preventDefault();
+        e.stopPropagation();
+        redo();
+        return;
+      }
+      if (e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({
+          x: mousePositionRef.current.x,
+          y: mousePositionRef.current.y
+        });
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "x") && !contextMenu) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDeleteNode();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown2);
+    return () => window.removeEventListener("keydown", handleKeyDown2);
+  }, [handleDeleteNode, contextMenu, undo, redo]);
+  import_react5.useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container)
+      return;
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx)
+      return;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
+    const gridSize = 20;
+    const gridExtent = 2000;
+    ctx.strokeStyle = "#252525";
+    ctx.lineWidth = 1 / zoom;
+    for (let x = -gridExtent;x <= gridExtent; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, -gridExtent);
+      ctx.lineTo(x, gridExtent);
+      ctx.stroke();
+    }
+    for (let y = -gridExtent;y <= gridExtent; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(-gridExtent, y);
+      ctx.lineTo(gridExtent, y);
+      ctx.stroke();
+    }
+    for (const conn of connections) {
+      const fromNode = nodes.find((n) => n.id === conn.fromNodeId);
+      const toNode = nodes.find((n) => n.id === conn.toNodeId);
+      if (!fromNode || !toNode)
+        continue;
+      const fromSocket = fromNode.outputs.find((s) => s.id === conn.fromSocketId);
+      const toSocket = toNode.inputs.find((s) => s.id === conn.toSocketId);
+      if (!fromSocket || !toSocket)
+        continue;
+      const fromPos = getSocketPosition(fromNode, fromSocket);
+      const toPos = getSocketPosition(toNode, toSocket);
+      drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[fromSocket.type], zoom);
+    }
+    if (pendingConnection) {
+      const node = nodes.find((n) => n.id === pendingConnection.fromNodeId);
+      if (node) {
+        const socket = [...node.inputs, ...node.outputs].find((s) => s.id === pendingConnection.fromSocketId);
+        if (socket) {
+          const pos = getSocketPosition(node, socket);
+          const mousePos = {
+            x: pendingConnection.mouseX,
+            y: pendingConnection.mouseY
+          };
+          const fromPos = pendingConnection.isInput ? mousePos : pos;
+          const toPos = pendingConnection.isInput ? pos : mousePos;
+          drawConnection(ctx, fromPos, toPos, SOCKET_COLORS[socket.type], zoom, true);
+        }
+      }
+    }
+    for (const node of nodes) {
+      drawNode(ctx, node, selectedNodeIds.has(node.id), zoom, texturePreviewCache.current);
+    }
+    if (boxSelection) {
+      ctx.strokeStyle = "#4a90d9";
+      ctx.fillStyle = "rgba(74, 144, 217, 0.2)";
+      ctx.lineWidth = 1 / zoom;
+      const x = Math.min(boxSelection.startX, boxSelection.currentX);
+      const y = Math.min(boxSelection.startY, boxSelection.currentY);
+      const w = Math.abs(boxSelection.currentX - boxSelection.startX);
+      const h = Math.abs(boxSelection.currentY - boxSelection.startY);
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.restore();
+  }, [
+    nodes,
+    connections,
+    selectedNodeIds,
+    pan,
+    zoom,
+    pendingConnection,
+    getSocketPosition,
+    boxSelection
+  ]);
+  return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+    ref: containerRef,
+    className: "node-editor",
+    style: { position: "relative" },
+    onMouseDown: (e) => {
+      const target = e.target;
+      if (target.tagName === "INPUT" || target.tagName === "BUTTON") {
+        return;
+      }
+      if (contextMenu) {
+        if (!target.closest(".node-context-menu")) {
+          setContextMenu(null);
+        }
+      }
+      handleMouseDown(e);
+    },
+    onMouseMove: (e) => {
+      mousePositionRef.current = { x: e.clientX, y: e.clientY };
+      if (draggingStop) {
+        const container = containerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const relativeX = mouseX - draggingStop.rampX;
+          const newPosition = Math.max(0, Math.min(1, relativeX / draggingStop.rampW));
+          setNodes((prev) => prev.map((n) => {
+            if (n.id === draggingStop.nodeId) {
+              const stops = [...n.data.stops];
+              stops[draggingStop.stopIndex] = {
+                ...stops[draggingStop.stopIndex],
+                position: newPosition
+              };
+              stops.sort((a, b) => a.position - b.position);
+              return { ...n, data: { ...n.data, stops } };
+            }
+            return n;
+          }));
+        }
+        return;
+      }
+      handleMouseMove(e);
+    },
+    onMouseUp: (e) => {
+      if (draggingStop) {
+        setDraggingStop(null);
+        return;
+      }
+      handleMouseUp(e);
+    },
+    onMouseEnter: () => {
+      isMouseOverRef.current = true;
+    },
+    onMouseLeave: () => {
+      isMouseOverRef.current = false;
+      if (dragging?.type !== "socket") {
+        setDragging(null);
+      }
+    },
+    onContextMenu: (e) => e.preventDefault(),
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("canvas", {
+        ref: canvasRef
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+        className: "node-editor-header",
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+            children: "Shader Editor"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+            className: "material-selector",
+            children: [
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("select", {
+                value: selectedMaterialId || "",
+                onChange: (e) => onSelectMaterial(e.target.value),
+                children: materials.map((mat) => /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                  value: mat.id,
+                  children: mat.name
+                }, mat.id, false, undefined, this))
+              }, undefined, false, undefined, this),
+              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+                className: "new-material-btn",
+                onClick: onNewMaterial,
+                title: "New Material",
+                children: "+"
+              }, undefined, false, undefined, this)
+            ]
+          }, undefined, true, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      contextMenu && /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+        className: "node-context-menu",
+        style: { left: contextMenu.x, top: contextMenu.y },
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+            className: "menu-header",
+            children: "Add Node"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("flat-color"),
+            children: "Flat Color"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("texture"),
+            children: "Texture"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("mix"),
+            children: "Mix"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("color-ramp"),
+            children: "Color Ramp"
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+            onClick: () => handleAddNode("voronoi"),
+            children: "Voronoi"
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      nodes.filter((n) => n.type === "flat-color").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const screenX = node.x * zoom + pan.x + 12 * zoom;
+        const screenY = node.y * zoom + pan.y + 24 * zoom + 36 * zoom;
+        const swatchW = (node.width - 24) * zoom;
+        const swatchH = 24 * zoom;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+          type: "color",
+          className: "node-color-picker",
+          value: node.data.color || "#808080",
+          onFocus: () => pushUndo(),
+          onChange: (e) => {
+            setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, color: e.target.value } } : n));
+          },
+          style: {
+            position: "absolute",
+            left: screenX,
+            top: screenY,
+            width: swatchW,
+            height: swatchH,
+            zIndex: 10
+          }
+        }, node.id, false, undefined, this);
+      }),
+      nodes.filter((n) => n.type === "color-ramp").map((node) => {
+        const stops = node.data.stops || [
+          { position: 0, color: "#000000" },
+          { position: 1, color: "#ffffff" }
+        ];
+        const rampX = node.x * zoom + pan.x + 8 * zoom;
+        const rampY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const rampW = (node.width - 16) * zoom;
+        const rampH = 24 * zoom;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV(import_react5.default.Fragment, {
+          children: [
+            stops.map((stop, idx) => {
+              const markerX = rampX + stop.position * rampW - 8 * zoom;
+              const markerY = rampY + rampH + 4 * zoom;
+              return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+                className: "color-ramp-stop",
+                style: {
+                  position: "absolute",
+                  left: markerX,
+                  top: markerY,
+                  width: 16 * zoom,
+                  height: 16 * zoom,
+                  backgroundColor: stop.color,
+                  border: "2px solid #fff",
+                  borderRadius: 2,
+                  cursor: "ew-resize",
+                  zIndex: 10,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.5)"
+                },
+                title: `Stop ${idx + 1} (${(stop.position * 100).toFixed(0)}%) - Drag to move, click to change color`,
+                onMouseDown: (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  pushUndo();
+                  setDraggingStop({
+                    nodeId: node.id,
+                    stopIndex: idx,
+                    rampX,
+                    rampW
+                  });
+                },
+                onDoubleClick: (e) => {
+                  e.stopPropagation();
+                  pushUndo();
+                  const colorInput = document.getElementById(`color-input-${node.id}-${idx}`);
+                  colorInput?.click();
+                },
+                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                  id: `color-input-${node.id}-${idx}`,
+                  type: "color",
+                  value: stop.color,
+                  onChange: (e) => {
+                    const newStops = [...stops];
+                    newStops[idx] = { ...stop, color: e.target.value };
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                  },
+                  style: {
+                    position: "absolute",
+                    opacity: 0,
+                    width: "100%",
+                    height: "100%",
+                    cursor: "ew-resize"
+                  },
+                  onClick: (e) => e.stopPropagation()
+                }, undefined, false, undefined, this)
+              }, `${node.id}-stop-${idx}`, false, undefined, this);
+            }),
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              className: "color-ramp-buttons",
+              style: {
+                position: "absolute",
+                left: rampX,
+                top: rampY + rampH + 24 * zoom,
+                display: "flex",
+                gap: 4,
+                zIndex: 10
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+                  style: {
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    background: "#444",
+                    border: "1px solid #666",
+                    color: "#fff",
+                    borderRadius: 2
+                  },
+                  onClick: () => {
+                    pushUndo();
+                    const newPos = stops.length === 0 ? 0.5 : stops[Math.floor(stops.length / 2)]?.position || 0.5;
+                    const newStops = [
+                      ...stops,
+                      {
+                        position: Math.min(0.99, newPos + 0.1),
+                        color: "#888888"
+                      }
+                    ].sort((a, b) => a.position - b.position);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                  },
+                  title: "Add stop",
+                  children: "+"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
+                  style: {
+                    padding: "2px 8px",
+                    fontSize: 12,
+                    cursor: stops.length <= 2 ? "not-allowed" : "pointer",
+                    background: stops.length <= 2 ? "#333" : "#444",
+                    border: "1px solid #666",
+                    color: stops.length <= 2 ? "#666" : "#fff",
+                    borderRadius: 2
+                  },
+                  onClick: () => {
+                    if (stops.length > 2) {
+                      pushUndo();
+                      const newStops = stops.filter((_, i) => i !== Math.floor(stops.length / 2));
+                      setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, stops: newStops } } : n));
+                    }
+                  },
+                  disabled: stops.length <= 2,
+                  title: "Remove stop",
+                  children: "−"
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, node.id, true, undefined, this);
+      }),
+      nodes.filter((n) => n.type === "voronoi").map((node) => {
+        const container = containerRef.current;
+        if (!container)
+          return null;
+        const controlX = node.x * zoom + pan.x + 8 * zoom;
+        const sliderY = node.y * zoom + pan.y + 24 * zoom + 32 * zoom;
+        const controlW = (node.width - 16) * zoom;
+        const scale = node.data.scale || 5;
+        const mode = node.data.mode || 0;
+        return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+          className: "voronoi-scale-control",
+          style: {
+            position: "absolute",
+            left: controlX,
+            top: sliderY,
+            width: controlW,
+            zIndex: 10
+          },
+          children: [
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%",
+                marginBottom: 6 * zoom
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Mode"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("select", {
+                  value: mode,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newMode = parseInt(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, mode: newMode } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 10 * zoom,
+                    background: "#333",
+                    color: "#fff",
+                    border: "1px solid #555",
+                    borderRadius: 2,
+                    padding: "2px 4px",
+                    cursor: "pointer"
+                  },
+                  children: [
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: 0,
+                      children: "F1 (Distance)"
+                    }, undefined, false, undefined, this),
+                    /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("option", {
+                      value: 1,
+                      children: "Edge"
+                    }, undefined, false, undefined, this)
+                  ]
+                }, undefined, true, undefined, this)
+              ]
+            }, undefined, true, undefined, this),
+            /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 4 * zoom,
+                width: "100%"
+              },
+              children: [
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#aaa",
+                    flexShrink: 0
+                  },
+                  children: "Scale"
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("input", {
+                  type: "range",
+                  min: "1",
+                  max: "50",
+                  step: "1",
+                  value: scale,
+                  onMouseDown: () => pushUndo(),
+                  onChange: (e) => {
+                    const newScale = parseInt(e.target.value);
+                    setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, data: { ...n.data, scale: newScale } } : n));
+                  },
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    height: 12 * zoom,
+                    cursor: "pointer"
+                  }
+                }, undefined, false, undefined, this),
+                /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
+                  style: {
+                    fontSize: 10 * zoom,
+                    color: "#fff",
+                    flexShrink: 0,
+                    minWidth: 16 * zoom,
+                    textAlign: "right"
+                  },
+                  children: scale
+                }, undefined, false, undefined, this)
+              ]
+            }, undefined, true, undefined, this)
+          ]
+        }, node.id, true, undefined, this);
+      })
+    ]
+  }, undefined, true, undefined, this);
+}
+function drawConnection(ctx, from, to, color, zoom, dashed = false) {
+  const dx = Math.abs(to.x - from.x);
+  const controlDist = Math.max(50, dx * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.bezierCurveTo(from.x + controlDist, from.y, to.x - controlDist, to.y, to.x, to.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 / zoom;
+  if (dashed) {
+    ctx.setLineDash([5 / zoom, 5 / zoom]);
+  } else {
+    ctx.setLineDash([]);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+function drawNode(ctx, node, selected, zoom, texturePreviewCache) {
+  const { x, y, width, height, type } = node;
+  const headerHeight = 24;
+  const borderRadius = 6;
+  const socketRadius = 6;
+  const socketSpacing = 22;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+  roundRect(ctx, x + 3, y + 3, width, height, borderRadius);
+  ctx.fill();
+  ctx.fillStyle = "#3d3d3d";
+  roundRect(ctx, x, y, width, height, borderRadius);
+  ctx.fill();
+  ctx.fillStyle = NODE_COLORS[type];
+  roundRectTop(ctx, x, y, width, headerHeight, borderRadius);
+  ctx.fill();
+  if (selected) {
+    ctx.strokeStyle = "#ff9500";
+    ctx.lineWidth = 2 / zoom;
+    roundRect(ctx, x, y, width, height, borderRadius);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px 'Pixelify Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(getNodeTitle(type), x + width / 2, y + 16);
+  ctx.textAlign = "left";
+  ctx.font = "11px 'Pixelify Sans', sans-serif";
+  for (let i = 0;i < node.inputs.length; i++) {
+    const socket = node.inputs[i];
+    const sy = y + headerHeight + 16 + i * socketSpacing;
+    ctx.beginPath();
+    ctx.arc(x, sy, socketRadius, 0, Math.PI * 2);
+    ctx.fillStyle = SOCKET_COLORS[socket.type];
+    ctx.fill();
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.stroke();
+    ctx.fillStyle = "#cccccc";
+    ctx.fillText(socket.name, x + socketRadius + 6, sy + 4);
+  }
+  ctx.textAlign = "right";
+  for (let i = 0;i < node.outputs.length; i++) {
+    const socket = node.outputs[i];
+    const sy = y + headerHeight + 16 + i * socketSpacing;
+    ctx.beginPath();
+    ctx.arc(x + width, sy, socketRadius, 0, Math.PI * 2);
+    ctx.fillStyle = SOCKET_COLORS[socket.type];
+    ctx.fill();
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.stroke();
+    ctx.fillStyle = "#cccccc";
+    ctx.fillText(socket.name, x + width - socketRadius - 6, sy + 4);
+  }
+  if (type === "flat-color" && node.data.color) {
+    const swatchX = x + 12;
+    const swatchY = y + headerHeight + 36;
+    const swatchW = width - 24;
+    const swatchH = 24;
+    ctx.fillStyle = "#2a2a2a";
+    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
+    ctx.fillStyle = node.data.color;
+    ctx.fillRect(swatchX, swatchY, swatchW, swatchH);
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(swatchX, swatchY, swatchW, swatchH);
+  }
+  if (type === "texture") {
+    const imagePath = node.data.imagePath || "";
+    const texW = node.data.textureWidth || 0;
+    const texH = node.data.textureHeight || 0;
+    const preview = texturePreviewCache?.get(imagePath);
+    if (preview) {
+      const previewX = x + 8;
+      const previewY = y + headerHeight + 8;
+      const previewSize = Math.min(width - 16, 48);
+      const checkSize = 6;
+      for (let cy = 0;cy < previewSize; cy += checkSize) {
+        for (let cx = 0;cx < previewSize; cx += checkSize) {
+          const isLight = (cx / checkSize + cy / checkSize) % 2 === 0;
+          ctx.fillStyle = isLight ? "#4a4a4a" : "#3a3a3a";
+          ctx.fillRect(previewX + cx, previewY + cy, Math.min(checkSize, previewSize - cx), Math.min(checkSize, previewSize - cy));
+        }
+      }
+      ctx.drawImage(preview, previewX, previewY, previewSize, previewSize);
+      ctx.strokeStyle = "#1a1a1a";
+      ctx.lineWidth = 1 / zoom;
+      ctx.strokeRect(previewX, previewY, previewSize, previewSize);
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+      const filename = imagePath.split("/").pop() || imagePath || "No texture";
+      const maxChars = 12;
+      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
+      ctx.fillText(displayName, previewX + previewSize + 6, previewY + 14);
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(`${texW}×${texH}`, previewX + previewSize + 6, previewY + 28);
+      }
+    } else {
+      const infoY = y + headerHeight + 36;
+      ctx.font = "10px 'Pixelify Sans', sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#888888";
+      const filename = imagePath ? imagePath.split("/").pop() || imagePath : "No texture";
+      const maxChars = 20;
+      const displayName = filename.length > maxChars ? filename.substring(0, maxChars - 2) + ".." : filename;
+      ctx.fillText(displayName, x + 8, infoY);
+      if (texW > 0 && texH > 0) {
+        ctx.fillStyle = "#666666";
+        ctx.fillText(`${texW} × ${texH}`, x + 8, infoY + 14);
+      }
+    }
+  }
+  if (type === "color-ramp") {
+    const stops = node.data.stops || [
+      { position: 0, color: "#000000" },
+      { position: 1, color: "#ffffff" }
+    ];
+    const sortedStops = [...stops].sort((a, b) => a.position - b.position);
+    const rampX = x + 8;
+    const rampY = y + headerHeight + 32;
+    const rampW = width - 16;
+    const rampH = 24;
+    const gradient = ctx.createLinearGradient(rampX, 0, rampX + rampW, 0);
+    for (const stop of sortedStops) {
+      gradient.addColorStop(stop.position, stop.color);
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(rampX, rampY, rampW, rampH);
+    ctx.strokeStyle = "#1a1a1a";
+    ctx.lineWidth = 1 / zoom;
+    ctx.strokeRect(rampX, rampY, rampW, rampH);
+    for (const stop of sortedStops) {
+      const markerX = rampX + stop.position * rampW;
+      const markerY = rampY + rampH;
+      ctx.beginPath();
+      ctx.moveTo(markerX, markerY);
+      ctx.lineTo(markerX - 4, markerY + 8);
+      ctx.lineTo(markerX + 4, markerY + 8);
+      ctx.closePath();
+      ctx.fillStyle = stop.color;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1 / zoom;
+      ctx.stroke();
+    }
+  }
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function roundRectTop(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function distanceToBezier(px, py, from, to) {
+  const dx = Math.abs(to.x - from.x);
+  const controlDist = Math.max(50, dx * 0.5);
+  let minDist = Infinity;
+  const samples = 20;
+  for (let i = 0;i <= samples; i++) {
+    const t = i / samples;
+    const t1 = 1 - t;
+    const cp1x = from.x + controlDist;
+    const cp1y = from.y;
+    const cp2x = to.x - controlDist;
+    const cp2y = to.y;
+    const x = t1 * t1 * t1 * from.x + 3 * t1 * t1 * t * cp1x + 3 * t1 * t * t * cp2x + t * t * t * to.x;
+    const y = t1 * t1 * t1 * from.y + 3 * t1 * t1 * t * cp1y + 3 * t1 * t * t * cp2y + t * t * t * to.y;
+    const dist = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+    if (dist < minDist) {
+      minDist = dist;
+    }
+  }
+  return minDist;
+}
+
+// src/components/ShadingWorkspace.tsx
+var jsx_dev_runtime12 = __toESM(require_jsx_dev_runtime(), 1);
+function ShadingWorkspace({
+  materials,
+  selectedMaterialId,
+  textureMap,
+  onSelectMaterial,
+  onMaterialChange,
+  onNewMaterial
+}) {
+  return /* @__PURE__ */ jsx_dev_runtime12.jsxDEV(NodeEditor, {
+    materials,
+    selectedMaterialId,
+    textureMap,
+    onSelectMaterial,
+    onMaterialChange,
+    onNewMaterial
+  }, undefined, false, undefined, this);
+}
+
 // src/components/StatusBar.tsx
-var jsx_dev_runtime7 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime13 = __toESM(require_jsx_dev_runtime(), 1);
 function StatusBar({
   mode,
   selectionMode,
@@ -28208,30 +29044,30 @@ function StatusBar({
     }
     return selectedCount > 0 ? `${selectedCount} object${selectedCount > 1 ? "s" : ""} selected` : "No selection";
   };
-  return /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
     className: "status-bar",
     children: [
-      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
         className: "status-left",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-mode",
             children: getModeText()
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-divider",
             children: "|"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-selection",
             children: getSelectionText()
           }, undefined, false, undefined, this)
         ]
       }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
         className: "status-right",
         children: [
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-resolution",
             children: [
               renderWidth,
@@ -28239,11 +29075,11 @@ function StatusBar({
               renderHeight
             ]
           }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-divider",
             children: "|"
           }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime7.jsxDEV("span", {
+          /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("span", {
             className: "status-fps",
             children: [
               fps,
@@ -28258,70 +29094,8 @@ function StatusBar({
   }, undefined, true, undefined, this);
 }
 
-// src/components/Instructions.tsx
-var jsx_dev_runtime8 = __toESM(require_jsx_dev_runtime(), 1);
-function Instructions() {
-  return /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("div", {
-    className: "instructions",
-    children: [
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "Tab"
-      }, undefined, false, undefined, this),
-      " Edit/Object | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "LMB"
-      }, undefined, false, undefined, this),
-      " Select | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "⇧A"
-      }, undefined, false, undefined, this),
-      " Add |",
-      " ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "Scroll"
-      }, undefined, false, undefined, this),
-      " Orbit | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "⌘Scroll"
-      }, undefined, false, undefined, this),
-      " Zoom | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "⇧Scroll"
-      }, undefined, false, undefined, this),
-      " Pan | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "G"
-      }, undefined, false, undefined, this),
-      " Grab | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "R"
-      }, undefined, false, undefined, this),
-      " Rotate | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "S"
-      }, undefined, false, undefined, this),
-      " Scale |",
-      " ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "1"
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "3"
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "7"
-      }, undefined, false, undefined, this),
-      " Views | ",
-      /* @__PURE__ */ jsx_dev_runtime8.jsxDEV("kbd", {
-        children: "⌘Z"
-      }, undefined, false, undefined, this),
-      " Undo"
-    ]
-  }, undefined, true, undefined, this);
-}
-
 // src/components/AddMenu.tsx
-var import_react5 = __toESM(require_react(), 1);
+var import_react6 = __toESM(require_react(), 1);
 
 // src/icons/mesh_plane.svg
 var mesh_plane_default = "./mesh_plane-011tjaxx.svg";
@@ -28348,7 +29122,7 @@ var mesh_cone_default = "./mesh_cone-qh3eewg3.svg";
 var mesh_torus_default = "./mesh_torus-zrqq0fj4.svg";
 
 // src/components/AddMenu.tsx
-var jsx_dev_runtime9 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime14 = __toESM(require_jsx_dev_runtime(), 1);
 var PRIMITIVES = [
   { type: "plane", label: "Plane", icon: mesh_plane_default },
   { type: "cube", label: "Cube", icon: mesh_cube_default },
@@ -28360,70 +29134,6 @@ var PRIMITIVES = [
   { type: "torus", label: "Torus", icon: mesh_torus_default }
 ];
 function AddMenu({ x, y, onSelect, onClose }) {
-  const menuRef = import_react5.useRef(null);
-  import_react5.useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        onClose();
-      }
-    };
-    const handleKeyDown2 = (e) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown2);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown2);
-    };
-  }, [onClose]);
-  return /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
-    ref: menuRef,
-    className: "add-menu",
-    style: {
-      left: x,
-      top: y
-    },
-    children: [
-      /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("div", {
-        className: "add-menu-header",
-        children: "Add Mesh"
-      }, undefined, false, undefined, this),
-      PRIMITIVES.map((primitive) => /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("button", {
-        className: "add-menu-item",
-        onClick: () => {
-          onSelect(primitive.type);
-          onClose();
-        },
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("img", {
-            src: primitive.icon,
-            className: "add-menu-icon",
-            width: 16,
-            height: 16,
-            alt: primitive.label
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime9.jsxDEV("span", {
-            className: "add-menu-label",
-            children: primitive.label
-          }, undefined, false, undefined, this)
-        ]
-      }, primitive.type, true, undefined, this))
-    ]
-  }, undefined, true, undefined, this);
-}
-
-// src/components/ShadingContextMenu.tsx
-var import_react6 = __toESM(require_react(), 1);
-var jsx_dev_runtime10 = __toESM(require_jsx_dev_runtime(), 1);
-function ObjectContextMenu({
-  x,
-  y,
-  onAction,
-  onClose
-}) {
   const menuRef = import_react6.useRef(null);
   import_react6.useEffect(() => {
     const handleClickOutside = (e) => {
@@ -28443,7 +29153,7 @@ function ObjectContextMenu({
       document.removeEventListener("keydown", handleKeyDown2);
     };
   }, [onClose]);
-  return /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
     ref: menuRef,
     className: "add-menu",
     style: {
@@ -28451,42 +29161,106 @@ function ObjectContextMenu({
       top: y
     },
     children: [
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
+        className: "add-menu-header",
+        children: "Add Mesh"
+      }, undefined, false, undefined, this),
+      PRIMITIVES.map((primitive) => /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("button", {
+        className: "add-menu-item",
+        onClick: () => {
+          onSelect(primitive.type);
+          onClose();
+        },
+        children: [
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("img", {
+            src: primitive.icon,
+            className: "add-menu-icon",
+            width: 16,
+            height: 16,
+            alt: primitive.label
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("span", {
+            className: "add-menu-label",
+            children: primitive.label
+          }, undefined, false, undefined, this)
+        ]
+      }, primitive.type, true, undefined, this))
+    ]
+  }, undefined, true, undefined, this);
+}
+
+// src/components/ShadingContextMenu.tsx
+var import_react7 = __toESM(require_react(), 1);
+var jsx_dev_runtime15 = __toESM(require_jsx_dev_runtime(), 1);
+function ObjectContextMenu({
+  x,
+  y,
+  onAction,
+  onClose
+}) {
+  const menuRef = import_react7.useRef(null);
+  import_react7.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    const handleKeyDown2 = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown2);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown2);
+    };
+  }, [onClose]);
+  return /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("div", {
+    ref: menuRef,
+    className: "add-menu",
+    style: {
+      left: x,
+      top: y
+    },
+    children: [
+      /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("div", {
         className: "add-menu-header",
         children: "Object"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("shade-smooth");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Shade Smooth"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("shade-flat");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Shade Flat"
         }, undefined, false, undefined, this)
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("div", {
+      /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("div", {
         className: "add-menu-separator"
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("button", {
+      /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("button", {
         className: "add-menu-item",
         onClick: () => {
           onAction("origin-to-center");
           onClose();
         },
-        children: /* @__PURE__ */ jsx_dev_runtime10.jsxDEV("span", {
+        children: /* @__PURE__ */ jsx_dev_runtime15.jsxDEV("span", {
           className: "add-menu-label",
           children: "Set Origin to Center of Mass"
         }, undefined, false, undefined, this)
@@ -28496,167 +29270,83 @@ function ObjectContextMenu({
 }
 var ShadingContextMenu = ObjectContextMenu;
 
-// src/components/ViewportGizmo.tsx
-var jsx_dev_runtime11 = __toESM(require_jsx_dev_runtime(), 1);
-function ViewportGizmo({
-  onViewpointChange,
-  onToggleOrtho,
-  isOrtho
-}) {
-  return /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
-    className: "viewport-gizmo",
-    children: [
-      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
-        className: "viewport-gizmo-cube",
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-            className: "gizmo-face gizmo-top",
-            onClick: () => onViewpointChange("top"),
-            title: "Top (Numpad 7)",
-            children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-              className: "gizmo-label gizmo-z",
-              children: "Z"
-            }, undefined, false, undefined, this)
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("div", {
-            className: "gizmo-middle-row",
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-                className: "gizmo-face gizmo-left",
-                onClick: () => onViewpointChange("left"),
-                title: "Left (Ctrl+Numpad 3)",
-                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-                  className: "gizmo-label gizmo-x-neg",
-                  children: "−X"
-                }, undefined, false, undefined, this)
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-                className: "gizmo-face gizmo-front",
-                onClick: () => onViewpointChange("front"),
-                title: "Front (Numpad 1)",
-                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-                  className: "gizmo-label gizmo-y-neg",
-                  children: "−Y"
-                }, undefined, false, undefined, this)
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-                className: "gizmo-face gizmo-right",
-                onClick: () => onViewpointChange("right"),
-                title: "Right (Numpad 3)",
-                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-                  className: "gizmo-label gizmo-x",
-                  children: "X"
-                }, undefined, false, undefined, this)
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-                className: "gizmo-face gizmo-back",
-                onClick: () => onViewpointChange("back"),
-                title: "Back (Ctrl+Numpad 1)",
-                children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-                  className: "gizmo-label gizmo-y",
-                  children: "Y"
-                }, undefined, false, undefined, this)
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-            className: "gizmo-face gizmo-bottom",
-            onClick: () => onViewpointChange("bottom"),
-            title: "Bottom (Ctrl+Numpad 7)",
-            children: /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("span", {
-              className: "gizmo-label gizmo-z-neg",
-              children: "−Z"
-            }, undefined, false, undefined, this)
-          }, undefined, false, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime11.jsxDEV("button", {
-        className: `gizmo-ortho-toggle ${isOrtho ? "ortho" : "persp"}`,
-        onClick: onToggleOrtho,
-        title: "Toggle Orthographic/Perspective (Numpad 5)",
-        children: isOrtho ? "Ortho" : "Persp"
-      }, undefined, false, undefined, this)
-    ]
-  }, undefined, true, undefined, this);
-}
-
 // src/components/WelcomeModal.tsx
-var import_react7 = __toESM(require_react(), 1);
-var jsx_dev_runtime12 = __toESM(require_jsx_dev_runtime(), 1);
+var import_react8 = __toESM(require_react(), 1);
+var jsx_dev_runtime16 = __toESM(require_jsx_dev_runtime(), 1);
 var STORAGE_KEY = "ps1ender_welcome_shown";
 function WelcomeModal({ onClose }) {
-  const [dontShowAgain, setDontShowAgain] = import_react7.useState(false);
+  const [dontShowAgain, setDontShowAgain] = import_react8.useState(false);
   const handleClose = () => {
     if (dontShowAgain) {
       localStorage.setItem(STORAGE_KEY, "true");
     }
     onClose();
   };
-  return /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
     className: "modal-overlay",
     onClick: handleClose,
-    children: /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+    children: /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
       className: "modal-content welcome-modal",
       onClick: (e) => e.stopPropagation(),
       children: [
-        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
           className: "welcome-header",
           children: [
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h1", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h1", {
               children: "Welcome to PS1ender"
             }, undefined, false, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("p", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("p", {
               className: "welcome-subtitle",
               children: "A retro-style 3D editor with PS1 aesthetics"
             }, undefined, false, undefined, this)
           ]
         }, undefined, true, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
           className: "welcome-sections",
           children: [
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h3", {
                   children: "\uD83C\uDFAE Navigation"
                 }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("ul", {
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "Scroll"
                         }, undefined, false, undefined, this),
                         " Orbit camera around object"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⌘ + Scroll"
                         }, undefined, false, undefined, this),
                         " Zoom in/out"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⇧ + Scroll"
                         }, undefined, false, undefined, this),
                         " Pan camera"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "1"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "3"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "7"
                         }, undefined, false, undefined, this),
                         " Snap to front/side/top views"
@@ -28666,65 +29356,65 @@ function WelcomeModal({ onClose }) {
                 }, undefined, true, undefined, this)
               ]
             }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h3", {
                   children: "\uD83D\uDD27 Object Mode"
                 }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("ul", {
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "LMB"
                         }, undefined, false, undefined, this),
                         " Select object"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⇧ + A"
                         }, undefined, false, undefined, this),
                         " Add primitive (cube, plane, etc.)"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "G"
                         }, undefined, false, undefined, this),
                         " Grab/Move selected object"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "R"
                         }, undefined, false, undefined, this),
                         " Rotate selected object"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "S"
                         }, undefined, false, undefined, this),
                         " Scale selected object"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "X"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "Y"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "Z"
                         }, undefined, false, undefined, this),
                         " Constrain to axis"
@@ -28734,128 +29424,128 @@ function WelcomeModal({ onClose }) {
                 }, undefined, true, undefined, this)
               ]
             }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h3", {
                   children: "✏️ Edit Mode"
                 }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("ul", {
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "Tab"
                         }, undefined, false, undefined, this),
                         " Toggle Edit/Object mode"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "1"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "2"
                         }, undefined, false, undefined, this),
                         " ",
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "3"
                         }, undefined, false, undefined, this),
                         " Vertex/Edge/Face selection"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "E"
                         }, undefined, false, undefined, this),
                         " Extrude edges/faces"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "F"
                         }, undefined, false, undefined, this),
                         " Fill selection (create face/edge)"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "A"
                         }, undefined, false, undefined, this),
                         " Select all"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: "Same G/R/S transforms work on selection"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this)
               ]
             }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h3", {
                   children: "\uD83C\uDFA8 Shading Workspace"
                 }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("ul", {
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: 'Click "Shading" tab to open node editor'
                     }, undefined, false, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⇧ + A"
                         }, undefined, false, undefined, this),
                         " Add node (Texture, Color, Mix, Voronoi...)"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: "Drag connections between sockets"
                     }, undefined, false, undefined, this)
                   ]
                 }, undefined, true, undefined, this)
               ]
             }, undefined, true, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-section",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("h3", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("h3", {
                   children: "\uD83D\uDCBE General"
                 }, undefined, false, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("ul", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("ul", {
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⌘ + Z"
                         }, undefined, false, undefined, this),
                         " Undo"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "⌘ + ⇧ + Z"
                         }, undefined, false, undefined, this),
                         " Redo"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: [
-                        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("kbd", {
+                        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("kbd", {
                           children: "X"
                         }, undefined, false, undefined, this),
                         " Delete selected"
                       ]
                     }, undefined, true, undefined, this),
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("li", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("li", {
                       children: "Drag & drop .OBJ, .GLTF, .GLB files to import"
                     }, undefined, false, undefined, this)
                   ]
@@ -28864,20 +29554,20 @@ function WelcomeModal({ onClose }) {
             }, undefined, true, undefined, this)
           ]
         }, undefined, true, undefined, this),
-        /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+        /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
           className: "welcome-footer",
           children: [
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("p", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("p", {
               className: "welcome-note",
               children: "\uD83E\uDD16 This project was entirely written by AI (Claude) under human supervision. Total cost: ~$100 in tokens."
             }, undefined, false, undefined, this),
-            /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("div", {
+            /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("div", {
               className: "welcome-footer-actions",
               children: [
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("label", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("label", {
                   className: "welcome-checkbox",
                   children: [
-                    /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("input", {
+                    /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("input", {
                       type: "checkbox",
                       checked: dontShowAgain,
                       onChange: (e) => setDontShowAgain(e.target.checked)
@@ -28885,7 +29575,7 @@ function WelcomeModal({ onClose }) {
                     "Don't show this again"
                   ]
                 }, undefined, true, undefined, this),
-                /* @__PURE__ */ jsx_dev_runtime12.jsxDEV("button", {
+                /* @__PURE__ */ jsx_dev_runtime16.jsxDEV("button", {
                   className: "welcome-btn",
                   onClick: handleClose,
                   children: "Get Started"
@@ -28902,295 +29592,8 @@ function shouldShowWelcome() {
   return localStorage.getItem(STORAGE_KEY) !== "true";
 }
 
-// src/components/PrimitiveSettings.tsx
-var import_react8 = __toESM(require_react(), 1);
-var jsx_dev_runtime13 = __toESM(require_jsx_dev_runtime(), 1);
-function NumberInput({
-  label: label2,
-  value: value2,
-  onChange: onChange2,
-  onSubmit,
-  min,
-  max,
-  step: step2 = 0.1,
-  integer = false
-}) {
-  const [localValue, setLocalValue] = import_react8.useState(value2.toString());
-  import_react8.useEffect(() => {
-    setLocalValue(integer ? value2.toString() : value2.toFixed(3));
-  }, [value2, integer]);
-  const handleChange = import_react8.useCallback((newValue) => {
-    setLocalValue(newValue);
-    let parsed = integer ? parseInt(newValue) : parseFloat(newValue);
-    if (isNaN(parsed))
-      return;
-    if (min !== undefined)
-      parsed = Math.max(min, parsed);
-    if (max !== undefined)
-      parsed = Math.min(max, parsed);
-    onChange2(parsed);
-  }, [onChange2, min, max, integer]);
-  const handleBlur2 = import_react8.useCallback(() => {
-    let parsed = integer ? parseInt(localValue) : parseFloat(localValue);
-    if (isNaN(parsed)) {
-      setLocalValue(integer ? value2.toString() : value2.toFixed(3));
-      return;
-    }
-    if (min !== undefined)
-      parsed = Math.max(min, parsed);
-    if (max !== undefined)
-      parsed = Math.min(max, parsed);
-    setLocalValue(integer ? parsed.toString() : parsed.toFixed(3));
-  }, [localValue, value2, min, max, integer]);
-  const handleKeyDown2 = import_react8.useCallback((e) => {
-    e.stopPropagation();
-    if (e.key === "Enter") {
-      handleBlur2();
-      onSubmit();
-    }
-  }, [handleBlur2, onSubmit]);
-  return /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
-    className: "primitive-setting",
-    children: [
-      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("label", {
-        children: label2
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("input", {
-        type: "text",
-        value: localValue,
-        onChange: (e) => handleChange(e.target.value),
-        onBlur: handleBlur2,
-        onKeyDown: handleKeyDown2
-      }, undefined, false, undefined, this)
-    ]
-  }, undefined, true, undefined, this);
-}
-function PrimitiveSettings({
-  params,
-  onChange: onChange2,
-  onSubmit
-}) {
-  const titles = {
-    plane: "Add Plane",
-    cube: "Add Cube",
-    circle: "Add Circle",
-    uvsphere: "Add UV Sphere",
-    icosphere: "Add Ico Sphere",
-    cylinder: "Add Cylinder",
-    cone: "Add Cone",
-    torus: "Add Torus"
-  };
-  const title = titles[params.type];
-  return /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
-    className: "primitive-settings-modal",
-    children: [
-      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
-        className: "primitive-settings-header",
-        children: title
-      }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime13.jsxDEV("div", {
-        className: "primitive-settings-content",
-        children: [
-          params.type === "plane" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-            label: "Size",
-            value: params.planeSize ?? 2,
-            onChange: (v) => onChange2({ ...params, planeSize: v }),
-            onSubmit,
-            min: 0.01,
-            step: 0.1
-          }, undefined, false, undefined, this),
-          params.type === "cube" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-            label: "Size",
-            value: params.cubeSize ?? 2,
-            onChange: (v) => onChange2({ ...params, cubeSize: v }),
-            onSubmit,
-            min: 0.01,
-            step: 0.1
-          }, undefined, false, undefined, this),
-          params.type === "circle" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Vertices",
-                value: params.circleVertices ?? 32,
-                onChange: (v) => onChange2({ ...params, circleVertices: v }),
-                onSubmit,
-                min: 3,
-                max: 128,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius",
-                value: params.circleRadius ?? 1,
-                onChange: (v) => onChange2({ ...params, circleRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          params.type === "uvsphere" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Segments",
-                value: params.uvSphereSegments ?? 32,
-                onChange: (v) => onChange2({ ...params, uvSphereSegments: v }),
-                onSubmit,
-                min: 3,
-                max: 64,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Rings",
-                value: params.uvSphereRings ?? 16,
-                onChange: (v) => onChange2({ ...params, uvSphereRings: v }),
-                onSubmit,
-                min: 2,
-                max: 32,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius",
-                value: params.uvSphereRadius ?? 1,
-                onChange: (v) => onChange2({ ...params, uvSphereRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          params.type === "icosphere" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Subdivisions",
-                value: params.icoSphereSubdivisions ?? 2,
-                onChange: (v) => onChange2({ ...params, icoSphereSubdivisions: v }),
-                onSubmit,
-                min: 1,
-                max: 5,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius",
-                value: params.icoSphereRadius ?? 1,
-                onChange: (v) => onChange2({ ...params, icoSphereRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          params.type === "cylinder" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Vertices",
-                value: params.cylinderVertices ?? 32,
-                onChange: (v) => onChange2({ ...params, cylinderVertices: v }),
-                onSubmit,
-                min: 3,
-                max: 64,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius",
-                value: params.cylinderRadius ?? 1,
-                onChange: (v) => onChange2({ ...params, cylinderRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Depth",
-                value: params.cylinderDepth ?? 2,
-                onChange: (v) => onChange2({ ...params, cylinderDepth: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          params.type === "cone" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Vertices",
-                value: params.coneVertices ?? 32,
-                onChange: (v) => onChange2({ ...params, coneVertices: v }),
-                onSubmit,
-                min: 3,
-                max: 64,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius 1",
-                value: params.coneRadius1 ?? 1,
-                onChange: (v) => onChange2({ ...params, coneRadius1: v }),
-                onSubmit,
-                min: 0,
-                step: 0.1
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Radius 2",
-                value: params.coneRadius2 ?? 0,
-                onChange: (v) => onChange2({ ...params, coneRadius2: v }),
-                onSubmit,
-                min: 0,
-                step: 0.1
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Depth",
-                value: params.coneDepth ?? 2,
-                onChange: (v) => onChange2({ ...params, coneDepth: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this),
-          params.type === "torus" && /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(jsx_dev_runtime13.Fragment, {
-            children: [
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Major Segments",
-                value: params.torusMajorSegments ?? 48,
-                onChange: (v) => onChange2({ ...params, torusMajorSegments: v }),
-                onSubmit,
-                min: 3,
-                max: 64,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Minor Segments",
-                value: params.torusMinorSegments ?? 12,
-                onChange: (v) => onChange2({ ...params, torusMinorSegments: v }),
-                onSubmit,
-                min: 3,
-                max: 32,
-                integer: true
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Major Radius",
-                value: params.torusMajorRadius ?? 1,
-                onChange: (v) => onChange2({ ...params, torusMajorRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.1
-              }, undefined, false, undefined, this),
-              /* @__PURE__ */ jsx_dev_runtime13.jsxDEV(NumberInput, {
-                label: "Minor Radius",
-                value: params.torusMinorRadius ?? 0.25,
-                onChange: (v) => onChange2({ ...params, torusMinorRadius: v }),
-                onSubmit,
-                min: 0.01,
-                step: 0.05
-              }, undefined, false, undefined, this)
-            ]
-          }, undefined, true, undefined, this)
-        ]
-      }, undefined, true, undefined, this)
-    ]
-  }, undefined, true, undefined, this);
-}
-
 // src/App.tsx
-var jsx_dev_runtime14 = __toESM(require_jsx_dev_runtime(), 1);
+var jsx_dev_runtime17 = __toESM(require_jsx_dev_runtime(), 1);
 function App() {
   const canvasRef = import_react9.useRef(null);
   const viewportRef = import_react9.useRef(null);
@@ -29249,21 +29652,8 @@ function App() {
   const [selectedMaterialId, setSelectedMaterialId] = import_react9.useState(null);
   const [materialList, setMaterialList] = import_react9.useState([]);
   const textureMap = import_react9.useMemo(() => {
-    const map = new Map;
     const scene = sceneRef.current;
-    for (const obj of scene.objects) {
-      if (obj.texture && obj.materialId) {
-        const material = scene.materials.get(obj.materialId);
-        if (material) {
-          for (const node of material.nodes) {
-            if (node.type === "texture" && node.data.imagePath) {
-              map.set(node.data.imagePath, obj.texture);
-            }
-          }
-        }
-      }
-    }
-    return map;
+    return scene.textures;
   }, [sceneObjects, materialList]);
   const [primitiveParams, setPrimitiveParams] = import_react9.useState(null);
   const newPrimitiveRef = import_react9.useRef(null);
@@ -29321,71 +29711,15 @@ function App() {
     try {
       console.log(`Loading OBJ: ${url}`);
       clearTextureCache();
-      const result2 = await OBJLoader.load(url, new Color(200, 200, 200));
-      const mtlToShaderMaterial = new Map;
-      for (const [mtlName, mtlMat] of result2.materials) {
-        const texWidth = result2.defaultTexture?.width || 0;
-        const texHeight = result2.defaultTexture?.height || 0;
-        const shaderMat = scene.materials.createFromMTL({
-          name: mtlName,
-          diffuseColor: mtlMat.diffuseColor,
-          diffuseTexturePath: mtlMat.diffuseTexturePath,
-          textureWidth: texWidth,
-          textureHeight: texHeight
-        });
-        mtlToShaderMaterial.set(mtlName, shaderMat.id);
-        console.log(`Created shader material "${mtlName}" from MTL`);
-      }
-      const meshEntries = Array.from(result2.meshes.entries());
-      let firstObj = null;
-      let overallCenter = Vector3.zero();
-      let meshCount = 0;
-      for (const [, mesh] of meshEntries) {
-        const center = mesh.getCenter();
-        overallCenter = overallCenter.add(center);
-        meshCount++;
-      }
-      if (meshCount > 0) {
-        overallCenter = overallCenter.mul(1 / meshCount);
-      }
-      const createdObjects = [];
-      for (const [meshName, mesh] of meshEntries) {
-        const objectName = meshName !== "default" ? meshName : "default";
-        const obj = new SceneObject(objectName, mesh);
-        obj.position = new Vector3(-overallCenter.x, -overallCenter.y, -overallCenter.z);
-        const mtlMaterialName = result2.groupMaterials.get(meshName);
-        if (mtlMaterialName && mtlToShaderMaterial.has(mtlMaterialName)) {
-          obj.materialId = mtlToShaderMaterial.get(mtlMaterialName);
-        } else if (mtlToShaderMaterial.size > 0) {
-          obj.materialId = mtlToShaderMaterial.values().next().value;
-        }
-        scene.addObject(obj);
-        createdObjects.push(obj);
-        if (!firstObj) {
-          firstObj = obj;
-        }
-        console.log(`Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`);
-      }
-      if (firstObj) {
-        scene.selectObject(firstObj);
-      }
+      const result2 = await loadOBJToScene(url, scene);
       if (result2.defaultTexture) {
-        console.log("Loaded texture, assigning to loaded objects");
-        for (const obj of createdObjects) {
-          obj.texture = result2.defaultTexture;
-        }
         textureRef.current = result2.defaultTexture;
         textureChangedRef.current = true;
       }
       setMaterialList([...scene.materials.getAll()]);
-      if (firstObj && firstObj.materialId) {
-        setSelectedMaterialId(firstObj.materialId);
+      if (result2.firstObject?.materialId) {
+        setSelectedMaterialId(result2.firstObject.materialId);
       }
-      const size = result2.defaultMesh.getSize();
-      const maxDim = Math.max(size.x, size.y, size.z);
-      scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
-      scene.camera.target = Vector3.zero();
-      console.log(`Loaded OBJ with ${meshEntries.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load OBJ file: ${error}`);
     }
@@ -29395,202 +29729,15 @@ function App() {
     try {
       console.log(`Loading GLTF: ${url}`);
       clearTextureCache();
-      const result2 = await GLTFLoader.load(url);
-      const gltfToShaderMaterial = new Map;
-      for (const [matName, gltfMat] of result2.materials) {
-        const shaderMat = scene.materials.createMaterial(matName);
-        const hasTexture = gltfMat.texture !== null;
-        const c = gltfMat.baseColor;
-        const colorHex = "#" + c.r.toString(16).padStart(2, "0") + c.g.toString(16).padStart(2, "0") + c.b.toString(16).padStart(2, "0");
-        if (hasTexture) {
-          const isWhite = c.r >= 250 && c.g >= 250 && c.b >= 250;
-          if (isWhite) {
-            shaderMat.nodes = [
-              {
-                id: "output-1",
-                type: "output",
-                x: 500,
-                y: 150,
-                width: 140,
-                height: 80,
-                inputs: [
-                  { id: "color", name: "Color", type: "color", isInput: true }
-                ],
-                outputs: [],
-                data: {}
-              },
-              {
-                id: "texture-1",
-                type: "texture",
-                x: 150,
-                y: 100,
-                width: 180,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false }
-                ],
-                data: {
-                  imagePath: gltfMat.textureName || matName,
-                  textureWidth: gltfMat.texture.width,
-                  textureHeight: gltfMat.texture.height
-                }
-              }
-            ];
-            shaderMat.connections = [
-              {
-                id: "conn-1",
-                fromNodeId: "texture-1",
-                fromSocketId: "color",
-                toNodeId: "output-1",
-                toSocketId: "color"
-              }
-            ];
-          } else {
-            shaderMat.nodes = [
-              {
-                id: "output-1",
-                type: "output",
-                x: 650,
-                y: 150,
-                width: 140,
-                height: 80,
-                inputs: [
-                  { id: "color", name: "Color", type: "color", isInput: true }
-                ],
-                outputs: [],
-                data: {}
-              },
-              {
-                id: "texture-1",
-                type: "texture",
-                x: 100,
-                y: 80,
-                width: 180,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false }
-                ],
-                data: {
-                  imagePath: gltfMat.textureName || matName,
-                  textureWidth: gltfMat.texture.width,
-                  textureHeight: gltfMat.texture.height
-                }
-              },
-              {
-                id: "flat-color-1",
-                type: "flat-color",
-                x: 100,
-                y: 200,
-                width: 160,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false }
-                ],
-                data: { color: colorHex }
-              },
-              {
-                id: "mix-1",
-                type: "mix",
-                x: 400,
-                y: 130,
-                width: 160,
-                height: 120,
-                inputs: [
-                  {
-                    id: "color1",
-                    name: "Color1",
-                    type: "color",
-                    isInput: true
-                  },
-                  {
-                    id: "color2",
-                    name: "Color2",
-                    type: "color",
-                    isInput: true
-                  }
-                ],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false }
-                ],
-                data: { blendMode: "multiply", factor: 1 }
-              }
-            ];
-            shaderMat.connections = [
-              {
-                id: "conn-1",
-                fromNodeId: "texture-1",
-                fromSocketId: "color",
-                toNodeId: "mix-1",
-                toSocketId: "color1"
-              },
-              {
-                id: "conn-2",
-                fromNodeId: "flat-color-1",
-                fromSocketId: "color",
-                toNodeId: "mix-1",
-                toSocketId: "color2"
-              },
-              {
-                id: "conn-3",
-                fromNodeId: "mix-1",
-                fromSocketId: "color",
-                toNodeId: "output-1",
-                toSocketId: "color"
-              }
-            ];
-          }
-          console.log(`Created textured material "${matName}" (${gltfMat.texture.width}x${gltfMat.texture.height})`);
-        } else {
-          const flatColorNode = shaderMat.nodes.find((n) => n.type === "flat-color");
-          if (flatColorNode && flatColorNode.data) {
-            flatColorNode.data.color = colorHex;
-          }
-        }
-        gltfToShaderMaterial.set(matName, shaderMat.id);
-        console.log(`Created shader material "${matName}" from GLTF`);
-      }
-      let firstObj = null;
-      const createdObjects = [];
-      const objectsWithMeshes = result2.sceneObjects.filter((obj) => obj.mesh.vertices.length > 0);
-      for (const obj of objectsWithMeshes) {
-        const matName = result2.meshMaterials.get(obj.name);
-        if (matName && gltfToShaderMaterial.has(matName)) {
-          obj.materialId = gltfToShaderMaterial.get(matName);
-        } else if (gltfToShaderMaterial.size > 0) {
-          obj.materialId = gltfToShaderMaterial.values().next().value;
-        }
-        const gltfMat = matName ? result2.materials.get(matName) : null;
-        if (gltfMat?.texture) {
-          obj.texture = gltfMat.texture;
-          if (!textureRef.current) {
-            textureRef.current = gltfMat.texture;
-            textureChangedRef.current = true;
-          }
-        }
-        scene.addObject(obj);
-        createdObjects.push(obj);
-        if (!firstObj) {
-          firstObj = obj;
-        }
-        console.log(`Loaded mesh "${obj.name}" with ${obj.mesh.triangles.length} triangles`);
-      }
-      if (firstObj) {
-        scene.selectObject(firstObj);
+      const result2 = await loadGLTFToScene(url, scene);
+      if (result2.defaultTexture) {
+        textureRef.current = result2.defaultTexture;
+        textureChangedRef.current = true;
       }
       setMaterialList([...scene.materials.getAll()]);
-      if (firstObj && firstObj.materialId) {
-        setSelectedMaterialId(firstObj.materialId);
+      if (result2.firstObject?.materialId) {
+        setSelectedMaterialId(result2.firstObject.materialId);
       }
-      if (result2.defaultMesh.vertices.length > 0) {
-        const size = result2.defaultMesh.getSize();
-        const maxDim = Math.max(size.x, size.y, size.z);
-        scene.camera.position = new Vector3(maxDim * -2, maxDim * -1.5, maxDim * 0.4);
-        scene.camera.target = Vector3.zero();
-      }
-      console.log(`Loaded GLTF with ${createdObjects.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load GLTF file: ${error}`);
     }
@@ -29806,6 +29953,33 @@ function App() {
       }
     }
     beforeTransformRef.current = null;
+  }, []);
+  const handleSelectMaterial = import_react9.useCallback((id) => {
+    setSelectedMaterialId(id);
+    const scene = sceneRef.current;
+    const selectedObjs = scene.getSelectedObjects();
+    if (selectedObjs.length > 0) {
+      for (const obj of selectedObjs) {
+        obj.materialId = id;
+      }
+    }
+  }, []);
+  const handleMaterialChange = import_react9.useCallback((newMaterial) => {
+    const scene = sceneRef.current;
+    scene.materials.update(newMaterial);
+    setMaterialList([...scene.materials.getAll()]);
+  }, []);
+  const handleNewMaterial = import_react9.useCallback(() => {
+    const scene = sceneRef.current;
+    const newMat = scene.materials.createMaterial("Material");
+    setMaterialList([...scene.materials.getAll()]);
+    setSelectedMaterialId(newMat.id);
+    const selectedObjs = scene.getSelectedObjects();
+    if (selectedObjs.length > 0) {
+      for (const obj of selectedObjs) {
+        obj.materialId = newMat.id;
+      }
+    }
   }, []);
   const handlePositionChange = import_react9.useCallback((position) => {
     const scene = sceneRef.current;
@@ -30147,10 +30321,10 @@ function App() {
         canvas.removeEventListener("mouseleave", handleViewportLeave);
     };
   }, [resizeCanvas, loadOBJ, updateUIState]);
-  return /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
+  return /* @__PURE__ */ jsx_dev_runtime17.jsxDEV("div", {
     className: `app-layout ${workspace === "shading" ? "shading-workspace" : ""}`,
     children: [
-      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(Toolbar, {
+      /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(Toolbar, {
         mode: editorMode,
         transformMode,
         viewMode,
@@ -30161,93 +30335,43 @@ function App() {
         onSelectionModeChange: handleSelectionModeChange,
         onWorkspaceChange: setWorkspace
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
-        className: "viewport",
-        ref: viewportRef,
+      /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(Viewport, {
+        viewportRef,
+        canvasRef,
         onDragOver: handleDragOver,
         onDrop: handleDrop,
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("canvas", {
-            id: "canvas",
-            ref: canvasRef
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(Instructions, {}, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(ViewportGizmo, {
-            onViewpointChange: handleViewpointChange,
-            onToggleOrtho: handleToggleOrtho,
-            isOrtho
-          }, undefined, false, undefined, this),
-          primitiveParams && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(PrimitiveSettings, {
-            params: primitiveParams,
-            onChange: handlePrimitiveParamsChange,
-            onSubmit: handlePrimitiveSubmit
-          }, undefined, false, undefined, this),
-          boxSelection && boxSelection.active && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
-            className: "box-selection",
-            style: {
-              left: Math.min(boxSelection.startX, boxSelection.currentX),
-              top: Math.min(boxSelection.startY, boxSelection.currentY),
-              width: Math.abs(boxSelection.currentX - boxSelection.startX),
-              height: Math.abs(boxSelection.currentY - boxSelection.startY)
-            }
-          }, undefined, false, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      workspace === "shading" && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(NodeEditor, {
+        onViewpointChange: handleViewpointChange,
+        onToggleOrtho: handleToggleOrtho,
+        isOrtho,
+        primitiveParams,
+        onPrimitiveParamsChange: handlePrimitiveParamsChange,
+        onPrimitiveSubmit: handlePrimitiveSubmit,
+        boxSelection
+      }, undefined, false, undefined, this),
+      workspace === "shading" && /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(ShadingWorkspace, {
         materials: materialList,
         selectedMaterialId,
         textureMap,
-        onSelectMaterial: (id) => {
-          setSelectedMaterialId(id);
-          const scene = sceneRef.current;
-          const selectedObjs = scene.getSelectedObjects();
-          if (selectedObjs.length > 0) {
-            for (const obj of selectedObjs) {
-              obj.materialId = id;
-            }
-          }
-        },
-        onMaterialChange: (newMaterial) => {
-          const scene = sceneRef.current;
-          scene.materials.update(newMaterial);
-          setMaterialList([...scene.materials.getAll()]);
-        },
-        onNewMaterial: () => {
-          const scene = sceneRef.current;
-          const newMat = scene.materials.createMaterial("Material");
-          setMaterialList([...scene.materials.getAll()]);
-          setSelectedMaterialId(newMat.id);
-          const selectedObjs = scene.getSelectedObjects();
-          if (selectedObjs.length > 0) {
-            for (const obj of selectedObjs) {
-              obj.materialId = newMat.id;
-            }
-          }
-        }
+        onSelectMaterial: handleSelectMaterial,
+        onMaterialChange: handleMaterialChange,
+        onNewMaterial: handleNewMaterial
       }, undefined, false, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV("div", {
-        className: "sidebar",
-        children: [
-          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(SceneTree, {
-            objects: sceneObjects,
-            onSelectObject: handleSelectObject,
-            onToggleVisibility: handleToggleVisibility
-          }, undefined, false, undefined, this),
-          /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(PropertiesPanel, {
-            objectName: selectedObjectName,
-            position: selectedPosition,
-            rotation: selectedRotation,
-            scale: selectedScale,
-            dimensions: selectedDimensions,
-            onPositionChange: handlePositionChange,
-            onRotationChange: handleRotationChange,
-            onScaleChange: handleScaleChange,
-            onEditStart: handleEditStart,
-            onEditEnd: handleEditEnd
-          }, undefined, false, undefined, this)
-        ]
-      }, undefined, true, undefined, this),
-      /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(StatusBar, {
+      /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(Sidebar, {
+        objects: sceneObjects,
+        onSelectObject: handleSelectObject,
+        onToggleVisibility: handleToggleVisibility,
+        selectedObjectName,
+        selectedPosition,
+        selectedRotation,
+        selectedScale,
+        selectedDimensions,
+        onPositionChange: handlePositionChange,
+        onRotationChange: handleRotationChange,
+        onScaleChange: handleScaleChange,
+        onEditStart: handleEditStart,
+        onEditEnd: handleEditEnd
+      }, undefined, false, undefined, this),
+      /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(StatusBar, {
         mode: editorMode,
         selectionMode,
         transformMode,
@@ -30261,13 +30385,13 @@ function App() {
         renderWidth,
         renderHeight
       }, undefined, false, undefined, this),
-      addMenuPos && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(AddMenu, {
+      addMenuPos && /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(AddMenu, {
         x: addMenuPos.x,
         y: addMenuPos.y,
         onSelect: handleAddPrimitive,
         onClose: () => setAddMenuPos(null)
       }, undefined, false, undefined, this),
-      contextMenuPos && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(ShadingContextMenu, {
+      contextMenuPos && /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(ShadingContextMenu, {
         x: contextMenuPos.x,
         y: contextMenuPos.y,
         onAction: (action) => {
@@ -30292,7 +30416,7 @@ function App() {
         },
         onClose: () => setContextMenuPos(null)
       }, undefined, false, undefined, this),
-      showWelcome && /* @__PURE__ */ jsx_dev_runtime14.jsxDEV(WelcomeModal, {
+      showWelcome && /* @__PURE__ */ jsx_dev_runtime17.jsxDEV(WelcomeModal, {
         onClose: () => setShowWelcome(false)
       }, undefined, false, undefined, this)
     ]
@@ -30301,5 +30425,5 @@ function App() {
 var container = document.getElementById("root");
 if (container) {
   const root = import_client.createRoot(container);
-  root.render(/* @__PURE__ */ jsx_dev_runtime14.jsxDEV(App, {}, undefined, false, undefined, this));
+  root.render(/* @__PURE__ */ jsx_dev_runtime17.jsxDEV(App, {}, undefined, false, undefined, this));
 }

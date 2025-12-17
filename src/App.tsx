@@ -11,8 +11,8 @@ import {
   createConeMesh,
   createTorusMesh,
 } from "./primitives";
-import { OBJLoader } from "./obj-loader";
-import { GLTFLoader } from "./gltf-loader";
+import { OBJLoader, loadOBJToScene } from "./obj-loader";
+import { GLTFLoader, loadGLTFToScene } from "./gltf-loader";
 import { Scene, SceneObject } from "./scene";
 import { Editor, ViewMode } from "./editor";
 import { InputManager } from "./systems/input";
@@ -29,19 +29,14 @@ import { Texture } from "./texture";
 import { Material } from "./material";
 import { Toolbar } from "./components/Toolbar";
 import { WorkspaceType } from "./components/WorkspaceTabs";
-import { NodeEditor } from "./components/NodeEditor";
-import { SceneTree } from "./components/SceneTree";
-import { PropertiesPanel } from "./components/PropertiesPanel";
+import { Viewport } from "./components/Viewport";
+import { Sidebar } from "./components/Sidebar";
+import { ShadingWorkspace } from "./components/ShadingWorkspace";
 import { StatusBar } from "./components/StatusBar";
-import { Instructions } from "./components/Instructions";
 import { AddMenu, PrimitiveType } from "./components/AddMenu";
 import { ShadingContextMenu } from "./components/ShadingContextMenu";
-import { ViewportGizmo } from "./components/ViewportGizmo";
 import { WelcomeModal, shouldShowWelcome } from "./components/WelcomeModal";
-import {
-  PrimitiveSettings,
-  PrimitiveParams,
-} from "./components/PrimitiveSettings";
+import { PrimitiveParams } from "./components/PrimitiveSettings";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -125,25 +120,12 @@ function App() {
   // Track material list for re-render (registry changes don't trigger re-render)
   const [materialList, setMaterialList] = useState<Material[]>([]);
 
-  // Build texture map from scene objects for shader editor previews
+  // Build texture map from scene's texture registry for shader editor previews
   const textureMap = useMemo(() => {
-    const map = new Map<string, Texture>();
     const scene = sceneRef.current;
-    // Collect textures from all objects and map by material texture node imagePath
-    for (const obj of scene.objects) {
-      if (obj.texture && obj.materialId) {
-        const material = scene.materials.get(obj.materialId);
-        if (material) {
-          // Find texture nodes and map their imagePath to the texture
-          for (const node of material.nodes) {
-            if (node.type === "texture" && node.data.imagePath) {
-              map.set(node.data.imagePath as string, obj.texture);
-            }
-          }
-        }
-      }
-    }
-    return map;
+    // Return the scene's texture registry directly
+    // This contains all registered textures keyed by their path/ID
+    return scene.textures;
   }, [sceneObjects, materialList]);
 
   // Primitive settings modal state (appears after creating a primitive)
@@ -232,113 +214,22 @@ function App() {
       console.log(`Loading OBJ: ${url}`);
       // Clear texture cache so new textures are sent to worker
       clearTextureCache();
-      const result = await OBJLoader.load(url, new Color(200, 200, 200));
 
-      // Create shader materials from MTL materials
-      const mtlToShaderMaterial = new Map<string, string>(); // MTL name -> shader material ID
-      for (const [mtlName, mtlMat] of result.materials) {
-        // Get texture dimensions if texture exists
-        const texWidth = result.defaultTexture?.width || 0;
-        const texHeight = result.defaultTexture?.height || 0;
+      const result = await loadOBJToScene(url, scene);
 
-        const shaderMat = scene.materials.createFromMTL({
-          name: mtlName,
-          diffuseColor: mtlMat.diffuseColor,
-          diffuseTexturePath: (mtlMat as any).diffuseTexturePath,
-          textureWidth: texWidth,
-          textureHeight: texHeight,
-        });
-        mtlToShaderMaterial.set(mtlName, shaderMat.id);
-        console.log(`Created shader material "${mtlName}" from MTL`);
-      }
-
-      // Create scene objects from all loaded meshes
-      const meshEntries = Array.from(result.meshes.entries());
-      let firstObj: SceneObject | null = null;
-      let overallCenter = Vector3.zero();
-      let meshCount = 0;
-
-      // Calculate overall center of all meshes
-      for (const [, mesh] of meshEntries) {
-        const center = mesh.getCenter();
-        overallCenter = overallCenter.add(center);
-        meshCount++;
-      }
-      if (meshCount > 0) {
-        overallCenter = overallCenter.mul(1 / meshCount);
-      }
-
-      // Create a scene object for each mesh
-      const createdObjects: SceneObject[] = [];
-      for (const [meshName, mesh] of meshEntries) {
-        // Use mesh name from OBJ file, fallback to provided name for "default" group
-        const objectName = meshName !== "default" ? meshName : "default";
-
-        const obj = new SceneObject(objectName, mesh);
-
-        // Center relative to overall center
-        obj.position = new Vector3(
-          -overallCenter.x,
-          -overallCenter.y,
-          -overallCenter.z
-        );
-
-        // Find and assign material from MTL if available
-        // Check if this mesh's group had a material assigned
-        const mtlMaterialName = result.groupMaterials.get(meshName);
-        if (mtlMaterialName && mtlToShaderMaterial.has(mtlMaterialName)) {
-          obj.materialId = mtlToShaderMaterial.get(mtlMaterialName)!;
-        } else if (mtlToShaderMaterial.size > 0) {
-          // Use first material if no specific assignment
-          obj.materialId = mtlToShaderMaterial.values().next().value!;
-        }
-
-        scene.addObject(obj);
-        createdObjects.push(obj);
-
-        if (!firstObj) {
-          firstObj = obj;
-        }
-
-        console.log(
-          `Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`
-        );
-      }
-
-      // Select the first object
-      if (firstObj) {
-        scene.selectObject(firstObj);
-      }
-
-      // Set up texture on each loaded object (not globally)
+      // Set up texture reference for worker
       if (result.defaultTexture) {
-        console.log("Loaded texture, assigning to loaded objects");
-        for (const obj of createdObjects) {
-          obj.texture = result.defaultTexture;
-        }
-        // Still keep global ref for worker texture upload
         textureRef.current = result.defaultTexture;
         textureChangedRef.current = true;
       }
 
       // Update material list state
       setMaterialList([...scene.materials.getAll()]);
+
       // Select the first object's material in shader editor
-      if (firstObj && firstObj.materialId) {
-        setSelectedMaterialId(firstObj.materialId);
+      if (result.firstObject?.materialId) {
+        setSelectedMaterialId(result.firstObject.materialId);
       }
-
-      // Position camera to view all objects
-      const size = result.defaultMesh.getSize();
-      const maxDim = Math.max(size.x, size.y, size.z);
-      scene.camera.position = new Vector3(
-        maxDim * -2,
-        maxDim * -1.5,
-        maxDim * 0.4
-      );
-      scene.camera.target = Vector3.zero();
-
-      console.log(`Loaded OBJ with ${meshEntries.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load OBJ file: ${error}`);
     }
@@ -352,251 +243,22 @@ function App() {
       console.log(`Loading GLTF: ${url}`);
       // Clear texture cache so new textures are sent to worker
       clearTextureCache();
-      const result = await GLTFLoader.load(url);
 
-      // Create shader materials from GLTF materials
-      const gltfToShaderMaterial = new Map<string, string>();
-      for (const [matName, gltfMat] of result.materials) {
-        const shaderMat = scene.materials.createMaterial(matName);
-        const hasTexture = gltfMat.texture !== null;
+      const result = await loadGLTFToScene(url, scene);
 
-        // Get base color hex
-        const c = gltfMat.baseColor;
-        const colorHex =
-          "#" +
-          c.r.toString(16).padStart(2, "0") +
-          c.g.toString(16).padStart(2, "0") +
-          c.b.toString(16).padStart(2, "0");
-
-        // Rebuild nodes and connections based on whether texture exists
-        if (hasTexture) {
-          const isWhite = c.r >= 250 && c.g >= 250 && c.b >= 250;
-
-          if (isWhite) {
-            // Pure texture (white tint = no color modification)
-            shaderMat.nodes = [
-              {
-                id: "output-1",
-                type: "output",
-                x: 500,
-                y: 150,
-                width: 140,
-                height: 80,
-                inputs: [
-                  { id: "color", name: "Color", type: "color", isInput: true },
-                ],
-                outputs: [],
-                data: {},
-              },
-              {
-                id: "texture-1",
-                type: "texture",
-                x: 150,
-                y: 100,
-                width: 180,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false },
-                ],
-                data: {
-                  imagePath: gltfMat.textureName || matName,
-                  textureWidth: gltfMat.texture!.width,
-                  textureHeight: gltfMat.texture!.height,
-                },
-              },
-            ];
-            shaderMat.connections = [
-              {
-                id: "conn-1",
-                fromNodeId: "texture-1",
-                fromSocketId: "color",
-                toNodeId: "output-1",
-                toSocketId: "color",
-              },
-            ];
-          } else {
-            // Texture + color tint (use Mix node in Multiply mode)
-            shaderMat.nodes = [
-              {
-                id: "output-1",
-                type: "output",
-                x: 650,
-                y: 150,
-                width: 140,
-                height: 80,
-                inputs: [
-                  { id: "color", name: "Color", type: "color", isInput: true },
-                ],
-                outputs: [],
-                data: {},
-              },
-              {
-                id: "texture-1",
-                type: "texture",
-                x: 100,
-                y: 80,
-                width: 180,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false },
-                ],
-                data: {
-                  imagePath: gltfMat.textureName || matName,
-                  textureWidth: gltfMat.texture!.width,
-                  textureHeight: gltfMat.texture!.height,
-                },
-              },
-              {
-                id: "flat-color-1",
-                type: "flat-color",
-                x: 100,
-                y: 200,
-                width: 160,
-                height: 100,
-                inputs: [],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false },
-                ],
-                data: { color: colorHex },
-              },
-              {
-                id: "mix-1",
-                type: "mix",
-                x: 400,
-                y: 130,
-                width: 160,
-                height: 120,
-                inputs: [
-                  {
-                    id: "color1",
-                    name: "Color1",
-                    type: "color",
-                    isInput: true,
-                  },
-                  {
-                    id: "color2",
-                    name: "Color2",
-                    type: "color",
-                    isInput: true,
-                  },
-                ],
-                outputs: [
-                  { id: "color", name: "Color", type: "color", isInput: false },
-                ],
-                data: { blendMode: "multiply", factor: 1.0 },
-              },
-            ];
-            shaderMat.connections = [
-              {
-                id: "conn-1",
-                fromNodeId: "texture-1",
-                fromSocketId: "color",
-                toNodeId: "mix-1",
-                toSocketId: "color1",
-              },
-              {
-                id: "conn-2",
-                fromNodeId: "flat-color-1",
-                fromSocketId: "color",
-                toNodeId: "mix-1",
-                toSocketId: "color2",
-              },
-              {
-                id: "conn-3",
-                fromNodeId: "mix-1",
-                fromSocketId: "color",
-                toNodeId: "output-1",
-                toSocketId: "color",
-              },
-            ];
-          }
-
-          console.log(
-            `Created textured material "${matName}" (${
-              gltfMat.texture!.width
-            }x${gltfMat.texture!.height})`
-          );
-        } else {
-          // No texture - just set the flat color
-          const flatColorNode = shaderMat.nodes.find(
-            (n) => n.type === "flat-color"
-          );
-          if (flatColorNode && flatColorNode.data) {
-            flatColorNode.data.color = colorHex;
-          }
-        }
-
-        gltfToShaderMaterial.set(matName, shaderMat.id);
-        console.log(`Created shader material "${matName}" from GLTF`);
-      }
-
-      // Add scene objects with hierarchy
-      let firstObj: SceneObject | null = null;
-      const createdObjects: SceneObject[] = [];
-
-      // Filter to only objects that have actual mesh geometry
-      const objectsWithMeshes = result.sceneObjects.filter(
-        (obj) => obj.mesh.vertices.length > 0
-      );
-
-      for (const obj of objectsWithMeshes) {
-        // Assign material if available
-        const matName = result.meshMaterials.get(obj.name);
-        if (matName && gltfToShaderMaterial.has(matName)) {
-          obj.materialId = gltfToShaderMaterial.get(matName)!;
-        } else if (gltfToShaderMaterial.size > 0) {
-          obj.materialId = gltfToShaderMaterial.values().next().value!;
-        }
-
-        // Assign texture if material has one
-        const gltfMat = matName ? result.materials.get(matName) : null;
-        if (gltfMat?.texture) {
-          obj.texture = gltfMat.texture;
-          // Keep global ref for worker texture upload
-          if (!textureRef.current) {
-            textureRef.current = gltfMat.texture;
-            textureChangedRef.current = true;
-          }
-        }
-
-        scene.addObject(obj);
-        createdObjects.push(obj);
-
-        if (!firstObj) {
-          firstObj = obj;
-        }
-
-        console.log(
-          `Loaded mesh "${obj.name}" with ${obj.mesh.triangles.length} triangles`
-        );
-      }
-
-      // Select the first object
-      if (firstObj) {
-        scene.selectObject(firstObj);
+      // Set up texture reference for worker
+      if (result.defaultTexture) {
+        textureRef.current = result.defaultTexture;
+        textureChangedRef.current = true;
       }
 
       // Update material list state
       setMaterialList([...scene.materials.getAll()]);
-      if (firstObj && firstObj.materialId) {
-        setSelectedMaterialId(firstObj.materialId);
-      }
 
-      // Position camera to view all objects
-      if (result.defaultMesh.vertices.length > 0) {
-        const size = result.defaultMesh.getSize();
-        const maxDim = Math.max(size.x, size.y, size.z);
-        scene.camera.position = new Vector3(
-          maxDim * -2,
-          maxDim * -1.5,
-          maxDim * 0.4
-        );
-        scene.camera.target = Vector3.zero();
+      // Select the first object's material in shader editor
+      if (result.firstObject?.materialId) {
+        setSelectedMaterialId(result.firstObject.materialId);
       }
-
-      console.log(`Loaded GLTF with ${createdObjects.length} object(s)`);
     } catch (error) {
       console.warn(`Could not load GLTF file: ${error}`);
     }
@@ -931,6 +593,40 @@ function App() {
       }
     }
     beforeTransformRef.current = null;
+  }, []);
+
+  // Material handling callbacks for shading workspace
+  const handleSelectMaterial = useCallback((id: string) => {
+    setSelectedMaterialId(id);
+    // Assign to selected object if in shading workspace
+    const scene = sceneRef.current;
+    const selectedObjs = scene.getSelectedObjects();
+    if (selectedObjs.length > 0) {
+      for (const obj of selectedObjs) {
+        obj.materialId = id;
+      }
+    }
+  }, []);
+
+  const handleMaterialChange = useCallback((newMaterial: Material) => {
+    const scene = sceneRef.current;
+    scene.materials.update(newMaterial);
+    // Update material list to trigger re-render
+    setMaterialList([...scene.materials.getAll()]);
+  }, []);
+
+  const handleNewMaterial = useCallback(() => {
+    const scene = sceneRef.current;
+    const newMat = scene.materials.createMaterial("Material");
+    setMaterialList([...scene.materials.getAll()]);
+    setSelectedMaterialId(newMat.id);
+    // Assign to selected object
+    const selectedObjs = scene.getSelectedObjects();
+    if (selectedObjs.length > 0) {
+      for (const obj of selectedObjs) {
+        obj.materialId = newMat.id;
+      }
+    }
   }, []);
 
   const handlePositionChange = useCallback(
@@ -1506,94 +1202,44 @@ function App() {
         onSelectionModeChange={handleSelectionModeChange}
         onWorkspaceChange={setWorkspace}
       />
-      <div
-        className="viewport"
-        ref={viewportRef}
+      <Viewport
+        viewportRef={viewportRef}
+        canvasRef={canvasRef}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-      >
-        <canvas id="canvas" ref={canvasRef} />
-        <Instructions />
-        <ViewportGizmo
-          onViewpointChange={handleViewpointChange}
-          onToggleOrtho={handleToggleOrtho}
-          isOrtho={isOrtho}
-        />
-        {primitiveParams && (
-          <PrimitiveSettings
-            params={primitiveParams}
-            onChange={handlePrimitiveParamsChange}
-            onSubmit={handlePrimitiveSubmit}
-          />
-        )}
-        {boxSelection && boxSelection.active && (
-          <div
-            className="box-selection"
-            style={{
-              left: Math.min(boxSelection.startX, boxSelection.currentX),
-              top: Math.min(boxSelection.startY, boxSelection.currentY),
-              width: Math.abs(boxSelection.currentX - boxSelection.startX),
-              height: Math.abs(boxSelection.currentY - boxSelection.startY),
-            }}
-          />
-        )}
-      </div>
+        onViewpointChange={handleViewpointChange}
+        onToggleOrtho={handleToggleOrtho}
+        isOrtho={isOrtho}
+        primitiveParams={primitiveParams}
+        onPrimitiveParamsChange={handlePrimitiveParamsChange}
+        onPrimitiveSubmit={handlePrimitiveSubmit}
+        boxSelection={boxSelection}
+      />
       {workspace === "shading" && (
-        <NodeEditor
+        <ShadingWorkspace
           materials={materialList}
           selectedMaterialId={selectedMaterialId}
           textureMap={textureMap}
-          onSelectMaterial={(id) => {
-            setSelectedMaterialId(id);
-            // Assign to selected object if in shading workspace
-            const scene = sceneRef.current;
-            const selectedObjs = scene.getSelectedObjects();
-            if (selectedObjs.length > 0) {
-              for (const obj of selectedObjs) {
-                obj.materialId = id;
-              }
-            }
-          }}
-          onMaterialChange={(newMaterial) => {
-            const scene = sceneRef.current;
-            scene.materials.update(newMaterial);
-            // Update material list to trigger re-render
-            setMaterialList([...scene.materials.getAll()]);
-          }}
-          onNewMaterial={() => {
-            const scene = sceneRef.current;
-            const newMat = scene.materials.createMaterial("Material");
-            setMaterialList([...scene.materials.getAll()]);
-            setSelectedMaterialId(newMat.id);
-            // Assign to selected object
-            const selectedObjs = scene.getSelectedObjects();
-            if (selectedObjs.length > 0) {
-              for (const obj of selectedObjs) {
-                obj.materialId = newMat.id;
-              }
-            }
-          }}
+          onSelectMaterial={handleSelectMaterial}
+          onMaterialChange={handleMaterialChange}
+          onNewMaterial={handleNewMaterial}
         />
       )}
-      <div className="sidebar">
-        <SceneTree
-          objects={sceneObjects}
-          onSelectObject={handleSelectObject}
-          onToggleVisibility={handleToggleVisibility}
-        />
-        <PropertiesPanel
-          objectName={selectedObjectName}
-          position={selectedPosition}
-          rotation={selectedRotation}
-          scale={selectedScale}
-          dimensions={selectedDimensions}
-          onPositionChange={handlePositionChange}
-          onRotationChange={handleRotationChange}
-          onScaleChange={handleScaleChange}
-          onEditStart={handleEditStart}
-          onEditEnd={handleEditEnd}
-        />
-      </div>
+      <Sidebar
+        objects={sceneObjects}
+        onSelectObject={handleSelectObject}
+        onToggleVisibility={handleToggleVisibility}
+        selectedObjectName={selectedObjectName}
+        selectedPosition={selectedPosition}
+        selectedRotation={selectedRotation}
+        selectedScale={selectedScale}
+        selectedDimensions={selectedDimensions}
+        onPositionChange={handlePositionChange}
+        onRotationChange={handleRotationChange}
+        onScaleChange={handleScaleChange}
+        onEditStart={handleEditStart}
+        onEditEnd={handleEditEnd}
+      />
       <StatusBar
         mode={editorMode}
         selectionMode={selectionMode}

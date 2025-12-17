@@ -288,10 +288,26 @@ export class Scene {
   public activeObject: SceneObject | null = null;
   /** Global material registry */
   public materials: MaterialRegistry;
+  /** Texture registry - maps texture paths/IDs to Texture objects */
+  public textures: Map<string, Texture> = new Map();
 
   constructor() {
     this.camera = new Camera();
     this.materials = new MaterialRegistry();
+  }
+
+  /**
+   * Register a texture by path/ID for use by materials
+   */
+  registerTexture(path: string, texture: Texture): void {
+    this.textures.set(path, texture);
+  }
+
+  /**
+   * Get a texture by path/ID
+   */
+  getTexture(path: string): Texture | undefined {
+    return this.textures.get(path);
   }
 
   /**

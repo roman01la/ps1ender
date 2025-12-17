@@ -489,11 +489,29 @@ export function buildRenderFrame(
       ? scene.materials.get(obj.materialId)
       : undefined;
 
-    // Add object's texture to sampler if available
-    if (obj.texture) {
+    // Look up texture from scene's texture registry based on material's texture node
+    // This allows texture to change when material changes
+    let objTexture: Texture | null = null;
+    if (material) {
+      for (const node of material.nodes) {
+        if (node.type === "texture" && node.data.imagePath) {
+          const tex = scene.textures.get(node.data.imagePath as string);
+          if (tex) {
+            objTexture = tex;
+            textureSampler.set("default", tex);
+            textureSampler.set(node.data.imagePath as string, tex);
+            objectTexture = tex; // Track for later use
+            break;
+          }
+        }
+      }
+    }
+
+    // Fallback to obj.texture for backwards compatibility (OBJ files, etc.)
+    if (!objTexture && obj.texture) {
+      objTexture = obj.texture;
       textureSampler.set("default", obj.texture);
-      objectTexture = obj.texture; // Track for later use
-      // Also add by any texture node paths in the material
+      objectTexture = obj.texture;
       if (material) {
         for (const node of material.nodes) {
           if (node.type === "texture" && node.data.imagePath) {
@@ -514,7 +532,7 @@ export function buildRenderFrame(
 
       // Check if material uses texture (texture node connected to output)
       let useTexture = material
-        ? materialUsesTexture(material) && !!obj.texture
+        ? materialUsesTexture(material) && !!objTexture
         : false;
 
       // Build material bake request if needed (worker will do the baking)
@@ -523,13 +541,13 @@ export function buildRenderFrame(
         // Compile material to bytecode for worker
         const compiled = compileMaterialForWorker(material);
 
-        // Include source texture if the material uses texture and object has one
+        // Include source texture if the material uses texture
         let sourceTexture: MaterialBakeRequest["sourceTexture"];
-        if (compiled.hasTexture && obj.texture && obj.texture.loaded) {
+        if (compiled.hasTexture && objTexture && objTexture.loaded) {
           sourceTexture = {
-            data: new Uint8Array(obj.texture.getData()),
-            width: obj.texture.width,
-            height: obj.texture.height,
+            data: new Uint8Array(objTexture.getData()),
+            width: objTexture.width,
+            height: objTexture.height,
           };
         }
 
@@ -538,8 +556,8 @@ export function buildRenderFrame(
           program: compiled.program,
           colorRampData: compiled.colorRampData,
           colorRampCount: compiled.colorRampCount,
-          bakeWidth: obj.texture?.width || 256,
-          bakeHeight: obj.texture?.height || 256,
+          bakeWidth: objTexture?.width || 256,
+          bakeHeight: objTexture?.height || 256,
           sourceTexture,
         };
 
@@ -548,16 +566,16 @@ export function buildRenderFrame(
 
       // Generate texture ID for non-baked textured objects
       let textureId: string | undefined;
-      if (useTexture && !needsBaking && obj.texture && obj.texture.loaded) {
-        textureId = hashTexture(obj.texture);
+      if (useTexture && !needsBaking && objTexture && objTexture.loaded) {
+        textureId = hashTexture(objTexture);
 
         // Only send texture data if not already sent to worker
         if (!sentTextureIds.has(textureId)) {
           frame.textures.push({
             id: textureId,
-            width: obj.texture.width,
-            height: obj.texture.height,
-            data: new Uint8Array(obj.texture.getData()),
+            width: objTexture.width,
+            height: objTexture.height,
+            data: new Uint8Array(objTexture.getData()),
           });
           sentTextureIds.add(textureId);
         }

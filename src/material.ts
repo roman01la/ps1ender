@@ -1125,7 +1125,7 @@ function createDefaultMaterialData(id: string, name: string): Material {
         outputs: [
           { id: "color", name: "Color", type: "color", isInput: false },
         ],
-        data: { color: "#dcdcdcff" },
+        data: { color: "#dcdcdc" },
       },
     ],
     connections: [

@@ -1,6 +1,7 @@
 import { Vector3, Color } from "./math";
 import { Vertex, Mesh, Face } from "./primitives";
 import { Texture, Material, MTLLoader } from "./texture";
+import { SceneObject, Scene } from "./scene";
 
 /**
  * OBJ file loader
@@ -23,6 +24,144 @@ export interface OBJLoadResult {
   mtlFile: string | null;
   /** Maps mesh/group name to its MTL material name */
   groupMaterials: Map<string, string>;
+}
+
+/**
+ * Result from loadToScene - includes data needed to update UI state
+ */
+export interface OBJSceneResult {
+  /** Objects that were added to the scene */
+  objects: SceneObject[];
+  /** First object (for selection) */
+  firstObject: SceneObject | null;
+  /** Default texture (for legacy textureRef) */
+  defaultTexture: Texture | null;
+}
+
+/**
+ * Load OBJ and add objects to scene with materials/textures set up
+ * This is the high-level API that handles all material/texture registration
+ */
+export async function loadOBJToScene(
+  url: string,
+  scene: Scene
+): Promise<OBJSceneResult> {
+  const result = await OBJLoader.load(url);
+
+  // Map OBJ material names to shader material IDs
+  const mtlToShaderMaterial = new Map<string, string>();
+  let defaultTexture: Texture | null = result.defaultTexture;
+
+  // Create shader materials from MTL materials
+  for (const [mtlName, mtlMat] of result.materials) {
+    // Get texture path if present (stored as untyped property by MTLLoader)
+    const texturePath = (mtlMat as any).diffuseTexturePath as
+      | string
+      | undefined;
+
+    const shaderMat = scene.materials.createFromMTL({
+      name: mtlName,
+      diffuseColor: mtlMat.diffuseColor,
+      diffuseTexturePath: texturePath,
+      textureWidth: mtlMat.diffuseTexture?.width || 0,
+      textureHeight: mtlMat.diffuseTexture?.height || 0,
+    });
+    mtlToShaderMaterial.set(mtlName, shaderMat.id);
+
+    // Register texture with scene if present
+    if (mtlMat.diffuseTexture && texturePath) {
+      scene.registerTexture(texturePath, mtlMat.diffuseTexture);
+    }
+
+    console.log(`Created shader material "${mtlName}" from MTL`);
+  }
+
+  // Create scene objects from meshes
+  let firstObj: SceneObject | null = null;
+  const createdObjects: SceneObject[] = [];
+
+  // Calculate scene bounds for centering
+  let minPos = new Vector3(Infinity, Infinity, Infinity);
+  let maxPos = new Vector3(-Infinity, -Infinity, -Infinity);
+
+  for (const [meshName, mesh] of result.meshes) {
+    for (const v of mesh.vertices) {
+      minPos = new Vector3(
+        Math.min(minPos.x, v.position.x),
+        Math.min(minPos.y, v.position.y),
+        Math.min(minPos.z, v.position.z)
+      );
+      maxPos = new Vector3(
+        Math.max(maxPos.x, v.position.x),
+        Math.max(maxPos.y, v.position.y),
+        Math.max(maxPos.z, v.position.z)
+      );
+    }
+  }
+
+  const center = minPos.add(maxPos).mul(0.5);
+
+  for (const [meshName, mesh] of result.meshes) {
+    // Center mesh vertices
+    for (const v of mesh.vertices) {
+      v.position = v.position.sub(center);
+    }
+    mesh.rebuildTriangles();
+
+    // Create scene object
+    const obj = new SceneObject(meshName, mesh);
+
+    // Assign material from MTL
+    const mtlMatName = result.groupMaterials.get(meshName);
+    if (mtlMatName && mtlToShaderMaterial.has(mtlMatName)) {
+      obj.materialId = mtlToShaderMaterial.get(mtlMatName)!;
+
+      // Assign texture if material has one
+      const mtlMat = result.materials.get(mtlMatName);
+      if (mtlMat?.diffuseTexture) {
+        obj.texture = mtlMat.diffuseTexture;
+      }
+    } else if (mtlToShaderMaterial.size > 0) {
+      // Use first material as default
+      obj.materialId = mtlToShaderMaterial.values().next().value!;
+    }
+
+    scene.addObject(obj);
+    createdObjects.push(obj);
+
+    if (!firstObj) {
+      firstObj = obj;
+    }
+
+    console.log(
+      `Loaded mesh "${meshName}" with ${mesh.triangles.length} triangles`
+    );
+  }
+
+  // Select the first object
+  if (firstObj) {
+    scene.selectObject(firstObj);
+  }
+
+  // Position camera to view all objects
+  if (result.defaultMesh.vertices.length > 0) {
+    const size = result.defaultMesh.getSize();
+    const maxDim = Math.max(size.x, size.y, size.z);
+    scene.camera.position = new Vector3(
+      maxDim * 1.5,
+      maxDim * -1.5,
+      maxDim * 0.5
+    );
+    scene.camera.target = Vector3.zero();
+  }
+
+  console.log(`Loaded OBJ with ${createdObjects.length} object(s)`);
+
+  return {
+    objects: createdObjects,
+    firstObject: firstObj,
+    defaultTexture,
+  };
 }
 
 export class OBJLoader {

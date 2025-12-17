@@ -17,7 +17,8 @@
 import { Vector3, Color, Matrix4 } from "./math";
 import { Vertex, Mesh, Face } from "./primitives";
 import { Texture } from "./texture";
-import { SceneObject } from "./scene";
+import { SceneObject, Scene } from "./scene";
+import { ShaderNode, NodeConnection } from "./material";
 
 // ============================================================================
 // GLTF Types (subset of spec)
@@ -194,6 +195,293 @@ export interface GLTFLoadResult {
   sceneObjects: SceneObject[];
   /** Root objects (no parent) */
   rootObjects: SceneObject[];
+}
+
+/**
+ * Result from loadToScene - includes data needed to update UI state
+ */
+export interface GLTFSceneResult {
+  /** Objects that were added to the scene */
+  objects: SceneObject[];
+  /** First object (for selection) */
+  firstObject: SceneObject | null;
+  /** Default texture (for legacy textureRef) */
+  defaultTexture: Texture | null;
+}
+
+/**
+ * Create shader node graph for a textured material
+ */
+function createTexturedMaterialNodes(
+  texturePath: string,
+  textureWidth: number,
+  textureHeight: number,
+  tintColor: string | null
+): { nodes: ShaderNode[]; connections: NodeConnection[] } {
+  if (!tintColor) {
+    // Pure texture (white tint = no color modification)
+    return {
+      nodes: [
+        {
+          id: "output-1",
+          type: "output",
+          x: 500,
+          y: 150,
+          width: 140,
+          height: 80,
+          inputs: [
+            { id: "color", name: "Color", type: "color", isInput: true },
+          ],
+          outputs: [],
+          data: {},
+        },
+        {
+          id: "texture-1",
+          type: "texture",
+          x: 150,
+          y: 100,
+          width: 180,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false },
+          ],
+          data: {
+            imagePath: texturePath,
+            textureWidth,
+            textureHeight,
+          },
+        },
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          fromNodeId: "texture-1",
+          fromSocketId: "color",
+          toNodeId: "output-1",
+          toSocketId: "color",
+        },
+      ],
+    };
+  } else {
+    // Texture + color tint (use Mix node in Multiply mode)
+    return {
+      nodes: [
+        {
+          id: "output-1",
+          type: "output",
+          x: 650,
+          y: 150,
+          width: 140,
+          height: 80,
+          inputs: [
+            { id: "color", name: "Color", type: "color", isInput: true },
+          ],
+          outputs: [],
+          data: {},
+        },
+        {
+          id: "texture-1",
+          type: "texture",
+          x: 100,
+          y: 80,
+          width: 180,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false },
+          ],
+          data: {
+            imagePath: texturePath,
+            textureWidth,
+            textureHeight,
+          },
+        },
+        {
+          id: "flat-color-1",
+          type: "flat-color",
+          x: 100,
+          y: 200,
+          width: 160,
+          height: 100,
+          inputs: [],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false },
+          ],
+          data: { color: tintColor },
+        },
+        {
+          id: "mix-1",
+          type: "mix",
+          x: 400,
+          y: 130,
+          width: 160,
+          height: 120,
+          inputs: [
+            { id: "color1", name: "Color1", type: "color", isInput: true },
+            { id: "color2", name: "Color2", type: "color", isInput: true },
+          ],
+          outputs: [
+            { id: "color", name: "Color", type: "color", isInput: false },
+          ],
+          data: { blendMode: "multiply", factor: 1.0 },
+        },
+      ],
+      connections: [
+        {
+          id: "conn-1",
+          fromNodeId: "texture-1",
+          fromSocketId: "color",
+          toNodeId: "mix-1",
+          toSocketId: "color1",
+        },
+        {
+          id: "conn-2",
+          fromNodeId: "flat-color-1",
+          fromSocketId: "color",
+          toNodeId: "mix-1",
+          toSocketId: "color2",
+        },
+        {
+          id: "conn-3",
+          fromNodeId: "mix-1",
+          fromSocketId: "color",
+          toNodeId: "output-1",
+          toSocketId: "color",
+        },
+      ],
+    };
+  }
+}
+
+/**
+ * Load GLTF/GLB and add objects to scene with materials/textures set up
+ * This is the high-level API that handles all material/texture registration
+ */
+export async function loadGLTFToScene(
+  url: string,
+  scene: Scene
+): Promise<GLTFSceneResult> {
+  const result = await GLTFLoader.load(url);
+
+  // Map GLTF material names to shader material IDs
+  const gltfToShaderMaterial = new Map<string, string>();
+  let defaultTexture: Texture | null = null;
+
+  // Create shader materials from GLTF materials
+  for (const [matName, gltfMat] of result.materials) {
+    const shaderMat = scene.materials.createMaterial(matName);
+    const hasTexture = gltfMat.texture !== null;
+
+    // Get base color hex
+    const c = gltfMat.baseColor;
+    const colorHex =
+      "#" +
+      c.r.toString(16).padStart(2, "0") +
+      c.g.toString(16).padStart(2, "0") +
+      c.b.toString(16).padStart(2, "0");
+
+    if (hasTexture) {
+      const isWhite = c.r >= 250 && c.g >= 250 && c.b >= 250;
+      const texturePath = gltfMat.textureName || matName;
+
+      // Register texture with scene for material lookup
+      scene.registerTexture(texturePath, gltfMat.texture!);
+
+      // Create node graph
+      const { nodes, connections } = createTexturedMaterialNodes(
+        texturePath,
+        gltfMat.texture!.width,
+        gltfMat.texture!.height,
+        isWhite ? null : colorHex
+      );
+      shaderMat.nodes = nodes;
+      shaderMat.connections = connections;
+
+      console.log(
+        `Created textured material "${matName}" (${gltfMat.texture!.width}x${
+          gltfMat.texture!.height
+        })`
+      );
+
+      // Keep first texture as default
+      if (!defaultTexture) {
+        defaultTexture = gltfMat.texture;
+      }
+    } else {
+      // No texture - just set the flat color
+      const flatColorNode = shaderMat.nodes.find(
+        (n) => n.type === "flat-color"
+      );
+      if (flatColorNode && flatColorNode.data) {
+        flatColorNode.data.color = colorHex;
+      }
+    }
+
+    gltfToShaderMaterial.set(matName, shaderMat.id);
+    console.log(`Created shader material "${matName}" from GLTF`);
+  }
+
+  // Add scene objects
+  let firstObj: SceneObject | null = null;
+  const createdObjects: SceneObject[] = [];
+
+  // Filter to only objects that have actual mesh geometry
+  const objectsWithMeshes = result.sceneObjects.filter(
+    (obj) => obj.mesh.vertices.length > 0
+  );
+
+  for (const obj of objectsWithMeshes) {
+    // Assign material if available
+    const matName = result.meshMaterials.get(obj.name);
+    if (matName && gltfToShaderMaterial.has(matName)) {
+      obj.materialId = gltfToShaderMaterial.get(matName)!;
+    } else if (gltfToShaderMaterial.size > 0) {
+      obj.materialId = gltfToShaderMaterial.values().next().value!;
+    }
+
+    // Assign texture if material has one
+    const gltfMat = matName ? result.materials.get(matName) : null;
+    if (gltfMat?.texture) {
+      obj.texture = gltfMat.texture;
+    }
+
+    scene.addObject(obj);
+    createdObjects.push(obj);
+
+    if (!firstObj) {
+      firstObj = obj;
+    }
+
+    console.log(
+      `Loaded mesh "${obj.name}" with ${obj.mesh.triangles.length} triangles`
+    );
+  }
+
+  // Select the first object
+  if (firstObj) {
+    scene.selectObject(firstObj);
+  }
+
+  // Position camera to view all objects
+  if (result.defaultMesh.vertices.length > 0) {
+    const size = result.defaultMesh.getSize();
+    const maxDim = Math.max(size.x, size.y, size.z);
+    scene.camera.position = new Vector3(
+      maxDim * -2,
+      maxDim * -1.5,
+      maxDim * 0.4
+    );
+    scene.camera.target = Vector3.zero();
+  }
+
+  console.log(`Loaded GLTF with ${createdObjects.length} object(s)`);
+
+  return {
+    objects: createdObjects,
+    firstObject: firstObj,
+    defaultTexture,
+  };
 }
 
 // ============================================================================
