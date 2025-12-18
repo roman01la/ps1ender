@@ -51,6 +51,11 @@ bun run mcp
 1. **Check TypeScript errors** - Use `get_errors` tool to catch type errors
 2. **Run tests** - Execute `bun test` to ensure no regressions
 3. **Rebuild WASM** (if editing `wasm/rasterizer.cpp`) - Run `bun run build:wasm`
+4. **Code review** - Review the changes made to:
+   - Understand what was actually modified
+   - Identify potential regressions or side effects
+   - Check if related code needs similar updates (e.g., if you fixed a bug in one place, does the same pattern exist elsewhere?)
+   - Verify the change is complete (no half-done refactors, no orphaned code)
 
 Common issues to watch for:
 
@@ -58,6 +63,8 @@ Common issues to watch for:
 - Missing imports after refactoring
 - Type mismatches when extracting components
 - Aspect ratio / dimension calculations that break on edge cases
+- Inconsistent patterns (e.g., calling `markMeshDirty()` in some places but not others)
+- Cache invalidation issues (geometry buffers, texture buffers, normals)
 
 ---
 

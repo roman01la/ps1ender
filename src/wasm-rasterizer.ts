@@ -107,6 +107,33 @@ export interface WasmRasterizerInstance {
   setBakeParams(width: number, height: number, sourceTexture: number): void;
   setColorRampCount(count: number): void;
   bakeMaterial(): void;
+
+  // Geometry buffers (OpenGL-style dynamic buffers)
+  createGeometryBuffer(): number; // Returns handle, 0 = failure
+  deleteGeometryBuffer(handle: number): void;
+  geometryBufferAllocVertices(
+    handle: number,
+    vertexCount: number
+  ): Float32Array | null;
+  geometryBufferAllocIndices(
+    handle: number,
+    indexCount: number
+  ): Uint32Array | null;
+  geometryBufferGetVertexCount(handle: number): number;
+  geometryBufferGetIndexCount(handle: number): number;
+  renderGeometryBuffer(handle: number): void;
+
+  // Texture buffers (OpenGL-style dynamic textures)
+  createTextureBuffer(): number; // Returns handle, 0 = failure
+  deleteTextureBuffer(handle: number): void;
+  textureBufferAlloc(
+    handle: number,
+    width: number,
+    height: number
+  ): Uint8Array | null;
+  textureBufferGetWidth(handle: number): number;
+  textureBufferGetHeight(handle: number): number;
+  bindTextureBuffer(handle: number): void; // 0 = unbind
 }
 
 interface WasmExports {
@@ -177,6 +204,30 @@ interface WasmExports {
   ) => void;
   set_color_ramp_count: (count: number) => void;
   bake_material: () => void;
+
+  // Geometry buffer exports
+  create_geometry_buffer: () => number;
+  delete_geometry_buffer: (handle: number) => void;
+  geometry_buffer_alloc_vertices: (
+    handle: number,
+    vertexCount: number
+  ) => number;
+  geometry_buffer_alloc_indices: (handle: number, indexCount: number) => number;
+  geometry_buffer_get_vertex_count: (handle: number) => number;
+  geometry_buffer_get_index_count: (handle: number) => number;
+  render_geometry_buffer: (handle: number) => void;
+
+  // Texture buffer exports
+  create_texture_buffer: () => number;
+  delete_texture_buffer: (handle: number) => void;
+  texture_buffer_alloc: (
+    handle: number,
+    width: number,
+    height: number
+  ) => number;
+  texture_buffer_get_width: (handle: number) => number;
+  texture_buffer_get_height: (handle: number) => number;
+  bind_texture_buffer: (handle: number) => void;
 }
 
 /**
@@ -441,6 +492,80 @@ export async function loadWasmRasterizer(
     bakeMaterial() {
       exports.bake_material();
     },
+
+    // Geometry buffer methods (OpenGL-style dynamic buffers)
+    createGeometryBuffer(): number {
+      return exports.create_geometry_buffer();
+    },
+
+    deleteGeometryBuffer(handle: number): void {
+      exports.delete_geometry_buffer(handle);
+    },
+
+    geometryBufferAllocVertices(
+      handle: number,
+      vertexCount: number
+    ): Float32Array | null {
+      const ptr = exports.geometry_buffer_alloc_vertices(handle, vertexCount);
+      if (!ptr) return null;
+      return new Float32Array(
+        memory.buffer,
+        ptr,
+        vertexCount * FLOATS_PER_VERTEX
+      );
+    },
+
+    geometryBufferAllocIndices(
+      handle: number,
+      indexCount: number
+    ): Uint32Array | null {
+      const ptr = exports.geometry_buffer_alloc_indices(handle, indexCount);
+      if (!ptr) return null;
+      return new Uint32Array(memory.buffer, ptr, indexCount);
+    },
+
+    geometryBufferGetVertexCount(handle: number): number {
+      return exports.geometry_buffer_get_vertex_count(handle);
+    },
+
+    geometryBufferGetIndexCount(handle: number): number {
+      return exports.geometry_buffer_get_index_count(handle);
+    },
+
+    renderGeometryBuffer(handle: number): void {
+      exports.render_geometry_buffer(handle);
+    },
+
+    // Texture buffer methods (OpenGL-style dynamic textures)
+    createTextureBuffer(): number {
+      return exports.create_texture_buffer();
+    },
+
+    deleteTextureBuffer(handle: number): void {
+      exports.delete_texture_buffer(handle);
+    },
+
+    textureBufferAlloc(
+      handle: number,
+      width: number,
+      height: number
+    ): Uint8Array | null {
+      const ptr = exports.texture_buffer_alloc(handle, width, height);
+      if (!ptr) return null;
+      return new Uint8Array(memory.buffer, ptr, width * height * 4);
+    },
+
+    textureBufferGetWidth(handle: number): number {
+      return exports.texture_buffer_get_width(handle);
+    },
+
+    textureBufferGetHeight(handle: number): number {
+      return exports.texture_buffer_get_height(handle);
+    },
+
+    bindTextureBuffer(handle: number): void {
+      exports.bind_texture_buffer(handle);
+    },
   };
 }
 
@@ -531,3 +656,53 @@ export {
   MAX_INDICES,
   FLOATS_PER_VERTEX,
 };
+
+/**
+ * Helper to upload mesh data to a geometry buffer (OpenGL-style dynamic buffer)
+ * The buffer must already be created via createGeometryBuffer()
+ * Returns true if successful
+ */
+export function uploadMeshToBuffer(
+  wasm: WasmRasterizerInstance,
+  handle: number,
+  positions: Float32Array,
+  normals: Float32Array,
+  uvs: Float32Array,
+  colors: Uint8Array,
+  indices: Uint32Array
+): boolean {
+  const vertexCount = positions.length / 3;
+
+  // Allocate vertex buffer
+  const vertexBuffer = wasm.geometryBufferAllocVertices(handle, vertexCount);
+  if (!vertexBuffer) return false;
+
+  // Allocate index buffer
+  const indexBuffer = wasm.geometryBufferAllocIndices(handle, indices.length);
+  if (!indexBuffer) return false;
+
+  // Interleave vertex data: x, y, z, nx, ny, nz, u, v, r, g, b, a
+  for (let i = 0; i < vertexCount; i++) {
+    const vOffset = i * FLOATS_PER_VERTEX;
+    const pOffset = i * 3;
+    const uvOffset = i * 2;
+    const cOffset = i * 4;
+
+    vertexBuffer[vOffset + 0] = positions[pOffset + 0];
+    vertexBuffer[vOffset + 1] = positions[pOffset + 1];
+    vertexBuffer[vOffset + 2] = positions[pOffset + 2];
+    vertexBuffer[vOffset + 3] = normals[pOffset + 0];
+    vertexBuffer[vOffset + 4] = normals[pOffset + 1];
+    vertexBuffer[vOffset + 5] = normals[pOffset + 2];
+    vertexBuffer[vOffset + 6] = uvs[uvOffset + 0];
+    vertexBuffer[vOffset + 7] = uvs[uvOffset + 1];
+    vertexBuffer[vOffset + 8] = colors[cOffset + 0];
+    vertexBuffer[vOffset + 9] = colors[cOffset + 1];
+    vertexBuffer[vOffset + 10] = colors[cOffset + 2];
+    vertexBuffer[vOffset + 11] = colors[cOffset + 3];
+  }
+
+  // Copy indices
+  indexBuffer.set(indices);
+  return true;
+}

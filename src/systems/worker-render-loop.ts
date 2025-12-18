@@ -582,6 +582,8 @@ export function buildRenderFrame(
       }
 
       frame.objects.push({
+        meshId: obj.id,
+        meshVersion: obj.meshVersion,
         mesh: serializeMesh(obj.mesh, material, textureSampler, useTexture),
         modelMatrix: serializeMatrix(modelMatrix),
         isEdgeOnly: false,

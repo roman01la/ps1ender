@@ -417,11 +417,25 @@ export class Mesh {
 
   /**
    * Recalculate vertex normals based on current face geometry.
-   * Uses flat shading (PS1-style) - each vertex gets the normal of its face.
+   * @param smooth - If true, averages normals at co-located vertices for smooth shading.
+   *                 If false (default), uses flat shading (PS1-style) where each vertex gets its face normal.
    * Call this after transforming vertices (rotate, scale, etc.) to update lighting.
    */
-  recalculateNormals(): void {
-    // PS1-style flat shading: each triangle's vertices get the face normal
+  recalculateNormals(smooth: boolean = false): void {
+    if (smooth) {
+      this.recalculateSmoothNormals();
+    } else {
+      this.recalculateFlatNormals();
+    }
+
+    // Rebuild triangles to pick up the new normals
+    this.buildTriangles();
+  }
+
+  /**
+   * Flat shading: each vertex gets the normal of its face (PS1-style)
+   */
+  private recalculateFlatNormals(): void {
     for (let i = 0; i < this.indices.length; i += 3) {
       const i0 = this.indices[i];
       const i1 = this.indices[i + 1];
@@ -440,9 +454,62 @@ export class Mesh {
       this.vertices[i1].normal = faceNormal;
       this.vertices[i2].normal = faceNormal;
     }
+  }
 
-    // Rebuild triangles to pick up the new normals
-    this.buildTriangles();
+  /**
+   * Smooth shading: average normals at co-located vertices (Gouraud-style)
+   * Vertices at the same position will share averaged normals for smooth lighting.
+   */
+  private recalculateSmoothNormals(): void {
+    const epsilon = 0.0001;
+    const getPositionKey = (pos: Vector3) =>
+      `${Math.round(pos.x / epsilon)},${Math.round(
+        pos.y / epsilon
+      )},${Math.round(pos.z / epsilon)}`;
+
+    // First pass: compute face normals and accumulate at each position
+    const normalAccum = new Map<string, Vector3>(); // position key -> accumulated normal
+
+    for (let i = 0; i < this.indices.length; i += 3) {
+      const i0 = this.indices[i];
+      const i1 = this.indices[i + 1];
+      const i2 = this.indices[i + 2];
+
+      const v0 = this.vertices[i0].position;
+      const v1 = this.vertices[i1].position;
+      const v2 = this.vertices[i2].position;
+
+      const edge1 = v1.sub(v0);
+      const edge2 = v2.sub(v0);
+      const faceNormal = edge1.cross(edge2).normalize();
+
+      // Accumulate face normal at each vertex position
+      for (const idx of [i0, i1, i2]) {
+        const pos = this.vertices[idx].position;
+        const key = getPositionKey(pos);
+        const existing = normalAccum.get(key);
+        if (existing) {
+          normalAccum.set(key, existing.add(faceNormal));
+        } else {
+          normalAccum.set(key, faceNormal.clone());
+        }
+      }
+    }
+
+    // Normalize accumulated normals
+    for (const [key, normal] of normalAccum) {
+      normalAccum.set(key, normal.normalize());
+    }
+
+    // Second pass: assign averaged normals to vertices
+    for (let i = 0; i < this.vertices.length; i++) {
+      const pos = this.vertices[i].position;
+      const key = getPositionKey(pos);
+      const smoothNormal = normalAccum.get(key);
+      if (smoothNormal) {
+        this.vertices[i].normal = smoothNormal;
+      }
+    }
   }
 
   // Public method to rebuild both triangles AND faces from indices
@@ -450,6 +517,9 @@ export class Mesh {
   rebuildMesh(): void {
     this.buildTriangles();
     this.buildFacesFromIndices();
+    // Recalculate normals for correct lighting after topology changes
+    // Use smooth normals if the mesh has smooth shading enabled
+    this.recalculateNormals(this.smoothShading);
   }
 
   /**
@@ -461,7 +531,8 @@ export class Mesh {
     this.triangulateFromFaces();
     this.buildTriangles();
     // Recalculate normals for correct lighting on new geometry
-    this.recalculateNormals();
+    // Use smooth normals if the mesh has smooth shading enabled
+    this.recalculateNormals(this.smoothShading);
   }
 
   /**

@@ -979,7 +979,7 @@ export class TransformManager {
         mesh.vertices[idx].position = rotated.add(this.editPivot);
       }
       // Recalculate normals after rotation to update lighting
-      mesh.recalculateNormals();
+      mesh.recalculateNormals(mesh.smoothShading);
     } else if (this.objectStartRotation) {
       // Object mode: rotate object
       if (this._axisConstraint === "none" || this._axisConstraint === "z") {
@@ -1061,7 +1061,7 @@ export class TransformManager {
         mesh.vertices[idx].position = scaled.add(this.editPivot);
       }
       // Recalculate normals after scaling to update lighting
-      mesh.recalculateNormals();
+      mesh.recalculateNormals(mesh.smoothShading);
     } else if (this.objectStartScale) {
       // Object mode: scale object
       if (this._axisConstraint === "none") {

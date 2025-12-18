@@ -15,14 +15,13 @@ CXXFLAGS := -O3 \
             -std=c++17 \
             -s WASM=1 \
             -s SIDE_MODULE=0 \
-            -s EXPORTED_FUNCTIONS="['_set_render_resolution','_get_render_width','_get_render_height','_get_pixel_count','_clear','_render_triangles','_draw_line','_get_pixels','_get_depth','_get_vertices','_get_indices','_get_mvp_matrix','_get_model_matrix','_get_texture','_get_texture_sizes','_set_texture_size','_set_current_texture','_set_light_direction','_set_light_color','_set_vertex_count','_set_index_count','_set_ambient_light','_set_enable_lighting','_set_enable_dithering','_set_enable_texturing','_set_enable_backface_culling','_set_enable_vertex_snapping','_set_enable_smooth_shading','_set_snap_resolution','_render_point','_render_points_batch','_malloc','_free','_get_bake_output_ptr','_get_bake_program_ptr','_get_color_ramp_ptr','_set_bake_params','_set_color_ramp_count','_bake_material']" \
+            -s EXPORTED_FUNCTIONS="['_set_render_resolution','_get_render_width','_get_render_height','_get_pixel_count','_clear','_render_triangles','_draw_line','_get_pixels','_get_depth','_get_vertices','_get_indices','_get_mvp_matrix','_get_model_matrix','_get_texture','_get_texture_sizes','_set_texture_size','_set_current_texture','_set_light_direction','_set_light_color','_set_vertex_count','_set_index_count','_set_ambient_light','_set_enable_lighting','_set_enable_dithering','_set_enable_texturing','_set_enable_backface_culling','_set_enable_vertex_snapping','_set_enable_smooth_shading','_set_snap_resolution','_render_point','_render_points_batch','_malloc','_free','_get_bake_output_ptr','_get_bake_program_ptr','_get_color_ramp_ptr','_set_bake_params','_set_color_ramp_count','_bake_material','_create_geometry_buffer','_delete_geometry_buffer','_geometry_buffer_alloc_vertices','_geometry_buffer_alloc_indices','_geometry_buffer_get_vertex_count','_geometry_buffer_get_index_count','_render_geometry_buffer','_create_texture_buffer','_delete_texture_buffer','_texture_buffer_alloc','_texture_buffer_get_width','_texture_buffer_get_height','_bind_texture_buffer']" \
             -s EXPORTED_RUNTIME_METHODS="['ccall','cwrap']" \
             -s ALLOW_MEMORY_GROWTH=1 \
             -s INITIAL_MEMORY=67108864 \
             -s MAXIMUM_MEMORY=536870912 \
             -s STANDALONE_WASM=1 \
             --no-entry
-
 # Source files
 SRC := rasterizer.cpp
 OUT := rasterizer.wasm

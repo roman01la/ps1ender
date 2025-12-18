@@ -4,6 +4,10 @@
       "command": "npx",
       "args": ["tsx", "src/mcp-server.ts"],
       "cwd": "${workspaceFolder}"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
     }
   }
 }

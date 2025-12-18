@@ -363,6 +363,7 @@ export class Editor {
               }
             }
             obj.mesh.rebuildTriangles();
+            obj.markMeshDirty(); // Invalidate mesh cache
           }
         }
         break;
@@ -423,6 +424,7 @@ export class Editor {
             // Replace the mesh entirely
             const newMesh = deserializeMesh(meshData);
             obj.mesh = newMesh;
+            obj.markMeshDirty(); // Invalidate mesh cache
             // Clear selections since indices have changed
             this.clearEditSelections();
           }
@@ -1247,6 +1249,7 @@ export class Editor {
     if (result.success) {
       // Rebuild the mesh (including faces since topology changed)
       mesh.rebuildMesh();
+      obj.markMeshDirty(); // Invalidate mesh cache
 
       // Store undo action
       const afterMesh = serializeMesh(mesh);
@@ -1451,6 +1454,8 @@ export class Editor {
 
     if (!result.success) return false;
 
+    obj.markMeshDirty(); // Invalidate mesh cache
+
     // Store undo action
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -1512,6 +1517,8 @@ export class Editor {
 
     if (!result.success) return false;
 
+    obj.markMeshDirty(); // Invalidate mesh cache
+
     // Store undo action
     const afterMesh = serializeMesh(mesh);
     this.pushHistoryAction({
@@ -1565,6 +1572,8 @@ export class Editor {
     );
 
     if (!result.success) return false;
+
+    obj.markMeshDirty(); // Invalidate mesh cache
 
     // Store undo action
     const afterMesh = serializeMesh(mesh);
@@ -1640,6 +1649,8 @@ export class Editor {
 
       if (!result.success) return false;
 
+      obj.markMeshDirty(); // Invalidate mesh cache
+
       // Store undo action
       const afterMesh = serializeMesh(mesh);
       this.pushHistoryAction({
@@ -1664,6 +1675,7 @@ export class Editor {
       // Add face to faceData and rebuild
       mesh.faceData.push({ vertices: [...vertexIndices] });
       mesh.rebuildFromFaces();
+      obj.markMeshDirty(); // Invalidate mesh cache
 
       // Store undo action
       const afterMesh = serializeMesh(mesh);
@@ -1892,7 +1904,7 @@ export class Editor {
             mesh.vertices[idx].position = startPos.clone();
           }
           mesh.rebuildTriangles();
-          mesh.recalculateNormals();
+          mesh.recalculateNormals(mesh.smoothShading);
 
           // Reset gizmo origin to original center
           let center = Vector3.zero();
@@ -1968,6 +1980,10 @@ export class Editor {
         canvasHeight,
         this.selectedVertices
       );
+      // Mark mesh dirty during live transform so geometry cache is updated
+      if (this.mode === "edit") {
+        obj.markMeshDirty();
+      }
     } else {
       // Multiple objects - use multi-object update
       this.transform.updateMultiObjectTransform(
@@ -2016,6 +2032,8 @@ export class Editor {
 
     // Create undo action from transform result
     if (result.type === "vertex" && result.vertexData) {
+      obj.markMeshDirty(); // Invalidate mesh cache after vertex transform
+
       const actionNames = {
         grab: "Move",
         rotate: "Rotate",
@@ -2064,6 +2082,10 @@ export class Editor {
       this.transform.cancelMultiObject(selected);
     } else {
       this.transform.cancel(selected[0], this.mode === "edit");
+      // Mark mesh dirty after cancel to restore cached geometry
+      if (this.mode === "edit") {
+        selected[0].markMeshDirty();
+      }
     }
   }
 

@@ -7,6 +7,8 @@ import { MaterialRegistry } from "./material";
  * A scene object that can be transformed and rendered
  */
 export class SceneObject {
+  public readonly id: string; // Unique ID for mesh caching
+  public meshVersion: number = 0; // Increments when mesh data changes (for cache invalidation)
   public name: string;
   public mesh: Mesh;
   public position: Vector3;
@@ -18,13 +20,27 @@ export class SceneObject {
   public texture: Texture | null = null; // Per-object texture
   public materialId: string | null = null; // Reference to material in registry
 
+  // Generate unique IDs
+  private static nextId = 0;
+  private static generateId(): string {
+    return `obj_${Date.now()}_${SceneObject.nextId++}`;
+  }
+
   constructor(name: string, mesh: Mesh) {
+    this.id = SceneObject.generateId();
     this.name = name;
     this.mesh = mesh;
     this.position = Vector3.zero();
     this.rotation = Vector3.zero();
     this.scale = new Vector3(1, 1, 1);
     // materialId will be set when added to scene
+  }
+
+  /**
+   * Mark mesh as dirty (increments version to trigger re-upload)
+   */
+  markMeshDirty(): void {
+    this.meshVersion++;
   }
 
   /**

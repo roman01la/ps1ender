@@ -15,6 +15,7 @@ import {
   loadWasmRasterizer,
   WasmRasterizerInstance,
   FLOATS_PER_VERTEX,
+  uploadMeshToBuffer,
 } from "./wasm-rasterizer";
 
 // ============================================================================
@@ -92,6 +93,8 @@ export interface MaterialBakeRequest {
 
 /** A single object to render */
 export interface RenderObject {
+  meshId: string; // Unique ID for mesh caching (e.g., object UUID)
+  meshVersion: number; // Increments when mesh data changes (dirty tracking)
   mesh: SerializedMesh;
   modelMatrix: Float32Array; // 16 floats, row-major
   isEdgeOnly: boolean;
@@ -237,20 +240,141 @@ interface BakedTextureCache {
   width: number;
   height: number;
   programHash: string; // Hash of program bytes to detect changes
+  uploadedToSlot: boolean; // Whether data has been uploaded to WASM slot
 }
 const bakedTextureCache = new Map<string, BakedTextureCache>();
 
 // Per-object texture cache (keyed by texture ID from main thread)
-// Stores texture data to avoid re-uploading every frame
-interface TextureCache {
-  data: Uint8Array;
+// Uses dynamic WASM texture buffers (no size limits, up to 256 textures)
+interface TextureBufferCache {
+  handle: number; // WASM texture buffer handle (0 = not created)
   width: number;
   height: number;
+  lastUsedFrame: number;
 }
-const textureCache = new Map<string, TextureCache>();
+const textureCache = new Map<string, TextureBufferCache>();
 
-// Slot dedicated for baked textures (we use slot 1, slot 0 is for source textures)
-const BAKED_TEXTURE_SLOT = 1;
+// Reserved texture slots (for legacy compatibility / baking)
+const TEXTURE_SLOT_LEGACY = 0;
+const TEXTURE_SLOT_BAKED = 1;
+const TEXTURE_SLOT_BAKE_SOURCE = 2;
+
+// Get or create a WASM texture buffer for the given textureId
+function getTextureBuffer(textureId: string): number {
+  const entry = textureCache.get(textureId);
+  if (entry && entry.handle !== 0) {
+    entry.lastUsedFrame = currentFrameNumber;
+    return entry.handle;
+  }
+
+  // Create a new texture buffer
+  const handle = wasmInstance?.createTextureBuffer() ?? 0;
+  if (handle === 0) {
+    // Failed to allocate - try to evict LRU entry
+    let lruTextureId: string | null = null;
+    let lruFrame = Infinity;
+    for (const [id, e] of textureCache) {
+      if (e.handle !== 0 && e.lastUsedFrame < lruFrame) {
+        lruFrame = e.lastUsedFrame;
+        lruTextureId = id;
+      }
+    }
+    if (lruTextureId) {
+      const evicted = textureCache.get(lruTextureId)!;
+      wasmInstance?.deleteTextureBuffer(evicted.handle);
+      textureCache.delete(lruTextureId);
+
+      // Try again
+      const retryHandle = wasmInstance?.createTextureBuffer() ?? 0;
+      if (retryHandle !== 0) {
+        // Entry will be created when texture data is uploaded
+        return retryHandle;
+      }
+    }
+    return 0; // Still failed
+  }
+
+  return handle;
+}
+
+// Free a specific texture from the cache
+function freeTextureFromCache(textureId: string) {
+  const entry = textureCache.get(textureId);
+  if (entry && entry.handle !== 0) {
+    wasmInstance?.deleteTextureBuffer(entry.handle);
+    textureCache.delete(textureId);
+  }
+}
+// ============================================================================
+// Geometry Buffer Cache (OpenGL-style dynamic buffers)
+// ============================================================================
+
+interface GeometryBufferEntry {
+  handle: number; // WASM geometry buffer handle (0 = invalid)
+  version: number; // Last uploaded version (for dirty checking)
+  lastUsedFrame: number; // Frame number when last used (for LRU eviction)
+}
+
+// Maps meshId -> cache entry
+const meshCache = new Map<string, GeometryBufferEntry>();
+let currentFrameNumber = 0;
+
+// Get or create a geometry buffer for the given meshId
+// Returns handle, or 0 if allocation failed
+function getGeometryBuffer(meshId: string): number {
+  const entry = meshCache.get(meshId);
+  if (entry) {
+    entry.lastUsedFrame = currentFrameNumber;
+    return entry.handle;
+  }
+
+  // Create a new geometry buffer
+  const handle = wasmInstance?.createGeometryBuffer() ?? 0;
+  if (handle === 0) {
+    // Failed to allocate - try to evict LRU entry
+    let lruMeshId: string | null = null;
+    let lruFrame = Infinity;
+    for (const [id, e] of meshCache) {
+      if (e.lastUsedFrame < lruFrame) {
+        lruFrame = e.lastUsedFrame;
+        lruMeshId = id;
+      }
+    }
+    if (lruMeshId) {
+      const evicted = meshCache.get(lruMeshId)!;
+      wasmInstance?.deleteGeometryBuffer(evicted.handle);
+      meshCache.delete(lruMeshId);
+
+      // Try again
+      const retryHandle = wasmInstance?.createGeometryBuffer() ?? 0;
+      if (retryHandle !== 0) {
+        meshCache.set(meshId, {
+          handle: retryHandle,
+          version: -1,
+          lastUsedFrame: currentFrameNumber,
+        });
+        return retryHandle;
+      }
+    }
+    return 0; // Still failed
+  }
+
+  meshCache.set(meshId, {
+    handle,
+    version: -1, // Will be updated on first upload
+    lastUsedFrame: currentFrameNumber,
+  });
+  return handle;
+}
+
+// Free a specific mesh from the cache
+function freeMeshFromCache(meshId: string) {
+  const entry = meshCache.get(meshId);
+  if (entry) {
+    wasmInstance?.deleteGeometryBuffer(entry.handle);
+    meshCache.delete(meshId);
+  }
+}
 
 // Simple hash for baking program bytes (for cache invalidation)
 function hashProgram(data: Uint8Array): string {
@@ -600,6 +724,66 @@ function renderMeshWasm(
   wasm.renderTriangles();
 }
 
+/**
+ * Render a mesh using the geometry buffer cache (OpenGL-style dynamic buffers)
+ * Only uploads mesh data when version changes (dirty flag)
+ */
+function renderMeshSlotWasm(
+  meshId: string,
+  meshVersion: number,
+  mesh: SerializedMesh,
+  modelMatrix: Float32Array,
+  viewMatrix: Float32Array,
+  projMatrix: Float32Array
+): void {
+  if (!wasmInstance) return;
+
+  const wasm = wasmInstance;
+
+  // Get or create a geometry buffer
+  const handle = getGeometryBuffer(meshId);
+  if (handle === 0) {
+    // Fallback to per-frame upload if allocation failed
+    renderMeshWasm(mesh, modelMatrix, viewMatrix, projMatrix);
+    return;
+  }
+
+  // Check if mesh needs re-upload (dirty)
+  const entry = meshCache.get(meshId)!;
+  if (entry.version !== meshVersion) {
+    // Upload mesh to geometry buffer
+    const success = uploadMeshToBuffer(
+      wasm,
+      handle,
+      mesh.positions,
+      mesh.normals,
+      mesh.uvs,
+      mesh.colors,
+      mesh.indices
+    );
+
+    if (!success) {
+      // Upload failed, fallback
+      freeMeshFromCache(meshId);
+      renderMeshWasm(mesh, modelMatrix, viewMatrix, projMatrix);
+      return;
+    }
+
+    entry.version = meshVersion;
+  }
+
+  // Compute MVP and model matrices
+  const mv = multiplyMatrices(viewMatrix, modelMatrix);
+  const mvp = multiplyMatrices(projMatrix, mv);
+
+  // Upload matrices (these change every frame due to camera movement)
+  wasm.mvpMatrix.set(mvp);
+  wasm.modelMatrix.set(modelMatrix);
+
+  // Render from cached buffer
+  wasm.renderGeometryBuffer(handle);
+}
+
 function renderLinesWasm(
   lines: RenderLines,
   viewMatrix: Float32Array,
@@ -905,20 +1089,53 @@ function renderFullFrame(frame: RenderFrame): void {
 
   const wasm = wasmInstance;
 
+  // Track frame number for LRU eviction
+  currentFrameNumber++;
+
   // Clear
   wasm.clear(frame.clearColor[0], frame.clearColor[1], frame.clearColor[2]);
 
-  // Upload new textures to cache
+  // Upload new textures to dynamic texture buffers
   for (const tex of frame.textures) {
-    textureCache.set(tex.id, {
-      data: tex.data,
-      width: tex.width,
-      height: tex.height,
-    });
+    let entry = textureCache.get(tex.id);
+    const needsUpload =
+      !entry ||
+      entry.handle === 0 ||
+      entry.width !== tex.width ||
+      entry.height !== tex.height;
+
+    if (needsUpload && wasmInstance) {
+      // Get or create a texture buffer handle
+      let handle = entry?.handle ?? 0;
+      if (handle === 0) {
+        handle = getTextureBuffer(tex.id);
+      }
+
+      if (handle !== 0) {
+        // Allocate and upload texture data
+        const texBuf = wasmInstance.textureBufferAlloc(
+          handle,
+          tex.width,
+          tex.height
+        );
+        if (texBuf) {
+          texBuf.set(tex.data);
+          textureCache.set(tex.id, {
+            handle,
+            width: tex.width,
+            height: tex.height,
+            lastUsedFrame: currentFrameNumber,
+          });
+        }
+      }
+    } else if (entry) {
+      entry.lastUsedFrame = currentFrameNumber;
+    }
   }
 
-  // Upload legacy global texture if provided
+  // Upload legacy global texture if provided (uses fixed slots)
   if (frame.texture) {
+    wasm.bindTextureBuffer(0); // Unbind dynamic texture
     const texBuf = wasm.getTextureBuffer(frame.texture.slot);
     texBuf.set(frame.texture.data);
     wasm.setTextureSize(
@@ -946,15 +1163,20 @@ function renderFullFrame(frame: RenderFrame): void {
       continue;
     }
 
-    // Upload per-object texture from cache if textureId is set
+    // Bind per-object texture if textureId is set
     if (obj.textureId && wasmInstance && !obj.materialBake) {
       const cached = textureCache.get(obj.textureId);
-      if (cached) {
-        const texBuf = wasmInstance.getTextureBuffer(0);
-        texBuf.set(cached.data);
-        wasmInstance.setTextureSize(0, cached.width, cached.height);
-        wasmInstance.setCurrentTexture(0);
+      if (cached && cached.handle !== 0) {
+        // Bind the dynamic texture buffer
+        wasmInstance.bindTextureBuffer(cached.handle);
+        cached.lastUsedFrame = currentFrameNumber;
+      } else {
+        // No texture - unbind
+        wasmInstance.bindTextureBuffer(0);
       }
+    } else if (!obj.materialBake && wasmInstance) {
+      // No texture ID - unbind dynamic texture
+      wasmInstance.bindTextureBuffer(0);
     }
 
     // Handle material baking if needed
@@ -982,16 +1204,16 @@ function renderFullFrame(frame: RenderFrame): void {
         // Upload source texture for baking if provided
         let sourceTextureSlot = -1;
         if (bake.sourceTexture) {
-          // Use slot 2 for bake source to avoid conflicts with slot 0 (frame) and slot 1 (baked)
-          const BAKE_SOURCE_SLOT = 2;
-          const srcTexBuf = wasmInstance.getTextureBuffer(BAKE_SOURCE_SLOT);
+          const srcTexBuf = wasmInstance.getTextureBuffer(
+            TEXTURE_SLOT_BAKE_SOURCE
+          );
           srcTexBuf.set(bake.sourceTexture.data);
           wasmInstance.setTextureSize(
-            BAKE_SOURCE_SLOT,
+            TEXTURE_SLOT_BAKE_SOURCE,
             bake.sourceTexture.width,
             bake.sourceTexture.height
           );
-          sourceTextureSlot = BAKE_SOURCE_SLOT;
+          sourceTextureSlot = TEXTURE_SLOT_BAKE_SOURCE;
         }
 
         wasmInstance.setBakeParams(
@@ -1010,12 +1232,13 @@ function renderFullFrame(frame: RenderFrame): void {
         const bakedData = new Uint8Array(bake.bakeWidth * bake.bakeHeight * 4);
         bakedData.set(output.subarray(0, bakedData.length));
 
-        // Cache it
+        // Cache it (mark as not yet uploaded since we just baked fresh)
         bakedTextureCache.set(bake.materialId, {
           data: bakedData,
           width: bake.bakeWidth,
           height: bake.bakeHeight,
           programHash,
+          uploadedToSlot: false,
         });
 
         console.log(
@@ -1025,16 +1248,19 @@ function renderFullFrame(frame: RenderFrame): void {
         );
       }
 
-      // Upload baked texture to slot 1
+      // Upload baked texture to slot 1 (only if just baked or slot was overwritten)
       const bakedCache = bakedTextureCache.get(bake.materialId)!;
-      const texBuf = wasmInstance.getTextureBuffer(BAKED_TEXTURE_SLOT);
-      texBuf.set(bakedCache.data);
-      wasmInstance.setTextureSize(
-        BAKED_TEXTURE_SLOT,
-        bakedCache.width,
-        bakedCache.height
-      );
-      wasmInstance.setCurrentTexture(BAKED_TEXTURE_SLOT);
+      if (!bakedCache.uploadedToSlot) {
+        const texBuf = wasmInstance.getTextureBuffer(TEXTURE_SLOT_BAKED);
+        texBuf.set(bakedCache.data);
+        wasmInstance.setTextureSize(
+          TEXTURE_SLOT_BAKED,
+          bakedCache.width,
+          bakedCache.height
+        );
+        bakedCache.uploadedToSlot = true;
+      }
+      wasmInstance.setCurrentTexture(TEXTURE_SLOT_BAKED);
     }
 
     // Apply settings for this render pass
@@ -1047,12 +1273,25 @@ function renderFullFrame(frame: RenderFrame): void {
       wasmInstance.setEnableTexturing(frame.enableTexturing && obj.hasTexture);
     }
 
-    renderMeshWasm(
-      obj.mesh,
-      obj.modelMatrix,
-      frame.viewMatrix,
-      frame.projectionMatrix
-    );
+    // Use cached mesh slot if meshId is provided, otherwise fallback to per-frame upload
+    if (obj.meshId) {
+      renderMeshSlotWasm(
+        obj.meshId,
+        obj.meshVersion,
+        obj.mesh,
+        obj.modelMatrix,
+        frame.viewMatrix,
+        frame.projectionMatrix
+      );
+    } else {
+      // Legacy fallback for objects without meshId
+      renderMeshWasm(
+        obj.mesh,
+        obj.modelMatrix,
+        frame.viewMatrix,
+        frame.projectionMatrix
+      );
+    }
   }
 
   // Render overlays (in order for proper depth/blending)

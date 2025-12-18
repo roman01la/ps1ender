@@ -88,6 +88,47 @@ extern "C"
 } // extern "C"
 
 // ============================================================================
+// Dynamic Geometry Buffers (OpenGL-style API)
+// ============================================================================
+
+// Buffer object - dynamically allocated geometry data
+struct GeometryBuffer
+{
+    float *vertices;   // Dynamically allocated vertex data
+    uint32_t *indices; // Dynamically allocated index data
+    int32_t vertexCount;
+    int32_t indexCount;
+    int32_t vertexCapacity; // Allocated size
+    int32_t indexCapacity;  // Allocated size
+};
+
+// Simple handle-based buffer management
+// Using a simple array + free list for now
+constexpr int MAX_GEOMETRY_BUFFERS = 1024;
+static GeometryBuffer *g_geometry_buffers[MAX_GEOMETRY_BUFFERS] = {nullptr};
+static int32_t g_next_buffer_handle = 1; // Start at 1, 0 = invalid
+
+// ============================================================================
+// Dynamic Texture Buffers (OpenGL-style API)
+// ============================================================================
+
+struct TextureBuffer
+{
+    uint8_t *data; // Dynamically allocated RGBA data
+    int32_t width;
+    int32_t height;
+    int32_t capacity; // Allocated size in bytes
+};
+
+constexpr int MAX_TEXTURE_BUFFERS = 256;
+static TextureBuffer *g_texture_buffers[MAX_TEXTURE_BUFFERS] = {nullptr};
+
+// Active texture pointer - can point to fixed slot or dynamic buffer
+static const uint8_t *g_active_texture_data = nullptr;
+static int32_t g_active_texture_width = 0;
+static int32_t g_active_texture_height = 0;
+
+// ============================================================================
 // 8x8 Bayer Dither Matrix
 // ============================================================================
 
@@ -370,7 +411,17 @@ static void rasterize_triangle(
     const uint8_t *texData = nullptr;
     int32_t texW = 0, texH = 0;
     float texWf = 0, texHf = 0;
-    if (g_enable_texturing && texIdx >= 0 && texIdx < MAX_TEXTURES)
+
+    // Use active texture pointer if set (dynamic textures), otherwise fall back to fixed slots
+    if (g_enable_texturing && g_active_texture_data)
+    {
+        texData = g_active_texture_data;
+        texW = g_active_texture_width;
+        texH = g_active_texture_height;
+        texWf = (float)texW;
+        texHf = (float)texH;
+    }
+    else if (g_enable_texturing && texIdx >= 0 && texIdx < MAX_TEXTURES)
     {
         texData = g_textures[texIdx];
         texW = g_texture_sizes[texIdx * 2];
@@ -1022,6 +1073,379 @@ extern "C"
     void set_enable_smooth_shading(int32_t enable)
     {
         g_enable_smooth_shading = enable;
+    }
+
+    // ========================================================================
+    // Geometry Buffer API (OpenGL-style dynamic buffers)
+    // ========================================================================
+
+    // Create a new geometry buffer, returns handle (0 = failure)
+    EMSCRIPTEN_KEEPALIVE
+    int32_t create_geometry_buffer()
+    {
+        // Find an empty slot
+        int slot = -1;
+        for (int i = 0; i < MAX_GEOMETRY_BUFFERS; i++)
+        {
+            if (g_geometry_buffers[i] == nullptr)
+            {
+                slot = i;
+                break;
+            }
+        }
+        if (slot < 0)
+            return 0; // No slots available
+
+        // Allocate buffer struct
+        GeometryBuffer *buf = (GeometryBuffer *)malloc(sizeof(GeometryBuffer));
+        if (!buf)
+            return 0;
+
+        buf->vertices = nullptr;
+        buf->indices = nullptr;
+        buf->vertexCount = 0;
+        buf->indexCount = 0;
+        buf->vertexCapacity = 0;
+        buf->indexCapacity = 0;
+
+        g_geometry_buffers[slot] = buf;
+
+        // Return handle (slot + 1 so 0 is invalid)
+        return slot + 1;
+    }
+
+    // Delete a geometry buffer
+    EMSCRIPTEN_KEEPALIVE
+    void delete_geometry_buffer(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return;
+
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        if (!buf)
+            return;
+
+        if (buf->vertices)
+            free(buf->vertices);
+        if (buf->indices)
+            free(buf->indices);
+        free(buf);
+
+        g_geometry_buffers[slot] = nullptr;
+    }
+
+    // Upload vertex data to a geometry buffer
+    // Returns pointer to vertex buffer for JS to write to, or nullptr on failure
+    EMSCRIPTEN_KEEPALIVE
+    float *geometry_buffer_alloc_vertices(int32_t handle, int32_t vertexCount)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return nullptr;
+
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        if (!buf)
+            return nullptr;
+
+        // Reallocate if needed
+        int32_t requiredSize = vertexCount * 12; // 12 floats per vertex
+        if (buf->vertexCapacity < requiredSize)
+        {
+            if (buf->vertices)
+                free(buf->vertices);
+            buf->vertices = (float *)malloc(requiredSize * sizeof(float));
+            if (!buf->vertices)
+            {
+                buf->vertexCapacity = 0;
+                buf->vertexCount = 0;
+                return nullptr;
+            }
+            buf->vertexCapacity = requiredSize;
+        }
+
+        buf->vertexCount = vertexCount;
+        return buf->vertices;
+    }
+
+    // Upload index data to a geometry buffer
+    // Returns pointer to index buffer for JS to write to, or nullptr on failure
+    EMSCRIPTEN_KEEPALIVE
+    uint32_t *geometry_buffer_alloc_indices(int32_t handle, int32_t indexCount)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return nullptr;
+
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        if (!buf)
+            return nullptr;
+
+        // Reallocate if needed
+        if (buf->indexCapacity < indexCount)
+        {
+            if (buf->indices)
+                free(buf->indices);
+            buf->indices = (uint32_t *)malloc(indexCount * sizeof(uint32_t));
+            if (!buf->indices)
+            {
+                buf->indexCapacity = 0;
+                buf->indexCount = 0;
+                return nullptr;
+            }
+            buf->indexCapacity = indexCount;
+        }
+
+        buf->indexCount = indexCount;
+        return buf->indices;
+    }
+
+    // Get geometry buffer info
+    EMSCRIPTEN_KEEPALIVE
+    int32_t geometry_buffer_get_vertex_count(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return 0;
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        return buf ? buf->vertexCount : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    int32_t geometry_buffer_get_index_count(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return 0;
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        return buf ? buf->indexCount : 0;
+    }
+
+    // Render a geometry buffer with current MVP/model matrices
+    EMSCRIPTEN_KEEPALIVE
+    void render_geometry_buffer(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_GEOMETRY_BUFFERS)
+            return;
+
+        GeometryBuffer *buf = g_geometry_buffers[slot];
+        if (!buf || !buf->vertices || !buf->indices)
+            return;
+        if (buf->vertexCount == 0 || buf->indexCount == 0)
+            return;
+
+        int32_t numTriangles = buf->indexCount / 3;
+
+        // Clear vertex cache for this render
+        __builtin_memset(g_vertex_processed, 0, buf->vertexCount);
+
+        for (int32_t t = 0; t < numTriangles; t++)
+        {
+            uint32_t i0 = buf->indices[t * 3];
+            uint32_t i1 = buf->indices[t * 3 + 1];
+            uint32_t i2 = buf->indices[t * 3 + 2];
+
+            // Copy vertex data to g_vertices for process_vertex to work
+            __builtin_memcpy(&g_vertices[i0 * 12], &buf->vertices[i0 * 12], 12 * sizeof(float));
+            __builtin_memcpy(&g_vertices[i1 * 12], &buf->vertices[i1 * 12], 12 * sizeof(float));
+            __builtin_memcpy(&g_vertices[i2 * 12], &buf->vertices[i2 * 12], 12 * sizeof(float));
+
+            // Get cached or compute vertices
+            ProcessedVertex v0 = get_processed_vertex(i0);
+            ProcessedVertex v1 = get_processed_vertex(i1);
+            ProcessedVertex v2 = get_processed_vertex(i2);
+
+            // Near-plane clipping (PS1 style - reject if any vertex behind camera)
+            if (v0.depth < -1.0f || v1.depth < -1.0f || v2.depth < -1.0f)
+                continue;
+            if (v0.depth > 1.0f || v1.depth > 1.0f || v2.depth > 1.0f)
+                continue;
+
+            // Check if backfacing
+            Vec3 edge1 = v1.screen - v0.screen;
+            Vec3 edge2 = v2.screen - v0.screen;
+            float cross_z = edge1.x * edge2.y - edge1.y * edge2.x;
+            bool isBackfacing = cross_z >= 0;
+
+            // Lighting calculation
+            if (g_enable_lighting)
+            {
+                if (g_enable_smooth_shading)
+                {
+                    if (isBackfacing)
+                    {
+                        v0.normal = v0.normal * -1.0f;
+                        v1.normal = v1.normal * -1.0f;
+                        v2.normal = v2.normal * -1.0f;
+                    }
+                    Vec3 lightDir(g_light_dir[0], g_light_dir[1], g_light_dir[2]);
+                    float ndotl0 = fmaxf(0.0f, -v0.normal.dot(lightDir));
+                    float ndotl1 = fmaxf(0.0f, -v1.normal.dot(lightDir));
+                    float ndotl2 = fmaxf(0.0f, -v2.normal.dot(lightDir));
+                    v0.light = fminf(1.0f, g_ambient_light + ndotl0 * g_light_color[3]);
+                    v1.light = fminf(1.0f, g_ambient_light + ndotl1 * g_light_color[3]);
+                    v2.light = fminf(1.0f, g_ambient_light + ndotl2 * g_light_color[3]);
+                }
+                else
+                {
+                    Vec3 worldEdge1 = v1.world - v0.world;
+                    Vec3 worldEdge2 = v2.world - v0.world;
+                    Vec3 faceNormal = worldEdge1.cross(worldEdge2).normalize();
+                    if (isBackfacing)
+                        faceNormal = faceNormal * -1.0f;
+                    Vec3 lightDir(g_light_dir[0], g_light_dir[1], g_light_dir[2]);
+                    float ndotl = fmaxf(0.0f, -faceNormal.dot(lightDir));
+                    float faceLight = fminf(1.0f, g_ambient_light + ndotl * g_light_color[3]);
+                    v0.light = faceLight;
+                    v1.light = faceLight;
+                    v2.light = faceLight;
+                }
+            }
+
+            rasterize_triangle(v0, v1, v2);
+        }
+    }
+
+    // ========================================================================
+    // Texture Buffer API (OpenGL-style dynamic textures)
+    // ========================================================================
+
+    // Create a new texture buffer, returns handle (0 = failure)
+    EMSCRIPTEN_KEEPALIVE
+    int32_t create_texture_buffer()
+    {
+        // Find an empty slot
+        int slot = -1;
+        for (int i = 0; i < MAX_TEXTURE_BUFFERS; i++)
+        {
+            if (g_texture_buffers[i] == nullptr)
+            {
+                slot = i;
+                break;
+            }
+        }
+        if (slot < 0)
+            return 0; // No slots available
+
+        // Allocate buffer struct
+        TextureBuffer *buf = (TextureBuffer *)malloc(sizeof(TextureBuffer));
+        if (!buf)
+            return 0;
+
+        buf->data = nullptr;
+        buf->width = 0;
+        buf->height = 0;
+        buf->capacity = 0;
+
+        g_texture_buffers[slot] = buf;
+
+        // Return handle (slot + 1 so 0 is invalid)
+        return slot + 1;
+    }
+
+    // Delete a texture buffer
+    EMSCRIPTEN_KEEPALIVE
+    void delete_texture_buffer(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_TEXTURE_BUFFERS)
+            return;
+
+        TextureBuffer *buf = g_texture_buffers[slot];
+        if (!buf)
+            return;
+
+        if (buf->data)
+            free(buf->data);
+        free(buf);
+
+        g_texture_buffers[slot] = nullptr;
+
+        // Clear active texture if it was pointing to this buffer
+        // (Can't check directly, just clear if any dynamic texture was active)
+    }
+
+    // Allocate texture data, returns pointer for JS to write RGBA data
+    EMSCRIPTEN_KEEPALIVE
+    uint8_t *texture_buffer_alloc(int32_t handle, int32_t width, int32_t height)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_TEXTURE_BUFFERS)
+            return nullptr;
+
+        TextureBuffer *buf = g_texture_buffers[slot];
+        if (!buf)
+            return nullptr;
+
+        int32_t requiredSize = width * height * 4; // RGBA
+
+        // Reallocate if needed
+        if (buf->capacity < requiredSize)
+        {
+            if (buf->data)
+                free(buf->data);
+            buf->data = (uint8_t *)malloc(requiredSize);
+            if (!buf->data)
+            {
+                buf->capacity = 0;
+                buf->width = 0;
+                buf->height = 0;
+                return nullptr;
+            }
+            buf->capacity = requiredSize;
+        }
+
+        buf->width = width;
+        buf->height = height;
+        return buf->data;
+    }
+
+    // Get texture buffer dimensions
+    EMSCRIPTEN_KEEPALIVE
+    int32_t texture_buffer_get_width(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_TEXTURE_BUFFERS)
+            return 0;
+        TextureBuffer *buf = g_texture_buffers[slot];
+        return buf ? buf->width : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    int32_t texture_buffer_get_height(int32_t handle)
+    {
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_TEXTURE_BUFFERS)
+            return 0;
+        TextureBuffer *buf = g_texture_buffers[slot];
+        return buf ? buf->height : 0;
+    }
+
+    // Bind a texture buffer as the active texture for rendering
+    EMSCRIPTEN_KEEPALIVE
+    void bind_texture_buffer(int32_t handle)
+    {
+        if (handle == 0)
+        {
+            // Unbind - clear active texture, fall back to fixed slots
+            g_active_texture_data = nullptr;
+            g_active_texture_width = 0;
+            g_active_texture_height = 0;
+            return;
+        }
+
+        int slot = handle - 1;
+        if (slot < 0 || slot >= MAX_TEXTURE_BUFFERS)
+            return;
+
+        TextureBuffer *buf = g_texture_buffers[slot];
+        if (!buf || !buf->data)
+            return;
+
+        g_active_texture_data = buf->data;
+        g_active_texture_width = buf->width;
+        g_active_texture_height = buf->height;
     }
 
     // Render a point (square) at screen coordinates with given color
